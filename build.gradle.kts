@@ -141,7 +141,7 @@ tasks.buildPlugin {
 
 dependencies {
     intellijPlatform {
-        rider(ProductVersion, useInstaller = false)
+        local("C:/Program Files/JetBrains/JetBrains Rider 2024.3.5")
         jetbrainsRuntime()
 
         // TODO: add plugins
