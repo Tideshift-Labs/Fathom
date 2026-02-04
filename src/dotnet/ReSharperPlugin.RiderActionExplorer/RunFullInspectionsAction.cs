@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using JetBrains.Application.BuildScript.Application.Zones;
 using JetBrains.Application.DataContext;
 using JetBrains.Application.Progress;
 using JetBrains.Application.UI.Actions;
@@ -22,12 +23,19 @@ using JetBrains.Util;
 namespace ReSharperPlugin.RiderActionExplorer
 {
 #pragma warning disable CS0612
+    [ZoneMarker]
+    public class ZoneMarker : IRequire<SweaZone>
+    {
+    }
+
     [Action("ActionExplorer.RunFullInspections", "Run Full Inspections (All Files) to File",
         Id = 1732,
         IdeaShortcuts = new[] { "Control+Alt+Shift+W" })]
 #pragma warning restore CS0612
     public class RunFullInspectionsAction : IExecutableAction
     {
+        private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<RunFullInspectionsAction>();
+
         public bool Update(IDataContext context, ActionPresentation presentation, DelegateUpdate nextUpdate)
         {
             return context.GetData(ProjectModelDataConstants.SOLUTION) != null;
@@ -35,28 +43,50 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         public void Execute(IDataContext context, DelegateExecute nextExecute)
         {
-            var solution = context.GetData(ProjectModelDataConstants.SOLUTION);
-            if (solution == null) return;
+            Log.Verbose("RunFullInspectionsAction.Execute() called");
 
-            var allSourceFiles = CollectAllSourceFiles(solution);
-            var issueLines = new List<string>();
-            string modeUsed;
-
-            var manager = solution.GetComponent<SolutionAnalysisManager>();
-            var config = solution.GetComponent<SolutionAnalysisConfiguration>();
-
-            if (!config.Paused.Value && config.CompletedOnceAfterStart.Value)
+            try
             {
-                modeUsed = "SWEA (cached solution-wide analysis)";
-                CollectFromSwea(solution, manager, allSourceFiles, issueLines);
-            }
-            else
-            {
-                modeUsed = "Local daemon (per-file analysis)";
-                CollectFromLocalDaemon(solution, allSourceFiles, issueLines);
-            }
+                var solution = context.GetData(ProjectModelDataConstants.SOLUTION);
+                if (solution == null)
+                {
+                    Log.Verbose("No solution in context, aborting");
+                    return;
+                }
 
-            WriteResults(solution, issueLines, modeUsed, allSourceFiles.Count);
+                Log.Verbose("Collecting source files...");
+                var allSourceFiles = CollectAllSourceFiles(solution);
+                Log.Verbose($"Found {allSourceFiles.Count} source files");
+
+                var issueLines = new List<string>();
+                string modeUsed;
+
+                var manager = solution.GetComponent<SolutionAnalysisManager>();
+                var config = solution.GetComponent<SolutionAnalysisConfiguration>();
+                Log.Verbose($"SWEA Paused={config.Paused.Value}, CompletedOnce={config.CompletedOnceAfterStart.Value}");
+
+                if (!config.Paused.Value && config.CompletedOnceAfterStart.Value)
+                {
+                    modeUsed = "SWEA (cached solution-wide analysis)";
+                    Log.Verbose("Using SWEA mode");
+                    CollectFromSwea(solution, manager, allSourceFiles, issueLines);
+                }
+                else
+                {
+                    modeUsed = "Local daemon (per-file analysis)";
+                    Log.Verbose("Using local daemon mode");
+                    CollectFromLocalDaemon(solution, allSourceFiles, issueLines);
+                }
+
+                Log.Verbose($"Collected {issueLines.Count} issues, writing results...");
+                WriteResults(solution, issueLines, modeUsed, allSourceFiles.Count);
+                Log.Verbose("Done");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "RunFullInspectionsAction failed");
+                MessageBox.ShowError($"RunFullInspectionsAction failed:\n{ex.Message}\n\n{ex.StackTrace}");
+            }
         }
 
         private static List<IPsiSourceFile> CollectAllSourceFiles(ISolution solution)
