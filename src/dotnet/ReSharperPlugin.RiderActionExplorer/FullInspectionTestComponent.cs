@@ -71,27 +71,63 @@ namespace ReSharperPlugin.RiderActionExplorer
                     $"Running local daemon per-file analysis...\n");
 
                 var issueLines = new List<string>();
+                var filesProcessed = 0;
+                var callbackCount = 0;
+
+                // Use the parent lifetime directly - don't nest and terminate early
                 var lifetimeDef = lifetime.CreateNested();
+                var progress = new ProgressIndicator(lifetimeDef.Lifetime);
+                var runner = new CollectInspectionResults(solution, lifetimeDef, progress);
+                var files = new Stack<IPsiSourceFile>(allSourceFiles);
 
-                try
+                Log.Verbose($"FullInspectionTestComponent: calling RunLocalInspections with {files.Count} files...");
+
+                runner.RunLocalInspections(files, (file, issues) =>
                 {
-                    var progress = new ProgressIndicator(lifetimeDef.Lifetime);
-                    var runner = new CollectInspectionResults(solution, lifetimeDef, progress);
-                    var files = new Stack<IPsiSourceFile>(allSourceFiles);
+                    callbackCount++;
+                    filesProcessed++;
+                    var issueCount = issues?.Count ?? 0;
+                    Log.Verbose($"FullInspectionTestComponent: callback #{callbackCount} for {file.Name}, {issueCount} issues");
 
-                    runner.RunLocalInspections(files, (file, issues) =>
+                    if (issues != null)
                     {
                         foreach (var issue in issues)
                             issueLines.Add(FormatIssue(issue, file, solution));
-                    }, null);
-                }
-                finally
+                    }
+                }, null);
+
+                Log.Verbose($"FullInspectionTestComponent: RunLocalInspections returned. " +
+                            $"Callbacks fired: {callbackCount}, files remaining in stack: {files.Count}");
+
+                // If RunLocalInspections is async and returned immediately with no callbacks,
+                // wait and check periodically
+                if (callbackCount == 0)
                 {
-                    lifetimeDef.Terminate();
+                    Log.Verbose("FullInspectionTestComponent: no callbacks fired, RunLocalInspections may be async. Waiting...");
+                    for (var i = 0; i < 60; i++)
+                    {
+                        Thread.Sleep(5000);
+                        if (lifetime.IsNotAlive) return;
+                        if (callbackCount > 0)
+                        {
+                            Log.Verbose($"FullInspectionTestComponent: callbacks started firing after wait. Count: {callbackCount}");
+                            // Wait a bit more for it to finish
+                            Thread.Sleep(30000);
+                            break;
+                        }
+                    }
                 }
 
+                lifetimeDef.Terminate();
+
                 issueLines.RemoveAll(l => l == null);
-                WriteResults(solution, issueLines, "Local daemon (per-file analysis)",
+
+                // Write diagnostic info alongside results
+                var diagnostics = $"Diagnostics: callbacks={callbackCount}, filesProcessed={filesProcessed}, " +
+                                  $"issueLines={issueLines.Count}, stackRemaining={files.Count}";
+                Log.Verbose($"FullInspectionTestComponent: {diagnostics}");
+
+                WriteResults(solution, issueLines, $"Local daemon (per-file analysis) | {diagnostics}",
                     allSourceFiles.Count, outputPath);
                 Log.Verbose($"FullInspectionTestComponent: wrote {issueLines.Count} issues");
             }
