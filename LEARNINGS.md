@@ -293,17 +293,18 @@ From the log analysis, UHT only runs on `.h` files and can take ~850ms per file.
 
 ## Next Steps
 
-### Immediate
+### Completed
 
-1. **Investigate `.h` file `OperationCanceledException`** — Determine if it's a timeout, cancellation, or UHT configuration issue. May need to trace the lifetime passed to `InspectCodeDaemon`.
-2. **Test `InspectCodeDaemon` on C# files** — Confirm it works for C# as well, potentially replacing `RunLocalInspections` entirely.
-3. **Parallelize** — The log analysis showed "Inspect Code" runs 8 files in parallel. Test running multiple `InspectCodeDaemon` instances concurrently.
+1. ~~Investigate `.h` file `OperationCanceledException`~~ — Handled via retry loop (Step C), up to 3 retries with 1s delay
+2. ~~Parallelize~~ — Done via `Parallel.ForEach` for both PSI sync and inspection phases
+3. ~~Build HTTP API~~ — Done: `InspectionHttpServer.cs` on port 19876 with `/inspect`, `/files`, `/health`
+4. ~~Handle PSI staleness~~ — Done: content comparison gate (Step A) polls until document matches disk
 
-### API Layer
+### Next
 
-4. **Build HTTP/MCP API** — Now that we have the working inspection mechanism, build the REST or MCP API layer on top.
-5. **Handle PSI staleness** — File written to disk → PSI update delay. Need a "flush and wait" strategy.
-6. **Handle new files** — Files must be in a project to get an `IPsiSourceFile`.
+5. **Add `/blueprints` endpoint** — Expose `UE4AssetsCache.GetDerivedBlueprintClasses()` via HTTP. Requires adding `JetBrains.ReSharper.Feature.Services.Cpp` assembly reference.
+6. **Test `InspectCodeDaemon` on C# files** — Confirm it works for C# as well, potentially replacing `RunLocalInspections` entirely.
+7. **Handle new files** — Files must be in a project to get an `IPsiSourceFile`.
 
 ### Constraints for the solution
 
@@ -554,17 +555,153 @@ Both would run inside the Rider process. MCP (Model Context Protocol) is purpose
 
 ---
 
+## UE5 Blueprint Derivation API (Decompiled from `JetBrains.ReSharper.Feature.Services.Cpp.dll`)
+
+### Source: Closed-source, decompiled
+
+The Unreal Engine support in ReSharper/Rider is **closed-source** — there is no `resharper-unreal` GitHub repo (unlike `resharper-unity` which is open-source). All types live in `JetBrains.ReSharper.Feature.Services.Cpp.dll`. The decompiled reference files are in `reference_files/ue_specific/`.
+
+### The Golden API: `UE4AssetsCache.GetDerivedBlueprintClasses`
+
+```csharp
+// UE4AssetsCache is a [PsiComponent] — resolve via DI
+var assetsCache = solution.GetComponent<UE4AssetsCache>();
+
+// Direct children only:
+ICollection<DerivedBlueprintClass> children = assetsCache.GetDerivedBlueprintClasses("AMyActor");
+
+// All descendants (recursive BFS traversal):
+IEnumerable<DerivedBlueprintClass> allDescendants = UE4SearchUtil.GetDerivedBlueprintClasses("AMyActor", assetsCache);
+```
+
+Each `DerivedBlueprintClass` is a readonly struct with:
+- `Name` — the Blueprint class name (e.g., `"BP_MyActor_C"`)
+- `ContainingFile` — `IPsiSourceFile` pointing to the `.uasset` file
+- `Index` — index into the `.uasset` export map
+
+### How the cache works
+
+`UE4AssetsCache` extends `DeferredCacheWithCustomLockBase<UE4AssetData>`:
+1. Scans all `.uasset` / `.umap` files (provided by `UE4AssetAdditionalFilesModuleFactory`)
+2. Parses each with `UELinker` → `UE4AssetData.FromLinker(linker)`
+3. `MergeData()` populates `myBaseTypesToInheritors` (`OneToListMap<string, DerivedBlueprintClass>`) from:
+   - `BlueprintClassObject.SuperClassName` — class inheritance
+   - `BlueprintClassObject.Interfaces[]` — interface implementations
+
+The cache is **asynchronous/deferred**. It builds in the background after solution load.
+
+### Cache readiness check
+
+The daemon stages check readiness like this (from `UnrealBlueprintDaemonStageProcessBase`):
+```csharp
+DeferredCacheController component = solution.GetComponent<DeferredCacheController>();
+bool isReady = component.CompletedOnce.Value && !component.HasDirtyFiles();
+```
+
+If the cache isn't ready, results will be incomplete (not wrong — just missing some Blueprints).
+
+### Rich data model: `UE4AssetData`
+
+Each parsed `.uasset` yields a `UE4AssetData` with:
+- `BlueprintClasses[]` — `BlueprintClassObject` structs with `ObjectName`, `ClassName`, `SuperClassName`, `Interfaces[]`
+- `K2VariableSets[]` — Blueprint graph nodes (variable get/set, function calls, delegate bindings)
+- `OtherClasses[]` — non-Blueprint asset objects
+- `WordHashes[]` — word index for fast text-based lookups
+
+### Additional search capabilities via `UEAssetUsagesSearcher`
+
+`UEAssetUsagesSearcher` is a `[SolutionComponent]` that provides higher-level queries:
+- `GetFindUsagesResults(sourceFile, searchTarget, searchReadOccurrences)` — find usages of C++ classes/functions/properties in `.uasset` files
+- `GetGoToInheritorsResults(searchTargets)` — find all Blueprint inheritors (classes and function overrides)
+- `FindPossibleReadWriteResults(searchTargets, cache, searchReadOccurrences)` — find property read/write in Blueprints
+
+Search targets are built via `UE4SearchUtil.BuildUESearchTargets(declaredElement)` which accounts for:
+- Core Redirects (renamed classes/properties in `.ini` files)
+- Class inheritance hierarchy (searches all derived C++ classes too)
+- UE naming conventions (e.g., stripping prefixes)
+
+### How Rider's Blueprint hints work (daemon stages)
+
+The flow for the "N derived Blueprint classes" CodeVision hint:
+1. `UnrealBlueprintClassesDaemonStage` creates a `UnrealBlueprintClassesDaemonStageProcess`
+2. Process walks the C++ AST, finds symbols that look like `UCLASS`
+3. For each, calls `UE4SearchUtil.BuildUESearchTargets(classEntity, solution, moduleName, withAllInheritors: true)`
+4. Passes targets to `searcher.GetGoToInheritorsResults(targets)` via a lazy `Func<>`
+5. Creates a `IHighlighting` via `CreateClassHighlighting()` that displays the count
+
+Similarly, `UnrealBlueprintPropertiesDaemonStage` finds `UPROPERTY` members and looks up Blueprint read/write usages.
+
+### Assembly reference requirement
+
+All these types are in `JetBrains.ReSharper.Feature.Services.Cpp.dll`. To use them from our plugin, we need to add a reference to this assembly (NuGet package or direct DLL reference). The assembly is at:
+```
+C:\Program Files\JetBrains\JetBrains Rider 2024.3.5\lib\ReSharperHost\JetBrains.ReSharper.Feature.Services.Cpp.dll
+```
+
+### What we can expose via our API
+
+A `/blueprints?class=AMyActor` endpoint could return:
+- All derived Blueprint classes (recursive)
+- The `.uasset` file path for each
+- Whether the cache is complete or still building
+- Optionally: interfaces implemented, function overrides, property usages
+
+This data is NOT available through `InspectCodeDaemon` — it comes from a completely separate cache system that parses `.uasset` binary files independently of the C++ daemon stages.
+
+---
+
+## HTTP Inspection Server (`InspectionHttpServer.cs`)
+
+### Architecture
+
+A `[SolutionComponent]` running `System.Net.HttpListener` on `http://localhost:19876/`. Zero external dependencies.
+
+### Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `/` | Help text |
+| `/health` | Health check |
+| `/files` | List all project source files |
+| `/inspect?file=X&file=Y` | Run code inspections on specified files |
+
+### Query parameters
+
+- `&format=json` — JSON output (default is markdown)
+- `&debug=true` — include per-file diagnostic info (PSI sync timing, retries, etc.)
+
+### Reliability pipeline
+
+The inspection endpoint implements a two-step reliability pipeline:
+
+**Step A: PSI Content Sync** — Before inspecting, compares disk content with `sourceFile.Document.GetText()` (normalized line endings). Polls every 250ms, up to 15s timeout. This ensures the PSI reflects the latest file content.
+
+**Step C: Retry on `OperationCanceledException`** — Up to 3 attempts with 1s delay. Handles the window where daemon stages get cancelled during re-indexing.
+
+**Step B (DEAD END): `CommitAllDocuments`** — `IPsiServices.Files.CommitAllDocuments()` requires the main/UI thread. Cannot be called from `HttpListener`'s ThreadPool thread. Throws: "This action cannot be executed on the .NET TP Worker thread." Removed entirely; Steps A + C are sufficient.
+
+### Parallelization
+
+Both PSI sync (Step A) and inspection (Step C) phases use `Parallel.ForEach`. Results are reassembled in original request order. The daemon infrastructure natively supports concurrent `InspectCodeDaemon` instances.
+
+### File not found handling
+
+If the requestor provides multiple file paths, only fail early if ALL files are not found. Otherwise continue and report individual not-found files in the results.
+
+---
+
 ## File Inventory
 
 | File | Status | Purpose |
 |---|---|---|
-| `InspectCodeDaemonExperiment.cs` | **Active** | **THE BREAKTHROUGH** — proves `InspectCodeDaemon` works for C++ (34 issues on 19 files) |
+| `InspectionHttpServer.cs` | **Active** | **THE API** — HTTP server on port 19876 with `/inspect`, `/files`, `/health` endpoints |
+| `InspectCodeDaemonExperiment.cs` | Disabled | Proved `InspectCodeDaemon` works for C++ (34 issues on 19 files). Replaced by `InspectionHttpServer` |
 | `CppInspectionExperiment.cs` | Disabled | Superseded by InspectCodeDaemonExperiment. Proved C++ PSI is healthy but RunLocalInspections fails for C++ |
 | `FullInspectionTestComponent.cs` | Disabled | POC proving RunLocalInspections works for C# (88 issues) |
 | `RunFullInspectionsAction.cs` | Active | Action-based entry point (shortcut broken, SWEA path dead) |
 | `RunInspectionsAction.cs` | Active | Legacy: markup-based inspection, open files only |
 | `DumpActionsAction.cs` | Active | Utility: dumps registered actions |
-| `ActionDumperComponent.cs` | Active | Utility: dumps actions at shell startup |
+| `ActionDumperComponent.cs` | Disabled | Utility: dumps actions at shell startup. Replaced by `InspectionHttpServer` |
 
 ### Reference files (decompiled)
 
@@ -574,3 +711,24 @@ Both would run inside the Rider process. MCP (Model Context Protocol) is purpose
 | `reference_files/CollectInspectionResults.cs` | same | Contains private `InspectionDaemon` (the broken path) and `RunLocalInspections` |
 | `reference_files/InspectCodeDaemon.cs` | same | **The working public class** — wraps in `FileImages.DisableCheckThread()` |
 | `reference_files/DaemonProcessBase.cs` | `JetBrains.ReSharper.Daemon.Engine.dll` | Core `DoHighlighting()` that discovers and runs all daemon stages |
+
+### UE-specific reference files (decompiled from `JetBrains.ReSharper.Feature.Services.Cpp.dll`)
+
+| File | Namespace | Purpose |
+|---|---|---|
+| `ue_specific/UE4AssetsCache.cs` | `...UE4.UEAsset` | **Central cache** — `[PsiComponent]`, `GetDerivedBlueprintClasses()`, word index, deferred build |
+| `ue_specific/UEAssetUsagesSearcher.cs` | `...UE4.UEAsset.Search` | **Search API** — `[SolutionComponent]`, find usages/inheritors/read-write in `.uasset` files |
+| `ue_specific/UE4SearchUtil.cs` | `...UE4.UEAsset.Search` | **Search helpers** — recursive `GetDerivedBlueprintClasses()`, `BuildUESearchTargets()`, Core Redirects |
+| `ue_specific/UE4AssetData.cs` | `...UE4.UEAsset` | **Parsed .uasset data** — `BlueprintClassObject` (with `SuperClassName`, `Interfaces[]`), `K2GraphNodeObject` |
+| `ue_specific/DerivedBlueprintClass.cs` | `...UE4.UEAsset` | Result struct — `Name`, `ContainingFile`, `Index` |
+| `ue_specific/UEBlueprintGeneratedClass.cs` | `...UE4.UEAsset.Reader` | `.uasset` binary reader — parses Blueprint class properties and interfaces |
+| `ue_specific/UnrealBlueprintClassesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage that produces "N derived Blueprint classes" hints |
+| `ue_specific/UnrealBlueprintClassesDaemonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UCLASS symbols and queries `GetGoToInheritorsResults()` |
+| `ue_specific/UnrealBlueprintPropertiesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage for UPROPERTY Blueprint usage hints |
+| `ue_specific/UnrealBlueprintPropertiesDameonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UPROPERTY symbols and queries read/write usages |
+| `ue_specific/UnrealBlueprintDaemonStageProcessBase.cs` | `...UE4.UEAsset.Daemon` | Generic base class — cache readiness check, symbol walking, settings |
+| `ue_specific/UnrealBlueprintHighlightingProvderBase.cs` | `...UE4.UEAsset.Daemon` | Abstract highlighting provider — class/property/function highlighting factories |
+| `ue_specific/IUnrealAssetHighlighting.cs` | `...UE4.UEAsset.Daemon` | Highlighting interface with `OccurrencesCalculator` and `DeclaredElement` |
+| `ue_specific/UnrealAssetOccurence.cs` | `...UE4.UEAsset.Search` | Occurrence wrapper — navigation (requires UnrealLink plugin), display text |
+| `ue_specific/IUnrealOccurence.cs` | `...UE4.UEAsset.Search` | Interface for occurrence results |
+| `ue_specific/IOccurrence.cs` | `...Feature.Services.Occurrences` | Base occurrence interface (from `Feature.Services.dll`, not Cpp-specific) |
