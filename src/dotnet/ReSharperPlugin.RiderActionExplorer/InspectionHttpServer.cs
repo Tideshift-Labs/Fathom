@@ -14,6 +14,7 @@
 //   GET /files           → List all user source files (under solution dir)
 //   GET /inspect?file=X  → Run InspectCodeDaemon on file(s), return JSON issues
 //                          Supports multiple: ?file=a.cpp&file=b.cpp
+//                          Add &debug=true for per-file diagnostic info (psiSync, timing)
 //
 // How it works:
 //   Uses System.Net.HttpListener (built into .NET, zero dependencies).
@@ -24,15 +25,18 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Application.Parts;
 using JetBrains.DocumentModel;
 using JetBrains.Lifetimes;
 using JetBrains.ProjectModel;
+using JetBrains.ReSharper.Daemon.SolutionAnalysis;
 using JetBrains.ReSharper.Daemon.SolutionAnalysis.InspectCode;
 using JetBrains.ReSharper.Daemon.SolutionAnalysis.Issues;
 using JetBrains.ReSharper.Feature.Services.Daemon;
@@ -164,6 +168,8 @@ namespace ReSharperPlugin.RiderActionExplorer
                 return;
             }
 
+            var debug = IsDebug(ctx);
+
             IssueClasses issueClasses;
             FileImages fileImages;
             try
@@ -180,6 +186,7 @@ namespace ReSharperPlugin.RiderActionExplorer
 
             var solutionDir = _solution.SolutionDirectory;
             var fileIndex = BuildFileIndex(solutionDir);
+            var requestSw = Stopwatch.StartNew();
 
             var fileResults = new List<string>();
             var totalIssues = 0;
@@ -197,8 +204,39 @@ namespace ReSharperPlugin.RiderActionExplorer
                     continue;
                 }
 
+                // Step A: Wait for PSI to match disk content before inspecting
+                var syncResult = WaitForPsiSync(sourceFile);
+
+                if (syncResult.Status == "timeout")
+                {
+                    var entry =
+                        "{\"file\": \"" + EscapeJson(fileParam) + "\", " +
+                        "\"error\": \"PSI sync timeout: document does not match disk content after " +
+                        syncResult.WaitedMs + "ms\", " +
+                        "\"issues\": []";
+                    if (debug)
+                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, 0);
+                    entry += "}";
+                    fileResults.Add(entry);
+                    continue;
+                }
+
+                if (syncResult.Status == "disk_read_error")
+                {
+                    var entry =
+                        "{\"file\": \"" + EscapeJson(fileParam) + "\", " +
+                        "\"error\": \"Cannot read file from disk: " + EscapeJson(syncResult.Message) + "\", " +
+                        "\"issues\": []";
+                    if (debug)
+                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, 0);
+                    entry += "}";
+                    fileResults.Add(entry);
+                    continue;
+                }
+
                 try
                 {
+                    var inspectSw = Stopwatch.StartNew();
                     var issues = new List<string>();
                     var daemon = new InspectCodeDaemon(issueClasses, sourceFile, fileImages);
                     daemon.DoHighlighting(DaemonProcessKind.OTHER, issue =>
@@ -225,31 +263,58 @@ namespace ReSharperPlugin.RiderActionExplorer
                             "\"line\": " + line + ", " +
                             "\"message\": \"" + EscapeJson(message) + "\"}");
                     });
+                    var inspectMs = (int)inspectSw.ElapsedMilliseconds;
 
                     totalIssues += issues.Count;
                     var relPath = sourceFile.GetLocation()
                         .MakeRelativeTo(solutionDir).ToString().Replace('\\', '/');
-                    fileResults.Add(
+                    var entry =
                         "{\"file\": \"" + EscapeJson(relPath) + "\", " +
                         "\"issues\": [" + string.Join(",", issues) + "], " +
-                        "\"error\": null}");
+                        "\"error\": null";
+                    if (debug)
+                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, inspectMs);
+                    entry += "}";
+                    fileResults.Add(entry);
                 }
                 catch (Exception ex)
                 {
-                    fileResults.Add(
+                    var entry =
                         "{\"file\": \"" + EscapeJson(fileParam) + "\", " +
                         "\"issues\": [], " +
-                        "\"error\": \"" + EscapeJson(ex.GetType().Name + ": " + ex.Message) + "\"}");
+                        "\"error\": \"" + EscapeJson(ex.GetType().Name + ": " + ex.Message) + "\"";
+                    if (debug)
+                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, 0);
+                    entry += "}";
+                    fileResults.Add(entry);
                 }
             }
 
+            var totalMs = (int)requestSw.ElapsedMilliseconds;
             var json =
                 "{\"solution\": \"" + EscapeJson(solutionDir.FullPath.Replace('\\', '/')) + "\", " +
                 "\"files\": [" + string.Join(",", fileResults) + "], " +
                 "\"totalIssues\": " + totalIssues + ", " +
-                "\"totalFiles\": " + fileParams.Length + "}";
+                "\"totalFiles\": " + fileParams.Length;
+            if (debug)
+                json += ", \"debug\": {\"totalMs\": " + totalMs + "}";
+            json += "}";
 
             RespondJson(ctx, 200, json);
+        }
+
+        private static string BuildFileDebugJson(PsiSyncResult sync, int inspectMs)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"psiSync\": {\"status\": \"").Append(EscapeJson(sync.Status)).Append("\"");
+            sb.Append(", \"waitedMs\": ").Append(sync.WaitedMs);
+            sb.Append(", \"attempts\": ").Append(sync.Attempts);
+            if (sync.Message != null)
+                sb.Append(", \"message\": \"").Append(EscapeJson(sync.Message)).Append("\"");
+            sb.Append("}");
+            sb.Append(", \"inspectionMs\": ").Append(inspectMs);
+            sb.Append("}");
+            return sb.ToString();
         }
 
         // ── /files ──
@@ -299,7 +364,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                 "\"GET /\": \"This help message\", " +
                 "\"GET /health\": \"Server and solution status\", " +
                 "\"GET /files\": \"List all user source files under solution directory\", " +
-                "\"GET /inspect?file=path\": \"Run code inspection on file(s). Supports multiple: ?file=a.cpp&file=b.cpp. Paths are relative to solution directory.\"" +
+                "\"GET /inspect?file=path\": \"Run code inspection on file(s). Supports multiple: ?file=a.cpp&file=b.cpp. Paths are relative to solution directory. Add &debug=true for per-file timing and PSI sync diagnostics.\"" +
                 "}}";
         }
 
@@ -326,7 +391,100 @@ namespace ReSharperPlugin.RiderActionExplorer
             return index;
         }
 
+        // ── PSI sync ──
+
+        private const int PsiSyncTimeoutMs = 15000;
+        private const int PsiSyncPollIntervalMs = 250;
+
+        /// <summary>
+        /// Waits until the PSI document content matches the file on disk.
+        /// Returns a diagnostic object with sync status info.
+        /// </summary>
+        private static PsiSyncResult WaitForPsiSync(IPsiSourceFile sourceFile)
+        {
+            var diskPath = sourceFile.GetLocation().FullPath;
+            var sw = Stopwatch.StartNew();
+
+            // Read disk content, normalize line endings for comparison
+            string diskContent;
+            try
+            {
+                diskContent = NormalizeLineEndings(File.ReadAllText(diskPath));
+            }
+            catch (Exception ex)
+            {
+                return new PsiSyncResult
+                {
+                    Status = "disk_read_error",
+                    WaitedMs = 0,
+                    Message = ex.GetType().Name + ": " + ex.Message
+                };
+            }
+
+            // Poll until document matches disk or timeout
+            var attempts = 0;
+            while (sw.ElapsedMilliseconds < PsiSyncTimeoutMs)
+            {
+                attempts++;
+                try
+                {
+                    var doc = sourceFile.Document;
+                    if (doc != null)
+                    {
+                        var docContent = NormalizeLineEndings(doc.GetText().ToString());
+                        if (docContent == diskContent)
+                        {
+                            return new PsiSyncResult
+                            {
+                                Status = attempts == 1 ? "synced" : "synced_after_wait",
+                                WaitedMs = (int)sw.ElapsedMilliseconds,
+                                Attempts = attempts
+                            };
+                        }
+                    }
+                }
+                catch
+                {
+                    // Document may be in a transitional state, keep polling
+                }
+
+                Thread.Sleep(PsiSyncPollIntervalMs);
+            }
+
+            return new PsiSyncResult
+            {
+                Status = "timeout",
+                WaitedMs = (int)sw.ElapsedMilliseconds,
+                Attempts = attempts,
+                Message = "PSI document did not match disk content within " + PsiSyncTimeoutMs + "ms"
+            };
+        }
+
+        private static string NormalizeLineEndings(string text)
+        {
+            return text.Replace("\r\n", "\n").Replace("\r", "\n");
+        }
+
+        private class PsiSyncResult
+        {
+            public string Status;   // "synced", "synced_after_wait", "timeout", "disk_read_error"
+            public int WaitedMs;
+            public int Attempts;
+            public string Message;
+        }
+
         // ── Helpers ──
+
+        /// <summary>
+        /// Parses the &amp;debug=true query parameter. Usable on any endpoint.
+        /// </summary>
+        private static bool IsDebug(HttpListenerContext ctx)
+        {
+            var val = ctx.Request.QueryString["debug"];
+            return val != null &&
+                   (val.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                    val.Equals("1", StringComparison.OrdinalIgnoreCase));
+        }
 
         private static string NormalizePath(string path)
         {
