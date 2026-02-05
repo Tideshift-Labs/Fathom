@@ -82,7 +82,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                     Log.Warn("InspectionHttpServer: stopped");
                 });
 
-                Task.Run(() => AcceptLoop());
+                _ = Task.Run(() => AcceptLoopAsync());
 
                 // Write a marker so the user knows the server started
                 var markerPath = Path.Combine(
@@ -100,7 +100,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
         }
 
-        private async Task AcceptLoop()
+        private async Task AcceptLoopAsync()
         {
             while (_lifetime.IsAlive && _listener != null && _listener.IsListening)
             {

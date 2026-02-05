@@ -7,7 +7,7 @@ import java.io.ByteArrayOutputStream
 plugins {
     id("java")
     alias(libs.plugins.kotlinJvm)
-    id("org.jetbrains.intellij.platform") version "2.10.4"     // See https://github.com/JetBrains/intellij-platform-gradle-plugin/releases
+    id("org.jetbrains.intellij.platform") version "2.11.0"     // See https://github.com/JetBrains/intellij-platform-gradle-plugin/releases
     id("me.filippov.gradle.jvm.wrapper") version "0.14.0"
 }
 
@@ -55,7 +55,9 @@ sourceSets {
 }
 
 tasks.compileKotlin {
-    kotlinOptions { jvmTarget = "17" }
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 val setBuildTool by tasks.registering {
@@ -91,6 +93,7 @@ val compileDotNet by tasks.registering {
     dependsOn(setBuildTool)
     doLast {
         val executable: String by setBuildTool.get().extra
+        @Suppress("UNCHECKED_CAST")
         val arguments = (setBuildTool.get().extra["args"] as List<String>).toMutableList()
         arguments.add("/t:Restore;Rebuild")
         exec {
@@ -114,7 +117,7 @@ val testDotNet by tasks.registering {
 tasks.buildPlugin {
     doLast {
         copy {
-            from("${buildDir}/distributions/${rootProject.name}-${version}.zip")
+            from("${layout.buildDirectory.get()}/distributions/${rootProject.name}-${version}.zip")
             into("${rootDir}/output")
         }
 
@@ -126,6 +129,7 @@ tasks.buildPlugin {
         }.take(1).joinToString()
 
         val executable: String by setBuildTool.get().extra
+        @Suppress("UNCHECKED_CAST")
         val arguments = (setBuildTool.get().extra["args"] as List<String>).toMutableList()
         arguments.add("/t:Pack")
         arguments.add("/p:PackageOutputPath=${rootDir}/output")
@@ -141,7 +145,7 @@ tasks.buildPlugin {
 
 dependencies {
     intellijPlatform {
-        local("C:/Program Files/JetBrains/JetBrains Rider 2024.3.5")
+        rider(ProductVersion)
         jetbrainsRuntime()
 
         // TODO: add plugins
