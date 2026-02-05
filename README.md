@@ -14,6 +14,7 @@ ReSharper's **Solution-Wide Error Analysis (SWEA)** continuously analyzes all fi
 
 | File | Purpose |
 |------|---------|
+| `InspectionHttpServer.cs` | `[SolutionComponent]` HTTP server on `localhost:19876` — exposes `/inspect`, `/files`, `/health`, `/blueprints` endpoints for LLM and tool integration |
 | `RunFullInspectionsAction.cs` | Action (`Ctrl+Alt+Shift+W`) that collects inspections from all solution files via SWEA or local daemon fallback, writes to `resharper-full-inspections-dump.txt` on Desktop |
 | `FullInspectionTestComponent.cs` | `[SolutionComponent]` test harness that runs automatically on solution open — polls for SWEA completion then dumps results, no UI interaction needed |
 | `RunInspectionsAction.cs` | Earlier approach (`Ctrl+Alt+Shift+I`) that reads `IDocumentMarkupManager` highlighters — only sees files with active document markup (effectively: open files) |
@@ -55,6 +56,31 @@ Total issues: 42
 [WARNING] src/Baz.cs:45 - Possible null reference exception
 ...
 ```
+
+## HTTP API (`InspectionHttpServer`)
+
+Starts automatically when a solution opens. Listens on `http://localhost:19876/`.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | List available endpoints |
+| `GET /health` | Server and solution status |
+| `GET /files` | List all user source files under the solution directory |
+| `GET /inspect?file=path` | Run code inspection on file(s). Multiple: `&file=a&file=b`. Default markdown; `&format=json` for JSON. `&debug=true` for diagnostics. |
+| `GET /blueprints?class=Name` | List UE5 Blueprint classes derived from a C++ or Blueprint class. `&format=json` for JSON. `&debug=true` for diagnostics. |
+
+### `/blueprints` details
+
+Uses **reflection** to access `UE4AssetsCache` and `UE4SearchUtil` from `JetBrains.ReSharper.Feature.Services.Cpp.dll` — no closed-source DLL reference needed. Performs recursive BFS to find Blueprint-to-Blueprint derivation chains.
+
+**Known limitation:** Only discovers Blueprints that directly derive from the queried class or from other Blueprints in its hierarchy. Blueprints that derive from **C++ intermediate subclasses** are not found, because the asset cache has no C++ class hierarchy API. To match Rider's "Find Derived Symbols" behavior fully, we would need to walk the C++ PSI symbol tree first (see TODOs below).
+
+## TODOs
+
+- [ ] **`/blueprints`: Walk C++ class hierarchy for full recursive Blueprint discovery.** Currently `GetDerivedBlueprintClasses` only returns Blueprints whose direct parent matches the queried name. If `ClassA (C++) -> ClassB (C++) -> BP_Foo (Blueprint)`, querying `ClassA` will miss `BP_Foo`. Need to find a ReSharper C++ PSI API (e.g. `CppInheritorSearcher`, `ICppClassHierarchy`, or similar) to enumerate C++ subclasses, then pass all names to `GetDerivedBlueprintClasses(IEnumerable<string>, UE4AssetsCache, bool)`.
+- [ ] **Clean up diagnostic/debug code in `/blueprints`.** The debug dumps of all methods on `UE4SearchUtil` and `UE4AssetsCache` were useful during development but can be trimmed once the API is stable.
+- [ ] **UE companion plugin for Blueprint audit.** A standalone Unreal Engine editor plugin that serializes Blueprint internals (variables, graphs, CDO overrides, widget trees) to JSON on disk. The Rider plugin reads those JSONs via a `/blueprint-audit` endpoint and triggers headless commandlet runs when `.uasset` files change while the editor is closed. See [docs/ue-companion-plugin.md](docs/ue-companion-plugin.md) for full design.
+- [ ] **`/uclass?class=ClassName`: UPROPERTY/UFUNCTION reflection endpoint.** Add an endpoint that, given a C++ class name, finds its header file and parses `UPROPERTY(...)` and `UFUNCTION(...)` macro declarations. Should return specifiers (e.g. `EditAnywhere`, `BlueprintCallable`, `Category="Foo"`), property/function types, and names. Approach: text-parse the header file directly (regex over macro blocks) rather than using the C++ PSI — this is the simplest strategy and captures the actual macro specifiers as written. Class-name-to-header lookup can reuse the `/files` endpoint's file list or the Unreal naming convention (`ClassName.h`).
 
 ## Building and running
 
