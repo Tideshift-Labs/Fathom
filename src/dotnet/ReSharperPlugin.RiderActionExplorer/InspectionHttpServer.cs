@@ -43,7 +43,6 @@ using JetBrains.ReSharper.Daemon.SolutionAnalysis.InspectCode;
 using JetBrains.ReSharper.Daemon.SolutionAnalysis.Issues;
 using JetBrains.ReSharper.Feature.Services.Daemon;
 using JetBrains.ReSharper.Psi;
-using JetBrains.ReSharper.Psi.Files;
 using JetBrains.Util;
 using FileImages = JetBrains.ReSharper.Daemon.SolutionAnalysis.FileImages.FileImages;
 
@@ -189,7 +188,9 @@ namespace ReSharperPlugin.RiderActionExplorer
             var fileIndex = BuildFileIndex(solutionDir);
             var requestSw = Stopwatch.StartNew();
 
-            var results = new List<FileResult>();
+            // Resolve all files and pair with their source files
+            var workItems = new List<(FileResult result, IPsiSourceFile source)>();
+            var notFoundResults = new List<FileResult>();
 
             foreach (var fileParam in fileParams)
             {
@@ -200,43 +201,48 @@ namespace ReSharperPlugin.RiderActionExplorer
                 if (!fileIndex.TryGetValue(key, out sourceFile))
                 {
                     result.Error = "File not found in solution";
-                    results.Add(result);
+                    notFoundResults.Add(result);
                     continue;
                 }
 
                 result.ResolvedPath = sourceFile.GetLocation()
                     .MakeRelativeTo(solutionDir).ToString().Replace('\\', '/');
+                workItems.Add((result, sourceFile));
+            }
 
-                // Step A: Wait for PSI to match disk content before inspecting
-                result.SyncResult = WaitForPsiSync(sourceFile);
+            // If ALL files are not found, fail early
+            if (workItems.Count == 0)
+            {
+                var earlyTotalMs = (int)requestSw.ElapsedMilliseconds;
+                if (format == "json")
+                    RespondInspectJson(ctx, solutionDir, notFoundResults, earlyTotalMs, debug);
+                else
+                    RespondInspectMarkdown(ctx, notFoundResults, earlyTotalMs, debug);
+                return;
+            }
 
-                if (result.SyncResult.Status == "timeout")
-                {
-                    result.Error = "PSI sync timeout: document does not match disk content after " +
-                                   result.SyncResult.WaitedMs + "ms";
-                    results.Add(result);
-                    continue;
-                }
+            // Step A: Wait for PSI sync on all files in parallel
+            Parallel.ForEach(workItems, item =>
+            {
+                item.result.SyncResult = WaitForPsiSync(item.source);
+                if (item.result.SyncResult.Status == "timeout")
+                    item.result.Error = "PSI sync timeout: document does not match disk content after " +
+                                        item.result.SyncResult.WaitedMs + "ms";
+                else if (item.result.SyncResult.Status == "disk_read_error")
+                    item.result.Error = "Cannot read file from disk: " + item.result.SyncResult.Message;
+            });
 
-                if (result.SyncResult.Status == "disk_read_error")
-                {
-                    result.Error = "Cannot read file from disk: " + result.SyncResult.Message;
-                    results.Add(result);
-                    continue;
-                }
+            // Step B (CommitAllDocuments) removed — requires main thread, can't run from
+            // HTTP handler's ThreadPool. Steps A + C are sufficient: A ensures document
+            // matches disk, C retries on OperationCanceledException if PSI is still settling.
 
-                // Step B: Commit pending document changes into PSI tree
-                // (runs after PSI sync so the updated document is ready to flush)
-                try
-                {
-                    _solution.GetPsiServices().Files.CommitAllDocuments();
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "InspectionHttpServer: CommitAllDocuments failed");
-                }
+            // Step C: Run inspections in parallel with retry on OperationCanceledException
+            var inspectableItems = workItems.Where(item => item.result.Error == null).ToList();
+            Parallel.ForEach(inspectableItems, item =>
+            {
+                var result = item.result;
+                var sourceFile = item.source;
 
-                // Step C: Run inspection with retry on OperationCanceledException
                 var inspectSw = Stopwatch.StartNew();
                 for (var attempt = 1; attempt <= MaxInspectionRetries; attempt++)
                 {
@@ -274,19 +280,13 @@ namespace ReSharperPlugin.RiderActionExplorer
                             });
                         });
 
-                        // Success — break out of retry loop
                         break;
                     }
                     catch (OperationCanceledException) when (attempt < MaxInspectionRetries)
                     {
-                        // PSI may still be settling — wait and retry
                         Log.Warn("InspectionHttpServer: OperationCanceledException on " +
                                  result.ResolvedPath + ", retry " + attempt + "/" + MaxInspectionRetries);
                         Thread.Sleep(RetryDelayMs);
-
-                        // Re-commit documents before retry
-                        try { _solution.GetPsiServices().Files.CommitAllDocuments(); }
-                        catch { /* ignore */ }
                     }
                     catch (Exception ex)
                     {
@@ -295,9 +295,13 @@ namespace ReSharperPlugin.RiderActionExplorer
                     }
                 }
                 result.InspectionMs = (int)inspectSw.ElapsedMilliseconds;
+            });
 
-                results.Add(result);
-            }
+            // Combine results in original request order
+            var resultsByPath = workItems.Select(w => w.result)
+                .Concat(notFoundResults)
+                .ToDictionary(r => r.RequestedPath);
+            var results = fileParams.Select(fp => resultsByPath[fp]).ToList();
 
             var totalMs = (int)requestSw.ElapsedMilliseconds;
 
