@@ -16,6 +16,9 @@
 //                          Supports multiple: ?file=a.cpp&file=b.cpp
 //                          &format=json for JSON (default is markdown)
 //                          &debug=true  for per-file diagnostic info (psiSync, timing)
+//   GET /blueprints?class=X → List UE5 Blueprint classes derived from a C++ class
+//                              Uses reflection to access UE4AssetsCache (no DLL ref needed)
+//                              &format=json for JSON (default is markdown)
 //
 // How it works:
 //   Uses System.Net.HttpListener (built into .NET, zero dependencies).
@@ -26,11 +29,13 @@
 // =============================================================================
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -140,9 +145,12 @@ namespace ReSharperPlugin.RiderActionExplorer
                     case "/inspect":
                         HandleInspect(ctx);
                         break;
+                    case "/blueprints":
+                        HandleBlueprints(ctx);
+                        break;
                     default:
                         Respond(ctx, 404, "text/plain",
-                            "Not found. Try: /, /health, /files, /inspect?file=path");
+                            "Not found. Try: /, /health, /files, /inspect?file=path, /blueprints?class=ClassName");
                         break;
                 }
             }
@@ -429,6 +437,643 @@ namespace ReSharperPlugin.RiderActionExplorer
             return sb.ToString();
         }
 
+        // ── /blueprints ──
+
+        private class BlueprintClassResult
+        {
+            public string Name;
+            public string FilePath;
+        }
+
+        private void HandleBlueprints(HttpListenerContext ctx)
+        {
+            var className = ctx.Request.QueryString["class"];
+            if (string.IsNullOrWhiteSpace(className))
+            {
+                Respond(ctx, 400, "text/plain",
+                    "Missing 'class' query parameter.\n" +
+                    "Usage: /blueprints?class=AMyActor\n" +
+                    "Add &format=json for JSON output. Add &debug=true for diagnostics.");
+                return;
+            }
+
+            var format = GetFormat(ctx);
+            var debug = IsDebug(ctx);
+
+            // Resolve UE4AssetsCache via reflection
+            object assetsCache;
+            try
+            {
+                assetsCache = ResolveUE4AssetsCache();
+            }
+            catch (Exception ex)
+            {
+                Respond(ctx, 501, "text/plain",
+                    "UE4 Blueprint cache is not available. This feature requires a UE5 C++ project open in Rider.\n" +
+                    "Detail: " + ex.Message);
+                return;
+            }
+
+            // Check cache readiness via DeferredCacheController
+            bool cacheReady;
+            string cacheStatus;
+            try
+            {
+                cacheReady = CheckCacheReadiness();
+                cacheStatus = cacheReady ? "ready" : "building";
+            }
+            catch
+            {
+                cacheReady = false;
+                cacheStatus = "unknown";
+            }
+
+            // Query derived blueprints via reflection
+            List<BlueprintClassResult> blueprints;
+            string debugInfo = null;
+            var solutionDir = _solution.SolutionDirectory;
+            try
+            {
+                blueprints = QueryDerivedBlueprints(className, assetsCache, solutionDir, debug, out debugInfo);
+            }
+            catch (Exception ex)
+            {
+                Respond(ctx, 500, "text/plain",
+                    "Reflection error querying Blueprint classes.\n" +
+                    "This may indicate a Rider API change.\n" +
+                    "Detail: " + ex.GetType().Name + ": " + ex.Message);
+                return;
+            }
+
+            if (format == "json")
+                RespondBlueprintsJson(ctx, className, cacheReady, cacheStatus, blueprints, debug, debugInfo);
+            else
+                RespondBlueprintsMarkdown(ctx, className, cacheReady, cacheStatus, blueprints, debug, debugInfo);
+        }
+
+        /// Resolve a component from the solution container by Type, handling extension methods.
+        private object ResolveComponent(Type componentType)
+        {
+            // Strategy 1: Look for instance GetComponent<T>() on solution interfaces
+            MethodInfo getComponentMethod = null;
+            foreach (var iface in _solution.GetType().GetInterfaces())
+            {
+                getComponentMethod = iface.GetMethod("GetComponent",
+                    BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+                if (getComponentMethod != null && getComponentMethod.IsGenericMethodDefinition)
+                    break;
+                getComponentMethod = null;
+            }
+
+            // Strategy 2: Search concrete type hierarchy
+            if (getComponentMethod == null)
+            {
+                for (var type = _solution.GetType(); type != null; type = type.BaseType)
+                {
+                    getComponentMethod = type.GetMethod("GetComponent",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                        null, Type.EmptyTypes, null);
+                    if (getComponentMethod != null && getComponentMethod.IsGenericMethodDefinition)
+                        break;
+                    getComponentMethod = null;
+                }
+            }
+
+            if (getComponentMethod != null)
+            {
+                var gm = getComponentMethod.MakeGenericMethod(componentType);
+                return gm.Invoke(_solution, null);
+            }
+
+            // Strategy 3: Find the static extension method in loaded assemblies
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var asmName = asm.GetName().Name ?? "";
+                if (!asmName.Contains("JetBrains")) continue;
+                try
+                {
+                    foreach (var t in asm.GetExportedTypes())
+                    {
+                        if (!t.IsAbstract || !t.IsSealed) continue; // static classes
+                        foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                        {
+                            if (m.Name != "GetComponent" || !m.IsGenericMethodDefinition) continue;
+                            var ps = m.GetParameters();
+                            if (ps.Length == 1 && ps[0].ParameterType.IsAssignableFrom(_solution.GetType()))
+                            {
+                                var gm = m.MakeGenericMethod(componentType);
+                                return gm.Invoke(null, new object[] { _solution });
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
+        private object ResolveUE4AssetsCache()
+        {
+            // Find the UE4AssetsCache type from loaded assemblies — try several known names
+            var candidateNames = new[]
+            {
+                "JetBrains.ReSharper.Feature.Services.Cpp.Caches.UE4AssetsCache",
+                "JetBrains.ReSharper.Feature.Services.Cpp.UE4.Caches.UE4AssetsCache",
+                "JetBrains.ReSharper.Features.Cpp.Caches.UE4AssetsCache",
+                "JetBrains.ReSharper.Plugins.Unreal.Caches.UE4AssetsCache",
+            };
+
+            Type assetsCacheType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                foreach (var candidate in candidateNames)
+                {
+                    try
+                    {
+                        assetsCacheType = asm.GetType(candidate);
+                        if (assetsCacheType != null) break;
+                    }
+                    catch { }
+                }
+                if (assetsCacheType != null) break;
+            }
+
+            // If still not found, search by short name across all types in Cpp-related assemblies
+            if (assetsCacheType == null)
+            {
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var asmName = asm.GetName().Name ?? "";
+                    if (!asmName.Contains("Cpp") && !asmName.Contains("Unreal") && !asmName.Contains("UE"))
+                        continue;
+                    try
+                    {
+                        foreach (var t in asm.GetExportedTypes())
+                        {
+                            if (t.Name == "UE4AssetsCache" || t.Name == "UnrealAssetsCache" ||
+                                t.Name == "UEAssetsCache" || t.Name == "BlueprintAssetsCache")
+                            {
+                                assetsCacheType = t;
+                                break;
+                            }
+                        }
+                    }
+                    catch { }
+                    if (assetsCacheType != null) break;
+                }
+            }
+
+            if (assetsCacheType == null)
+            {
+                // Build diagnostic info
+                var diag = new StringBuilder();
+                diag.AppendLine("Type not found. Diagnostics:");
+                diag.AppendLine();
+                diag.AppendLine("== Assemblies containing 'Cpp', 'Unreal', or 'UE' ==");
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var asmName = asm.GetName().Name ?? "";
+                    if (asmName.Contains("Cpp") || asmName.Contains("Unreal") || asmName.Contains("UE"))
+                        diag.AppendLine("  " + asm.GetName().FullName);
+                }
+                diag.AppendLine();
+                diag.AppendLine("== Types containing 'Asset' or 'Blueprint' in those assemblies ==");
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var asmName = asm.GetName().Name ?? "";
+                    if (!asmName.Contains("Cpp") && !asmName.Contains("Unreal") && !asmName.Contains("UE"))
+                        continue;
+                    try
+                    {
+                        foreach (var t in asm.GetExportedTypes())
+                        {
+                            if (t.Name.Contains("Asset") || t.Name.Contains("Blueprint") || t.Name.Contains("UE4"))
+                                diag.AppendLine("  " + t.FullName);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        diag.AppendLine("  [" + asmName + ": GetExportedTypes() threw " + ex.GetType().Name + "]");
+                    }
+                }
+                throw new InvalidOperationException(diag.ToString());
+            }
+
+            var componentResult = ResolveComponent(assetsCacheType);
+            if (componentResult == null)
+            {
+                // Diagnostics: show what's available on the solution
+                var diag = new StringBuilder();
+                diag.AppendLine("ResolveComponent returned null for " + assetsCacheType.FullName);
+                diag.AppendLine();
+                diag.AppendLine("Solution type: " + _solution.GetType().FullName);
+                diag.AppendLine();
+                diag.AppendLine("== Interfaces on solution ==");
+                foreach (var iface in _solution.GetType().GetInterfaces())
+                    diag.AppendLine("  " + iface.FullName);
+                diag.AppendLine();
+                diag.AppendLine("== Methods containing 'Component' or 'Resolve' on solution type ==");
+                foreach (var m in _solution.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (m.Name.Contains("Component") || m.Name.Contains("Resolve") || m.Name.Contains("GetInstance"))
+                        diag.AppendLine("  " + m.DeclaringType?.Name + "." + m.Name +
+                            "(" + string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name)) + ")" +
+                            (m.IsGenericMethodDefinition ? " [generic]" : ""));
+                }
+                throw new InvalidOperationException(diag.ToString());
+            }
+
+            return componentResult;
+        }
+
+        private bool CheckCacheReadiness()
+        {
+            // Find DeferredCacheController type
+            Type controllerType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    controllerType = asm.GetType("JetBrains.ReSharper.Feature.Services.DeferredCaches.DeferredCacheController");
+                    if (controllerType != null) break;
+                }
+                catch { }
+            }
+
+            if (controllerType == null) return false;
+
+            // Get the controller instance
+            var controller = ResolveComponent(controllerType);
+            if (controller == null) return false;
+
+            // Read CompletedOnce property
+            var completedOnceProp = controllerType.GetProperty("CompletedOnce",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (completedOnceProp == null) return false;
+
+            var completedOnceObj = completedOnceProp.GetValue(controller);
+            if (completedOnceObj == null) return false;
+
+            // CompletedOnce is IProperty<bool> — read .Value
+            var valueProp = completedOnceObj.GetType().GetProperty("Value",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (valueProp == null) return false;
+
+            var value = valueProp.GetValue(completedOnceObj);
+            if (value is bool b && !b) return false;
+
+            // Check HasDirtyFiles()
+            var hasDirtyMethod = controllerType.GetMethod("HasDirtyFiles",
+                BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+            if (hasDirtyMethod != null)
+            {
+                var hasDirty = hasDirtyMethod.Invoke(controller, null);
+                if (hasDirty is bool dirty && dirty) return false;
+            }
+
+            return true;
+        }
+
+        private List<BlueprintClassResult> QueryDerivedBlueprints(
+            string className, object assetsCache, VirtualFileSystemPath solutionDir,
+            bool debug, out string debugInfo)
+        {
+            debugInfo = null;
+            var debugSb = debug ? new StringBuilder() : null;
+            var results = new List<BlueprintClassResult>();
+
+            // Find a method named GetDerivedBlueprintClasses (or similar) across Cpp/Unreal assemblies
+            MethodInfo targetMethod = null;
+            var assetsCacheRuntimeType = assetsCache.GetType();
+
+            // Strategy 1: Search by method name across all types in relevant assemblies
+            var methodSearchNames = new[] { "GetDerivedBlueprintClasses", "GetDerivedBlueprints", "FindDerivedBlueprints" };
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var asmName = asm.GetName().Name ?? "";
+                if (!asmName.Contains("Cpp") && !asmName.Contains("Unreal") && !asmName.Contains("UE"))
+                    continue;
+                try
+                {
+                    foreach (var t in asm.GetExportedTypes())
+                    {
+                        foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                        {
+                            if (!methodSearchNames.Contains(m.Name)) continue;
+                            var ps = m.GetParameters();
+                            // Look for (string, UE4AssetsCache) or (UE4AssetsCache, string) signatures
+                            if (ps.Length == 2)
+                            {
+                                if (ps[0].ParameterType == typeof(string) &&
+                                    ps[1].ParameterType.IsAssignableFrom(assetsCacheRuntimeType))
+                                {
+                                    targetMethod = m;
+                                    break;
+                                }
+                                if (ps[1].ParameterType == typeof(string) &&
+                                    ps[0].ParameterType.IsAssignableFrom(assetsCacheRuntimeType))
+                                {
+                                    targetMethod = m;
+                                    break;
+                                }
+                            }
+                        }
+                        if (targetMethod != null) break;
+                    }
+                }
+                catch { }
+                if (targetMethod != null) break;
+            }
+
+            if (targetMethod == null)
+            {
+                // Diagnostics: dump all methods mentioning "Blueprint" or "Derived" in Cpp/Unreal assemblies
+                var diag = new StringBuilder();
+                diag.AppendLine("Could not find GetDerivedBlueprintClasses method.");
+                diag.AppendLine("AssetsCache runtime type: " + assetsCacheRuntimeType.FullName);
+                diag.AppendLine();
+                diag.AppendLine("== Static methods containing 'Blueprint' or 'Derived' in Cpp/Unreal assemblies ==");
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var asmName = asm.GetName().Name ?? "";
+                    if (!asmName.Contains("Cpp") && !asmName.Contains("Unreal") && !asmName.Contains("UE"))
+                        continue;
+                    try
+                    {
+                        foreach (var t in asm.GetExportedTypes())
+                        {
+                            foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                            {
+                                if (m.Name.Contains("Blueprint") || m.Name.Contains("Derived") ||
+                                    m.Name.Contains("blueprint") || m.Name.Contains("derived"))
+                                    diag.AppendLine("  " + t.FullName + "." + m.Name +
+                                        "(" + string.Join(", ", m.GetParameters().Select(p =>
+                                            p.ParameterType.Name + " " + p.Name)) + ")");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        diag.AppendLine("  [" + asmName + ": " + ex.GetType().Name + "]");
+                    }
+                }
+
+                // Also show instance methods on the assetsCache object itself
+                diag.AppendLine();
+                diag.AppendLine("== Methods on assetsCache containing 'Blueprint' or 'Derived' or 'Class' ==");
+                foreach (var m in assetsCacheRuntimeType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (m.Name.Contains("Blueprint") || m.Name.Contains("Derived") ||
+                        m.Name.Contains("Class") || m.Name.Contains("Asset"))
+                        diag.AppendLine("  " + m.Name + "(" + string.Join(", ",
+                            m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")" +
+                            " -> " + m.ReturnType.Name);
+                }
+
+                throw new InvalidOperationException(diag.ToString());
+            }
+
+            if (debugSb != null)
+            {
+                debugSb.AppendLine("Matched method: " + targetMethod.DeclaringType?.FullName + "." + targetMethod.Name);
+                debugSb.Append("  Signature: " + targetMethod.Name + "(");
+                debugSb.Append(string.Join(", ", targetMethod.GetParameters().Select(p =>
+                    p.ParameterType.FullName + " " + p.Name)));
+                debugSb.AppendLine(")");
+                debugSb.AppendLine("  Return type: " + targetMethod.ReturnType.FullName);
+                debugSb.AppendLine();
+
+                // Dump ALL methods on UE4SearchUtil
+                var searchUtilType = targetMethod.DeclaringType;
+                if (searchUtilType != null)
+                {
+                    debugSb.AppendLine("== All methods on " + searchUtilType.Name + " ==");
+                    foreach (var m in searchUtilType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                    {
+                        debugSb.AppendLine("  " + m.ReturnType.Name + " " + m.Name + "(" +
+                            string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")");
+                    }
+                    debugSb.AppendLine();
+                }
+
+                // Dump ALL public methods on UE4AssetsCache (excluding Object base methods)
+                debugSb.AppendLine("== ALL public methods on " + assetsCacheRuntimeType.Name + " ==");
+                foreach (var m in assetsCacheRuntimeType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => m.DeclaringType != typeof(object))
+                    .OrderBy(m => m.Name))
+                {
+                    debugSb.AppendLine("  " + m.ReturnType.Name + " " + m.Name + "(" +
+                        string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")");
+                }
+                debugSb.AppendLine();
+
+                // Also dump public properties on UE4AssetsCache
+                debugSb.AppendLine("== ALL public properties on " + assetsCacheRuntimeType.Name + " ==");
+                foreach (var p in assetsCacheRuntimeType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    debugSb.AppendLine("  " + p.PropertyType.Name + " " + p.Name);
+                }
+                debugSb.AppendLine();
+            }
+
+            // BFS: recursively find all derived Blueprints
+            // GetDerivedBlueprintClasses only returns direct children, so we need to
+            // recurse into each found Blueprint name to find grandchildren, etc.
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var queue = new Queue<string>();
+            queue.Enqueue(className);
+            seen.Add(className);
+
+            var isFirstParam0String = targetMethod.GetParameters()[0].ParameterType == typeof(string);
+
+            while (queue.Count > 0)
+            {
+                var currentClass = queue.Dequeue();
+                object[] invokeArgs = isFirstParam0String
+                    ? new object[] { currentClass, assetsCache }
+                    : new object[] { assetsCache, currentClass };
+
+                var enumerable = targetMethod.Invoke(null, invokeArgs);
+                if (enumerable == null) continue;
+
+                foreach (var item in (IEnumerable)enumerable)
+                {
+                    if (item == null) continue;
+                    var itemType = item.GetType();
+
+                    // Dump schema of the first item in debug mode
+                    if (results.Count == 0 && debugSb != null)
+                    {
+                        debugSb.AppendLine("Result item type: " + itemType.FullName);
+                        debugSb.AppendLine("  Fields:");
+                        foreach (var f in itemType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                        {
+                            object val = null;
+                            try { val = f.GetValue(item); } catch { }
+                            debugSb.AppendLine("    " + f.FieldType.Name + " " + f.Name +
+                                " = " + (val?.ToString() ?? "null"));
+                        }
+                        debugSb.AppendLine();
+                    }
+
+                    var name = "";
+                    var filePath = "";
+
+                    // Read Name
+                    var nameField = itemType.GetField("Name", BindingFlags.Public | BindingFlags.Instance);
+                    if (nameField != null)
+                        name = nameField.GetValue(item)?.ToString() ?? "";
+                    else
+                    {
+                        var nameProp = itemType.GetProperty("Name", BindingFlags.Public | BindingFlags.Instance);
+                        if (nameProp != null)
+                            name = nameProp.GetValue(item)?.ToString() ?? "";
+                        else
+                            name = item.ToString() ?? "";
+                    }
+
+                    // Read ContainingFile
+                    var filePropertyNames = new[] { "ContainingFile", "File", "Path", "Location" };
+                    object containingFile = null;
+                    foreach (var fpName in filePropertyNames)
+                    {
+                        var field = itemType.GetField(fpName, BindingFlags.Public | BindingFlags.Instance);
+                        if (field != null) { containingFile = field.GetValue(item); break; }
+                        var prop = itemType.GetProperty(fpName, BindingFlags.Public | BindingFlags.Instance);
+                        if (prop != null) { containingFile = prop.GetValue(item); break; }
+                    }
+
+                    if (containingFile != null)
+                    {
+                        var getLocationMethod = containingFile.GetType().GetMethod("GetLocation",
+                            BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+                        if (getLocationMethod != null)
+                        {
+                            var location = getLocationMethod.Invoke(containingFile, null);
+                            if (location != null)
+                            {
+                                var makeRelMethod = location.GetType().GetMethod("MakeRelativeTo",
+                                    BindingFlags.Public | BindingFlags.Instance);
+                                if (makeRelMethod != null)
+                                {
+                                    try
+                                    {
+                                        var relPath = makeRelMethod.Invoke(location, new object[] { solutionDir });
+                                        filePath = relPath?.ToString()?.Replace('\\', '/') ?? "";
+                                    }
+                                    catch { filePath = location.ToString()?.Replace('\\', '/') ?? ""; }
+                                }
+                                else
+                                    filePath = location.ToString()?.Replace('\\', '/') ?? "";
+                            }
+                        }
+                        else
+                            filePath = containingFile.ToString()?.Replace('\\', '/') ?? "";
+                    }
+
+                    if (!string.IsNullOrEmpty(name) && seen.Add(name))
+                    {
+                        results.Add(new BlueprintClassResult { Name = name, FilePath = filePath });
+
+                        // Enqueue this Blueprint name for recursive search
+                        // Try both with and without _C suffix
+                        queue.Enqueue(name);
+                        if (name.EndsWith("_C"))
+                        {
+                            var withoutC = name.Substring(0, name.Length - 2);
+                            if (seen.Add(withoutC))
+                                queue.Enqueue(withoutC);
+                        }
+                        else if (seen.Add(name + "_C"))
+                        {
+                            queue.Enqueue(name + "_C");
+                        }
+                    }
+                }
+            }
+
+            if (debugSb != null)
+            {
+                debugSb.AppendLine("Total results (recursive BFS): " + results.Count);
+                debugSb.AppendLine("Classes queried: " + string.Join(", ", seen));
+                debugInfo = debugSb.ToString();
+            }
+
+            return results;
+        }
+
+        private static void RespondBlueprintsMarkdown(
+            HttpListenerContext ctx, string className, bool cacheReady,
+            string cacheStatus, List<BlueprintClassResult> blueprints,
+            bool debug, string debugInfo)
+        {
+            var sb = new StringBuilder();
+            sb.Append("# Blueprints derived from ").AppendLine(className);
+            sb.AppendLine();
+            sb.Append("**Cache status:** ").AppendLine(cacheStatus);
+            sb.Append("**Total descendants:** ").AppendLine(blueprints.Count.ToString());
+            sb.AppendLine();
+
+            if (!cacheReady)
+            {
+                sb.AppendLine("> **Warning:** Cache is still building. Results may be incomplete.");
+                sb.AppendLine();
+            }
+
+            if (blueprints.Count == 0)
+            {
+                sb.AppendLine("No derived Blueprint classes found.");
+            }
+            else
+            {
+                sb.AppendLine("## Derived Blueprint Classes");
+                sb.AppendLine();
+                for (var i = 0; i < blueprints.Count; i++)
+                {
+                    var bp = blueprints[i];
+                    sb.Append(i + 1).Append(". ").Append(bp.Name);
+                    if (!string.IsNullOrEmpty(bp.FilePath))
+                        sb.Append(" — ").Append(bp.FilePath);
+                    sb.AppendLine();
+                }
+            }
+
+            if (debug && debugInfo != null)
+            {
+                sb.AppendLine();
+                sb.AppendLine("---");
+                sb.AppendLine("## Debug Info");
+                sb.AppendLine("```");
+                sb.AppendLine(debugInfo);
+                sb.AppendLine("```");
+            }
+
+            Respond(ctx, 200, "text/markdown; charset=utf-8", sb.ToString());
+        }
+
+        private static void RespondBlueprintsJson(
+            HttpListenerContext ctx, string className, bool cacheReady,
+            string cacheStatus, List<BlueprintClassResult> blueprints,
+            bool debug, string debugInfo)
+        {
+            var bpJsons = blueprints.Select(bp =>
+                "{\"name\": \"" + EscapeJson(bp.Name) + "\", " +
+                "\"file\": \"" + EscapeJson(bp.FilePath) + "\"}");
+
+            var json =
+                "{\"class\": \"" + EscapeJson(className) + "\", " +
+                "\"cacheReady\": " + (cacheReady ? "true" : "false") + ", " +
+                "\"cacheStatus\": \"" + EscapeJson(cacheStatus) + "\", " +
+                "\"totalCount\": " + blueprints.Count + ", " +
+                "\"blueprints\": [" + string.Join(",", bpJsons) + "]";
+            if (debug && debugInfo != null)
+                json += ", \"debug\": \"" + EscapeJson(debugInfo) + "\"";
+            json += "}";
+
+            Respond(ctx, 200, "application/json; charset=utf-8", json);
+        }
+
         // ── /files ──
 
         private void HandleFiles(HttpListenerContext ctx)
@@ -476,7 +1121,8 @@ namespace ReSharperPlugin.RiderActionExplorer
                 "\"GET /\": \"This help message\", " +
                 "\"GET /health\": \"Server and solution status\", " +
                 "\"GET /files\": \"List all user source files under solution directory\", " +
-                "\"GET /inspect?file=path\": \"Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.\"" +
+                "\"GET /inspect?file=path\": \"Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.\", " +
+                "\"GET /blueprints?class=ClassName\": \"List UE5 Blueprint classes deriving from a C++ class. Add &format=json for JSON.\"" +
                 "}}";
         }
 
