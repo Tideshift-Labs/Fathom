@@ -148,9 +148,12 @@ namespace ReSharperPlugin.RiderActionExplorer
                     case "/blueprints":
                         HandleBlueprints(ctx);
                         break;
+                    case "/ue-project":
+                        HandleUEProjectDiagnostics(ctx);
+                        break;
                     default:
                         Respond(ctx, 404, "text/plain",
-                            "Not found. Try: /, /health, /files, /inspect?file=path, /blueprints?class=ClassName");
+                            "Not found. Try: /, /health, /files, /inspect?file=path, /blueprints?class=ClassName, /ue-project");
                         break;
                 }
             }
@@ -1074,6 +1077,280 @@ namespace ReSharperPlugin.RiderActionExplorer
             Respond(ctx, 200, "application/json; charset=utf-8", json);
         }
 
+        // ── /ue-project (diagnostic) ──
+
+        private void HandleUEProjectDiagnostics(HttpListenerContext ctx)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("# UE Project Diagnostics");
+            sb.AppendLine();
+
+            // Basic solution info
+            var solutionDir = _solution.SolutionDirectory;
+            sb.AppendLine("## Solution");
+            sb.AppendLine($"- Directory: {solutionDir.FullPath}");
+            sb.AppendLine();
+
+            // Look for .uproject files in solution directory
+            sb.AppendLine("## .uproject files in solution directory");
+            try
+            {
+                var uprojectFiles = Directory.GetFiles(solutionDir.FullPath, "*.uproject");
+                if (uprojectFiles.Length == 0)
+                    sb.AppendLine("- (none found)");
+                else
+                    foreach (var f in uprojectFiles)
+                        sb.AppendLine($"- {f}");
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"- Error: {ex.Message}");
+            }
+            sb.AppendLine();
+
+            // Search for UE-related components
+            sb.AppendLine("## UE-related components (searching loaded assemblies)");
+            sb.AppendLine();
+
+            var componentCandidates = new[]
+            {
+                "ICppUE4ProjectPropertiesProvider",
+                "ICppUE4SolutionDetector",
+                "CppUE4Configuration",
+                "UE4ProjectModel",
+                "UnrealProjectModel",
+                "IUnrealProjectProvider",
+                "UnrealEngineSettings",
+            };
+
+            foreach (var candidateName in componentCandidates)
+            {
+                sb.AppendLine($"### Searching for: {candidateName}");
+
+                Type foundType = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var asmName = asm.GetName().Name ?? "";
+                    if (!asmName.Contains("Cpp") && !asmName.Contains("Unreal") && !asmName.Contains("UE") &&
+                        !asmName.Contains("Rider") && !asmName.Contains("JetBrains"))
+                        continue;
+
+                    try
+                    {
+                        foreach (var t in asm.GetExportedTypes())
+                        {
+                            if (t.Name == candidateName || t.Name == "I" + candidateName)
+                            {
+                                foundType = t;
+                                break;
+                            }
+                        }
+                    }
+                    catch { }
+                    if (foundType != null) break;
+                }
+
+                if (foundType == null)
+                {
+                    sb.AppendLine("- Type not found");
+                    sb.AppendLine();
+                    continue;
+                }
+
+                sb.AppendLine($"- Found: {foundType.FullName}");
+                sb.AppendLine($"- Assembly: {foundType.Assembly.GetName().Name}");
+
+                // Try to resolve as component
+                object componentInstance = null;
+                try
+                {
+                    componentInstance = ResolveComponent(foundType);
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"- ResolveComponent error: {ex.Message}");
+                }
+
+                if (componentInstance == null)
+                {
+                    sb.AppendLine("- Component instance: null (not registered or not resolvable)");
+                    sb.AppendLine();
+                    continue;
+                }
+
+                sb.AppendLine($"- Component instance: {componentInstance.GetType().FullName}");
+                sb.AppendLine();
+
+                // Dump properties
+                sb.AppendLine("#### Properties:");
+                foreach (var prop in componentInstance.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    try
+                    {
+                        var value = prop.GetValue(componentInstance);
+                        var valueStr = value?.ToString() ?? "null";
+                        if (valueStr.Length > 200) valueStr = valueStr.Substring(0, 200) + "...";
+                        sb.AppendLine($"- {prop.PropertyType.Name} {prop.Name} = {valueStr}");
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine($"- {prop.PropertyType.Name} {prop.Name} = (error: {ex.Message})");
+                    }
+                }
+                sb.AppendLine();
+
+                // Dump methods (excluding Object base methods)
+                sb.AppendLine("#### Methods:");
+                foreach (var method in componentInstance.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => m.DeclaringType != typeof(object))
+                    .OrderBy(m => m.Name))
+                {
+                    var paramStr = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
+                    sb.AppendLine($"- {method.ReturnType.Name} {method.Name}({paramStr})");
+                }
+                sb.AppendLine();
+            }
+
+            // Try to call GetUProjectPath() and GetUE4EngineProject() on ICppUE4SolutionDetector
+            sb.AppendLine("## UE Project Info (via GetUEProjectInfo helper)");
+            var ueInfo = GetUEProjectInfo();
+            sb.AppendLine($"- IsUnrealProject: {ueInfo.IsUnrealProject}");
+            sb.AppendLine($"- UProjectPath: {ueInfo.UProjectPath ?? "(null)"}");
+            sb.AppendLine($"- EnginePath: {ueInfo.EnginePath ?? "(null)"}");
+            sb.AppendLine($"- EngineVersion: {ueInfo.EngineVersion ?? "(null)"}");
+            sb.AppendLine($"- CommandletExePath: {ueInfo.CommandletExePath ?? "(null)"}");
+            if (ueInfo.Error != null)
+                sb.AppendLine($"- Error: {ueInfo.Error}");
+            if (!string.IsNullOrEmpty(ueInfo.CommandletExePath))
+                sb.AppendLine($"- Commandlet exists: {File.Exists(ueInfo.CommandletExePath)}");
+            sb.AppendLine();
+
+            sb.AppendLine("## Calling ICppUE4SolutionDetector methods (raw)");
+            try
+            {
+                Type detectorType = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
+                    {
+                        detectorType = asm.GetType("JetBrains.ReSharper.Psi.Cpp.UE4.ICppUE4SolutionDetector");
+                        if (detectorType != null) break;
+                    }
+                    catch { }
+                }
+
+                if (detectorType != null)
+                {
+                    var detector = ResolveComponent(detectorType);
+                    if (detector != null)
+                    {
+                        // Call GetUProjectPath()
+                        var getUProjectPath = detector.GetType().GetMethod("GetUProjectPath",
+                            BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+                        if (getUProjectPath != null)
+                        {
+                            var uprojectPath = getUProjectPath.Invoke(detector, null);
+                            sb.AppendLine($"- GetUProjectPath() = {uprojectPath}");
+                        }
+                        else
+                        {
+                            sb.AppendLine("- GetUProjectPath() method not found");
+                        }
+
+                        // Call GetUE4EngineProject()
+                        var getEngineProject = detector.GetType().GetMethod("GetUE4EngineProject",
+                            BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+                        if (getEngineProject != null)
+                        {
+                            var engineProject = getEngineProject.Invoke(detector, null);
+                            sb.AppendLine($"- GetUE4EngineProject() = {engineProject}");
+
+                            if (engineProject != null)
+                            {
+                                // Try to get more info from the engine project
+                                var engineType = engineProject.GetType();
+                                sb.AppendLine($"  - Type: {engineType.FullName}");
+
+                                // Look for path-related properties
+                                foreach (var prop in engineType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                                {
+                                    if (prop.Name.Contains("Path") || prop.Name.Contains("Directory") ||
+                                        prop.Name.Contains("Location") || prop.Name.Contains("Folder"))
+                                    {
+                                        try
+                                        {
+                                            var val = prop.GetValue(engineProject);
+                                            sb.AppendLine($"  - {prop.Name} = {val}");
+                                        }
+                                        catch { }
+                                    }
+                                }
+
+                                // Try GetProperty("ProjectFileLocation") or similar
+                                var getPropMethod = engineType.GetMethod("GetProperty",
+                                    BindingFlags.Public | BindingFlags.Instance);
+                                if (getPropMethod != null)
+                                {
+                                    sb.AppendLine($"  - Has GetProperty method");
+                                }
+
+                                // Look for ProjectFileLocation
+                                var projFileLoc = engineType.GetProperty("ProjectFileLocation",
+                                    BindingFlags.Public | BindingFlags.Instance);
+                                if (projFileLoc != null)
+                                {
+                                    var loc = projFileLoc.GetValue(engineProject);
+                                    sb.AppendLine($"  - ProjectFileLocation = {loc}");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            sb.AppendLine("- GetUE4EngineProject() method not found");
+                        }
+                    }
+                    else
+                    {
+                        sb.AppendLine("- Could not resolve ICppUE4SolutionDetector component");
+                    }
+                }
+                else
+                {
+                    sb.AppendLine("- ICppUE4SolutionDetector type not found");
+                }
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"- Error: {ex.Message}");
+                if (ex.InnerException != null)
+                    sb.AppendLine($"  Inner: {ex.InnerException.Message}");
+            }
+            sb.AppendLine();
+
+            // Also dump types containing "Engine" or "Project" in Cpp/Unreal assemblies
+            sb.AppendLine("## All types containing 'Engine', 'Project', or 'Uproject' in Cpp/Unreal assemblies");
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var asmName = asm.GetName().Name ?? "";
+                if (!asmName.Contains("Cpp") && !asmName.Contains("Unreal") && !asmName.Contains("UE"))
+                    continue;
+
+                try
+                {
+                    foreach (var t in asm.GetExportedTypes())
+                    {
+                        if (t.Name.Contains("Engine") || t.Name.Contains("Project") || t.Name.Contains("Uproject"))
+                        {
+                            sb.AppendLine($"- {t.FullName}");
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            Respond(ctx, 200, "text/markdown; charset=utf-8", sb.ToString());
+        }
+
         // ── /files ──
 
         private void HandleFiles(HttpListenerContext ctx)
@@ -1289,6 +1566,152 @@ namespace ReSharperPlugin.RiderActionExplorer
             ctx.Response.ContentLength64 = buffer.Length;
             ctx.Response.OutputStream.Write(buffer, 0, buffer.Length);
             ctx.Response.OutputStream.Close();
+        }
+
+        // ── UE Project Info ──
+
+        private class UEProjectInfo
+        {
+            public bool IsUnrealProject;
+            public string UProjectPath;      // e.g. E:\UE\Projects\Workspace\Udemy_CUI.uproject
+            public string EnginePath;        // e.g. D:\UE\Engines\UE_5.7\Engine
+            public string EngineVersion;     // e.g. 5.7.1
+            public string CommandletExePath; // e.g. D:\UE\Engines\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe
+            public string Error;
+        }
+
+        private UEProjectInfo GetUEProjectInfo()
+        {
+            var result = new UEProjectInfo();
+
+            try
+            {
+                // Find ICppUE4SolutionDetector type
+                Type detectorType = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
+                    {
+                        detectorType = asm.GetType("JetBrains.ReSharper.Psi.Cpp.UE4.ICppUE4SolutionDetector");
+                        if (detectorType != null) break;
+                    }
+                    catch { }
+                }
+
+                if (detectorType == null)
+                {
+                    result.Error = "ICppUE4SolutionDetector type not found";
+                    return result;
+                }
+
+                var detector = ResolveComponent(detectorType);
+                if (detector == null)
+                {
+                    result.Error = "ICppUE4SolutionDetector component not resolvable";
+                    return result;
+                }
+
+                // Check IsUnrealSolution property
+                var isUnrealProp = detector.GetType().GetProperty("IsUnrealSolution",
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (isUnrealProp != null)
+                {
+                    var isUnrealObj = isUnrealProp.GetValue(detector);
+                    // It's IProperty<bool>, get .Value
+                    var valueProp = isUnrealObj?.GetType().GetProperty("Value",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    if (valueProp != null)
+                    {
+                        var val = valueProp.GetValue(isUnrealObj);
+                        result.IsUnrealProject = val is true;
+                    }
+                }
+
+                if (!result.IsUnrealProject)
+                {
+                    result.Error = "Not an Unreal project";
+                    return result;
+                }
+
+                // Get UProjectPath
+                var getUProjectPath = detector.GetType().GetMethod("GetUProjectPath",
+                    BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+                if (getUProjectPath != null)
+                {
+                    var uprojectPath = getUProjectPath.Invoke(detector, null);
+                    result.UProjectPath = uprojectPath?.ToString();
+                }
+
+                // Get UnrealContext property and parse engine path
+                var unrealContextProp = detector.GetType().GetProperty("UnrealContext",
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (unrealContextProp != null)
+                {
+                    var contextObj = unrealContextProp.GetValue(detector);
+                    // It's IProperty<UnrealEngineContext>, get .Value
+                    var valueProp = contextObj?.GetType().GetProperty("Value",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    if (valueProp != null)
+                    {
+                        var contextValue = valueProp.GetValue(contextObj);
+                        if (contextValue != null)
+                        {
+                            // Try to get Path property directly from UnrealEngineContext
+                            var pathProp = contextValue.GetType().GetProperty("Path",
+                                BindingFlags.Public | BindingFlags.Instance);
+                            if (pathProp != null)
+                            {
+                                var pathVal = pathProp.GetValue(contextValue);
+                                result.EnginePath = pathVal?.ToString();
+                            }
+
+                            // Try to get Version property
+                            var versionProp = contextValue.GetType().GetProperty("Version",
+                                BindingFlags.Public | BindingFlags.Instance);
+                            if (versionProp != null)
+                            {
+                                var versionVal = versionProp.GetValue(contextValue);
+                                result.EngineVersion = versionVal?.ToString();
+                            }
+
+                            // If Path property didn't work, try parsing ToString()
+                            if (string.IsNullOrEmpty(result.EnginePath))
+                            {
+                                var contextStr = contextValue.ToString();
+                                // Format: "Path: D:\UE\Engines\UE_5.7\Engine. Version: 5.7.1. ..."
+                                var pathMatch = System.Text.RegularExpressions.Regex.Match(
+                                    contextStr, @"Path:\s*([^.]+(?:\.[^.]+)*?)\.\s*Version:");
+                                if (pathMatch.Success)
+                                {
+                                    result.EnginePath = pathMatch.Groups[1].Value.Trim();
+                                }
+
+                                var versionMatch = System.Text.RegularExpressions.Regex.Match(
+                                    contextStr, @"Version:\s*([0-9.]+)");
+                                if (versionMatch.Success)
+                                {
+                                    result.EngineVersion = versionMatch.Groups[1].Value.Trim();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Build commandlet path
+                if (!string.IsNullOrEmpty(result.EnginePath))
+                {
+                    result.CommandletExePath = Path.Combine(
+                        result.EnginePath, "Binaries", "Win64", "UnrealEditor-Cmd.exe");
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Error = ex.Message;
+                if (ex.InnerException != null)
+                    result.Error += " | Inner: " + ex.InnerException.Message;
+            }
+
+            return result;
         }
     }
 }
