@@ -12,15 +12,17 @@
 //   GET /                → List available endpoints
 //   GET /health          → Solution info and server status
 //   GET /files           → List all user source files (under solution dir)
-//   GET /inspect?file=X  → Run InspectCodeDaemon on file(s), return JSON issues
+//   GET /inspect?file=X  → Run InspectCodeDaemon on file(s), return issues
 //                          Supports multiple: ?file=a.cpp&file=b.cpp
-//                          Add &debug=true for per-file diagnostic info (psiSync, timing)
+//                          &format=json for JSON (default is markdown)
+//                          &debug=true  for per-file diagnostic info (psiSync, timing)
 //
 // How it works:
 //   Uses System.Net.HttpListener (built into .NET, zero dependencies).
 //   For /inspect, finds matching IPsiSourceFile by relative path, then runs
 //   InspectCodeDaemon.DoHighlighting() — the same proven mechanism from
 //   InspectCodeDaemonExperiment.cs.
+//   Default output is markdown (LLM-friendly). Use &format=json for structured data.
 // =============================================================================
 
 using System;
@@ -127,10 +129,10 @@ namespace ReSharperPlugin.RiderActionExplorer
                 {
                     case "":
                     case "/":
-                        RespondJson(ctx, 200, BuildIndexResponse());
+                        Respond(ctx, 200, "application/json; charset=utf-8", BuildIndexResponse());
                         break;
                     case "/health":
-                        RespondJson(ctx, 200, BuildHealthResponse());
+                        Respond(ctx, 200, "application/json; charset=utf-8", BuildHealthResponse());
                         break;
                     case "/files":
                         HandleFiles(ctx);
@@ -139,8 +141,8 @@ namespace ReSharperPlugin.RiderActionExplorer
                         HandleInspect(ctx);
                         break;
                     default:
-                        RespondJson(ctx, 404,
-                            "{\"error\": \"Not found. Try: /, /health, /files, /inspect?file=path\"}");
+                        Respond(ctx, 404, "text/plain",
+                            "Not found. Try: /, /health, /files, /inspect?file=path");
                         break;
                 }
             }
@@ -149,8 +151,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                 Log.Error(ex, "InspectionHttpServer: unhandled error in request handler");
                 try
                 {
-                    RespondJson(ctx, 500,
-                        "{\"error\": \"" + EscapeJson(ex.GetType().Name + ": " + ex.Message) + "\"}");
+                    Respond(ctx, 500, "text/plain", ex.GetType().Name + ": " + ex.Message);
                 }
                 catch { /* give up */ }
             }
@@ -163,12 +164,12 @@ namespace ReSharperPlugin.RiderActionExplorer
             var fileParams = ctx.Request.QueryString.GetValues("file");
             if (fileParams == null || fileParams.Length == 0)
             {
-                RespondJson(ctx, 400,
-                    "{\"error\": \"Missing 'file' query parameter. Usage: /inspect?file=Source/Foo.cpp&file=Source/Bar.cpp\"}");
+                Respond(ctx, 400, "text/plain", "Missing 'file' query parameter.\nUsage: /inspect?file=Source/Foo.cpp&file=Source/Bar.cpp");
                 return;
             }
 
             var debug = IsDebug(ctx);
+            var format = GetFormat(ctx);
 
             IssueClasses issueClasses;
             FileImages fileImages;
@@ -179,8 +180,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
             catch (Exception ex)
             {
-                RespondJson(ctx, 500,
-                    "{\"error\": \"Failed to get inspection components: " + EscapeJson(ex.Message) + "\"}");
+                Respond(ctx, 500, "text/plain", "Failed to get inspection components: " + ex.Message);
                 return;
             }
 
@@ -188,56 +188,45 @@ namespace ReSharperPlugin.RiderActionExplorer
             var fileIndex = BuildFileIndex(solutionDir);
             var requestSw = Stopwatch.StartNew();
 
-            var fileResults = new List<string>();
-            var totalIssues = 0;
+            var results = new List<FileResult>();
 
             foreach (var fileParam in fileParams)
             {
                 var key = NormalizePath(fileParam);
+                var result = new FileResult { RequestedPath = fileParam };
 
                 IPsiSourceFile sourceFile;
                 if (!fileIndex.TryGetValue(key, out sourceFile))
                 {
-                    fileResults.Add(
-                        "{\"file\": \"" + EscapeJson(fileParam) + "\", " +
-                        "\"error\": \"File not found in solution\", \"issues\": []}");
+                    result.Error = "File not found in solution";
+                    results.Add(result);
                     continue;
                 }
+
+                result.ResolvedPath = sourceFile.GetLocation()
+                    .MakeRelativeTo(solutionDir).ToString().Replace('\\', '/');
 
                 // Step A: Wait for PSI to match disk content before inspecting
-                var syncResult = WaitForPsiSync(sourceFile);
+                result.SyncResult = WaitForPsiSync(sourceFile);
 
-                if (syncResult.Status == "timeout")
+                if (result.SyncResult.Status == "timeout")
                 {
-                    var entry =
-                        "{\"file\": \"" + EscapeJson(fileParam) + "\", " +
-                        "\"error\": \"PSI sync timeout: document does not match disk content after " +
-                        syncResult.WaitedMs + "ms\", " +
-                        "\"issues\": []";
-                    if (debug)
-                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, 0);
-                    entry += "}";
-                    fileResults.Add(entry);
+                    result.Error = "PSI sync timeout: document does not match disk content after " +
+                                   result.SyncResult.WaitedMs + "ms";
+                    results.Add(result);
                     continue;
                 }
 
-                if (syncResult.Status == "disk_read_error")
+                if (result.SyncResult.Status == "disk_read_error")
                 {
-                    var entry =
-                        "{\"file\": \"" + EscapeJson(fileParam) + "\", " +
-                        "\"error\": \"Cannot read file from disk: " + EscapeJson(syncResult.Message) + "\", " +
-                        "\"issues\": []";
-                    if (debug)
-                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, 0);
-                    entry += "}";
-                    fileResults.Add(entry);
+                    result.Error = "Cannot read file from disk: " + result.SyncResult.Message;
+                    results.Add(result);
                     continue;
                 }
 
                 try
                 {
                     var inspectSw = Stopwatch.StartNew();
-                    var issues = new List<string>();
                     var daemon = new InspectCodeDaemon(issueClasses, sourceFile, fileImages);
                     daemon.DoHighlighting(DaemonProcessKind.OTHER, issue =>
                     {
@@ -258,49 +247,130 @@ namespace ReSharperPlugin.RiderActionExplorer
                         }
                         catch { /* ignore offset errors */ }
 
-                        issues.Add(
-                            "{\"severity\": \"" + EscapeJson(severity) + "\", " +
-                            "\"line\": " + line + ", " +
-                            "\"message\": \"" + EscapeJson(message) + "\"}");
+                        result.Issues.Add(new IssueInfo
+                        {
+                            Severity = severity,
+                            Line = line,
+                            Message = message
+                        });
                     });
-                    var inspectMs = (int)inspectSw.ElapsedMilliseconds;
-
-                    totalIssues += issues.Count;
-                    var relPath = sourceFile.GetLocation()
-                        .MakeRelativeTo(solutionDir).ToString().Replace('\\', '/');
-                    var entry =
-                        "{\"file\": \"" + EscapeJson(relPath) + "\", " +
-                        "\"issues\": [" + string.Join(",", issues) + "], " +
-                        "\"error\": null";
-                    if (debug)
-                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, inspectMs);
-                    entry += "}";
-                    fileResults.Add(entry);
+                    result.InspectionMs = (int)inspectSw.ElapsedMilliseconds;
                 }
                 catch (Exception ex)
                 {
-                    var entry =
-                        "{\"file\": \"" + EscapeJson(fileParam) + "\", " +
-                        "\"issues\": [], " +
-                        "\"error\": \"" + EscapeJson(ex.GetType().Name + ": " + ex.Message) + "\"";
-                    if (debug)
-                        entry += ", \"debug\": " + BuildFileDebugJson(syncResult, 0);
-                    entry += "}";
-                    fileResults.Add(entry);
+                    result.Error = ex.GetType().Name + ": " + ex.Message;
                 }
+
+                results.Add(result);
             }
 
             var totalMs = (int)requestSw.ElapsedMilliseconds;
+
+            if (format == "json")
+                RespondInspectJson(ctx, solutionDir, results, totalMs, debug);
+            else
+                RespondInspectMarkdown(ctx, results, totalMs, debug);
+        }
+
+        // ── /inspect formatters ──
+
+        private static void RespondInspectMarkdown(
+            HttpListenerContext ctx, List<FileResult> results, int totalMs, bool debug)
+        {
+            var sb = new StringBuilder();
+            var totalIssues = results.Sum(r => r.Issues.Count);
+
+            foreach (var r in results)
+            {
+                var displayPath = r.ResolvedPath ?? r.RequestedPath;
+
+                if (r.Error != null)
+                {
+                    sb.Append("## ").Append(displayPath).AppendLine(" (error)");
+                    sb.Append("**Error:** ").AppendLine(r.Error);
+                }
+                else if (r.Issues.Count == 0)
+                {
+                    sb.Append("## ").Append(displayPath).AppendLine(" (0 issues)");
+                }
+                else
+                {
+                    sb.Append("## ").Append(displayPath)
+                        .Append(" (").Append(r.Issues.Count)
+                        .Append(r.Issues.Count == 1 ? " issue)" : " issues)")
+                        .AppendLine();
+                    for (var i = 0; i < r.Issues.Count; i++)
+                    {
+                        var issue = r.Issues[i];
+                        sb.Append(i + 1).Append(". ")
+                            .Append(issue.Message)
+                            .Append(" [").Append(issue.Severity).Append("]")
+                            .Append(" (line ").Append(issue.Line).Append(")")
+                            .AppendLine();
+                    }
+                }
+
+                if (debug && r.SyncResult != null)
+                {
+                    sb.Append("> Debug: PSI ").Append(r.SyncResult.Status);
+                    if (r.SyncResult.WaitedMs > 0)
+                        sb.Append(" (").Append(r.SyncResult.WaitedMs).Append("ms, ")
+                            .Append(r.SyncResult.Attempts).Append(" attempts)");
+                    sb.Append(" | Inspection: ").Append(r.InspectionMs).Append("ms");
+                    sb.AppendLine();
+                }
+
+                sb.AppendLine();
+            }
+
+            if (debug)
+            {
+                sb.Append("---").AppendLine();
+                sb.Append("Total: ").Append(totalIssues).Append(" issues across ")
+                    .Append(results.Count).Append(" files in ")
+                    .Append(totalMs).Append("ms").AppendLine();
+            }
+
+            Respond(ctx, 200, "text/markdown; charset=utf-8", sb.ToString());
+        }
+
+        private void RespondInspectJson(
+            HttpListenerContext ctx, VirtualFileSystemPath solutionDir,
+            List<FileResult> results, int totalMs, bool debug)
+        {
+            var totalIssues = results.Sum(r => r.Issues.Count);
+            var fileJsons = new List<string>();
+
+            foreach (var r in results)
+            {
+                var displayPath = r.ResolvedPath ?? r.RequestedPath;
+                var issueJsons = r.Issues.Select(issue =>
+                    "{\"severity\": \"" + EscapeJson(issue.Severity) + "\", " +
+                    "\"line\": " + issue.Line + ", " +
+                    "\"message\": \"" + EscapeJson(issue.Message) + "\"}");
+
+                var entry =
+                    "{\"file\": \"" + EscapeJson(displayPath) + "\", " +
+                    "\"issues\": [" + string.Join(",", issueJsons) + "], " +
+                    "\"error\": " + (r.Error != null
+                        ? "\"" + EscapeJson(r.Error) + "\""
+                        : "null");
+                if (debug && r.SyncResult != null)
+                    entry += ", \"debug\": " + BuildFileDebugJson(r.SyncResult, r.InspectionMs);
+                entry += "}";
+                fileJsons.Add(entry);
+            }
+
             var json =
                 "{\"solution\": \"" + EscapeJson(solutionDir.FullPath.Replace('\\', '/')) + "\", " +
-                "\"files\": [" + string.Join(",", fileResults) + "], " +
+                "\"files\": [" + string.Join(",", fileJsons) + "], " +
                 "\"totalIssues\": " + totalIssues + ", " +
-                "\"totalFiles\": " + fileParams.Length;
+                "\"totalFiles\": " + results.Count;
             if (debug)
                 json += ", \"debug\": {\"totalMs\": " + totalMs + "}";
             json += "}";
 
-            RespondJson(ctx, 200, json);
+            Respond(ctx, 200, "application/json; charset=utf-8", json);
         }
 
         private static string BuildFileDebugJson(PsiSyncResult sync, int inspectMs)
@@ -342,7 +412,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                 "\"fileCount\": " + fileEntries.Count + ", " +
                 "\"files\": [" + string.Join(",", fileEntries) + "]}";
 
-            RespondJson(ctx, 200, json);
+            Respond(ctx, 200, "application/json; charset=utf-8", json);
         }
 
         // ── /health ──
@@ -364,8 +434,27 @@ namespace ReSharperPlugin.RiderActionExplorer
                 "\"GET /\": \"This help message\", " +
                 "\"GET /health\": \"Server and solution status\", " +
                 "\"GET /files\": \"List all user source files under solution directory\", " +
-                "\"GET /inspect?file=path\": \"Run code inspection on file(s). Supports multiple: ?file=a.cpp&file=b.cpp. Paths are relative to solution directory. Add &debug=true for per-file timing and PSI sync diagnostics.\"" +
+                "\"GET /inspect?file=path\": \"Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.\"" +
                 "}}";
+        }
+
+        // ── Result data structures ──
+
+        private class FileResult
+        {
+            public string RequestedPath;
+            public string ResolvedPath;
+            public string Error;
+            public List<IssueInfo> Issues = new List<IssueInfo>();
+            public PsiSyncResult SyncResult;
+            public int InspectionMs;
+        }
+
+        private class IssueInfo
+        {
+            public string Severity;
+            public int Line;
+            public string Message;
         }
 
         // ── File index ──
@@ -396,16 +485,11 @@ namespace ReSharperPlugin.RiderActionExplorer
         private const int PsiSyncTimeoutMs = 15000;
         private const int PsiSyncPollIntervalMs = 250;
 
-        /// <summary>
-        /// Waits until the PSI document content matches the file on disk.
-        /// Returns a diagnostic object with sync status info.
-        /// </summary>
         private static PsiSyncResult WaitForPsiSync(IPsiSourceFile sourceFile)
         {
             var diskPath = sourceFile.GetLocation().FullPath;
             var sw = Stopwatch.StartNew();
 
-            // Read disk content, normalize line endings for comparison
             string diskContent;
             try
             {
@@ -421,7 +505,6 @@ namespace ReSharperPlugin.RiderActionExplorer
                 };
             }
 
-            // Poll until document matches disk or timeout
             var attempts = 0;
             while (sw.ElapsedMilliseconds < PsiSyncTimeoutMs)
             {
@@ -467,7 +550,7 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         private class PsiSyncResult
         {
-            public string Status;   // "synced", "synced_after_wait", "timeout", "disk_read_error"
+            public string Status;
             public int WaitedMs;
             public int Attempts;
             public string Message;
@@ -475,15 +558,20 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         // ── Helpers ──
 
-        /// <summary>
-        /// Parses the &amp;debug=true query parameter. Usable on any endpoint.
-        /// </summary>
         private static bool IsDebug(HttpListenerContext ctx)
         {
             var val = ctx.Request.QueryString["debug"];
             return val != null &&
                    (val.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                     val.Equals("1", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string GetFormat(HttpListenerContext ctx)
+        {
+            var val = ctx.Request.QueryString["format"];
+            if (val != null && val.Equals("json", StringComparison.OrdinalIgnoreCase))
+                return "json";
+            return "md";
         }
 
         private static string NormalizePath(string path)
@@ -502,11 +590,11 @@ namespace ReSharperPlugin.RiderActionExplorer
                 .Replace("\t", "\\t");
         }
 
-        private static void RespondJson(HttpListenerContext ctx, int statusCode, string json)
+        private static void Respond(HttpListenerContext ctx, int statusCode, string contentType, string body)
         {
-            var buffer = Encoding.UTF8.GetBytes(json);
+            var buffer = Encoding.UTF8.GetBytes(body);
             ctx.Response.StatusCode = statusCode;
-            ctx.Response.ContentType = "application/json; charset=utf-8";
+            ctx.Response.ContentType = contentType;
             ctx.Response.ContentLength64 = buffer.Length;
             ctx.Response.OutputStream.Write(buffer, 0, buffer.Length);
             ctx.Response.OutputStream.Close();
