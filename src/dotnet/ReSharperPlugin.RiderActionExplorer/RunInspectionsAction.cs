@@ -1,3 +1,31 @@
+// =============================================================================
+// RunInspectionsAction.cs — DEAD END (Active but not useful)
+// =============================================================================
+// GOAL PROGRESS: NO — Only reads existing markup from already-open files.
+//
+// What it does:
+//   An IExecutableAction (Ctrl+Alt+Shift+I) that reads document markup
+//   (highlighting results) from all files that have an active IDocumentMarkup
+//   model. Writes results to desktop as resharper-inspections-dump.txt.
+//
+// How it works:
+//   1. Gets IDocumentMarkupManager from Shell
+//   2. Iterates all project files, calls TryGetMarkupModel(document)
+//   3. For files with markup, enumerates highlighters and extracts tooltip text
+//   4. Filters out Usage markers, keeps Error/Warning/Suggestion/Hint
+//
+// Why it doesn't help:
+//   IDocumentMarkupManager.TryGetMarkupModel() only returns a model for
+//   documents that have active editor sessions (open files). Files not open
+//   in the editor have no markup model, so they're silently skipped.
+//   This is fundamentally the same constraint as IDaemon.ForceReHighlight —
+//   it requires open editor tabs, which conflicts with our requirement to
+//   inspect files without UI interaction.
+//
+// Value: First experiment. Proved that reading existing markup only works for
+//   open files and that we need a different approach entirely.
+// =============================================================================
+
 using System;
 using System.Collections.Generic;
 using System.IO;

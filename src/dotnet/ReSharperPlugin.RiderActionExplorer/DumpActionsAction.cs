@@ -1,3 +1,20 @@
+// =============================================================================
+// DumpActionsAction.cs — UTILITY (Active)
+// =============================================================================
+// GOAL PROGRESS: N/A — Diagnostic utility, not related to inspection.
+//
+// What it does:
+//   An IExecutableAction (Ctrl+Alt+Shift+D) that dumps all registered
+//   ReSharper/Rider backend actions to a text file on the desktop.
+//
+// How it works:
+//   Gets IActionManager from Shell, iterates Defs.GetAllActionDefs(),
+//   writes ID/Text/Description for each action to resharper-actions-dump.txt.
+//
+// Value: Helped verify that our plugin actions were registered in the backend.
+//   Also useful for discovering available action IDs.
+// =============================================================================
+
 using System;
 using System.IO;
 using System.Linq;

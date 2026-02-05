@@ -1,3 +1,33 @@
+// =============================================================================
+// FullInspectionTestComponent.cs — C#-ONLY SUCCESS (Disabled)
+// =============================================================================
+// GOAL PROGRESS: PARTIAL — Proved RunLocalInspections works for C#, not C++.
+//
+// What it does:
+//   Auto-runs on solution load. Collects ALL source files across ALL projects,
+//   then runs CollectInspectionResults.RunLocalInspections() on the entire batch.
+//   Writes results to desktop as resharper-full-inspections-dump.txt.
+//
+// How it works:
+//   1. Waits 10s for solution indexing to settle
+//   2. Collects all IPsiSourceFile from all projects (no filtering)
+//   3. Creates CollectInspectionResults with a nested lifetime
+//   4. Calls RunLocalInspections with the full file stack
+//   5. Formats IssuePointer results with severity, path, line, and message
+//
+// Why it doesn't help for C++:
+//   RunLocalInspections only triggers ReSharper daemon stages (C# analyzers).
+//   C++ files get callbacks but with 0 issues. This is because the internal
+//   InspectionDaemon lacks FileImages.DisableCheckThread().
+//
+// Value: Proved that RunLocalInspections works for C# (88 issues found on a
+//   C# project without SWEA). Also established the correct lifetime management
+//   pattern — terminating the lifetime too early causes silent 0-issue results.
+//
+// Superseded by: CppInspectionExperiment.cs (for diagnostics),
+//   InspectCodeDaemonExperiment.cs (for the working C++ solution)
+// =============================================================================
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,7 +48,8 @@ using JetBrains.Util;
 
 namespace ReSharperPlugin.RiderActionExplorer
 {
-    [SolutionComponent(Instantiation.ContainerAsyncAnyThreadSafe)]
+    // Disabled: superseded by CppInspectionExperiment
+    // [SolutionComponent(Instantiation.ContainerAsyncAnyThreadSafe)]
     public class FullInspectionTestComponent
     {
         private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<FullInspectionTestComponent>();

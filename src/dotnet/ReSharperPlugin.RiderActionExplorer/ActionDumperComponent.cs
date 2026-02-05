@@ -1,3 +1,20 @@
+// =============================================================================
+// ActionDumperComponent.cs — UTILITY (Active)
+// =============================================================================
+// GOAL PROGRESS: N/A — Diagnostic utility, not related to inspection.
+//
+// What it does:
+//   A [ShellComponent] that automatically dumps all registered actions at shell
+//   startup. Same output as DumpActionsAction.cs but runs without user trigger.
+//
+// How it works:
+//   Constructor receives IActionManager, iterates all action defs, writes to
+//   resharper-actions-dump.txt on the desktop.
+//
+// Value: Proved that [ShellComponent] auto-runs at startup. Useful for
+//   debugging action registration issues without relying on keyboard shortcuts.
+// =============================================================================
+
 using System;
 using System.IO;
 using System.Linq;
@@ -9,7 +26,8 @@ using JetBrains.Lifetimes;
 
 namespace ReSharperPlugin.RiderActionExplorer
 {
-    [ShellComponent]
+    // Disabled: auto-run replaced by InspectionHttpServer
+    // [ShellComponent]
     public class ActionDumperComponent
     {
         public ActionDumperComponent(Lifetime lifetime, IActionManager actionManager)

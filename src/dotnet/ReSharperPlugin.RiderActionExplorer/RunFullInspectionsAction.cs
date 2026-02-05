@@ -1,3 +1,32 @@
+// =============================================================================
+// RunFullInspectionsAction.cs — DEAD END for C++ (Active but not useful)
+// =============================================================================
+// GOAL PROGRESS: NO — Both paths (SWEA and RunLocalInspections) fail for C++.
+//
+// What it does:
+//   An IExecutableAction (Ctrl+Alt+Shift+W) that tries two strategies:
+//   1. If SWEA is enabled and completed: reads cached results via
+//      CollectInspectionResults.CollectIssuesFromSolutionAnalysis()
+//   2. Otherwise: falls back to CollectInspectionResults.RunLocalInspections()
+//
+// How it works:
+//   - Checks SolutionAnalysisConfiguration.Paused and CompletedOnceAfterStart
+//   - SWEA path: reads from SolutionAnalysisManager.IssueSet under ReadLockCookie
+//   - Local path: creates CollectInspectionResults and runs per-file analysis
+//
+// Why it doesn't help:
+//   - SWEA path: SolutionAnalysisManager is not a registered component (throws
+//     "Could not find the component's descriptor"). Also SWEA is off by default
+//     in UE5 projects.
+//   - Local daemon path: RunLocalInspections returns 0 results for C++ files
+//     (same issue as FullInspectionTestComponent — missing DisableCheckThread).
+//   - Shortcut (Ctrl+Alt+Shift+W) doesn't reliably reach the backend from
+//     Rider's IntelliJ frontend.
+//
+// Value: Established that SolutionAnalysisManager is not accessible from plugins
+//   and that the SWEA cache path is a dead end.
+// =============================================================================
+
 using System;
 using System.Collections.Generic;
 using System.IO;
