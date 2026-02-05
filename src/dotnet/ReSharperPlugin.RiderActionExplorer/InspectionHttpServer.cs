@@ -57,7 +57,7 @@ using FileImages = JetBrains.ReSharper.Daemon.SolutionAnalysis.FileImages.FileIm
 
 namespace ReSharperPlugin.RiderActionExplorer
 {
-    [SolutionComponent(Instantiation.ContainerAsyncAnyThreadSafe)]
+    // [SolutionComponent(Instantiation.ContainerAsyncAnyThreadSafe)] // Disabled: replaced by InspectionHttpServer2
     public class InspectionHttpServer
     {
         private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<InspectionHttpServer>();

@@ -94,3 +94,17 @@ public class FileInspectionResult
         /// </summary>
         public string Message { get; set; }
     }
+
+    public class InspectResponse
+    {
+        public string Solution { get; set; }
+        public List<FileInspectionResult> Files { get; set; }
+        public int TotalIssues { get; set; }
+        public int TotalFiles { get; set; }
+        public InspectDebugInfo Debug { get; set; }
+    }
+
+    public class InspectDebugInfo
+    {
+        public int TotalMs { get; set; }
+    }
