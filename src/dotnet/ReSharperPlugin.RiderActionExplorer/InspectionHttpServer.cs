@@ -97,10 +97,20 @@ namespace ReSharperPlugin.RiderActionExplorer
                     $"Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
 
                 // Schedule on-boot staleness check (delayed to allow solution to fully load)
+                // Only runs for Unreal Engine projects
                 _ = Task.Run(async () =>
                 {
                     await Task.Delay(5000); // Wait 5 seconds for solution to settle
-                    CheckAndRefreshOnBoot();
+                    if (IsUnrealProject())
+                    {
+                        CheckAndRefreshOnBoot();
+                    }
+                    else
+                    {
+                        _bootCheckCompleted = true;
+                        _bootCheckResult = "Not an Unreal Engine project - Blueprint audit not applicable";
+                        Log.Info("InspectionHttpServer: Not a UE project, skipping Blueprint boot check");
+                    }
                 });
             }
             catch (Exception ex)
@@ -171,7 +181,14 @@ namespace ReSharperPlugin.RiderActionExplorer
                         break;
                     default:
                         Respond(ctx, 404, "text/plain",
-                            "Not found. Try: /, /health, /files, /inspect?file=path, /blueprints?class=ClassName, /blueprint-audit, /ue-project");
+                            "Not found. Available endpoints:\n" +
+                            "  /              - List all endpoints\n" +
+                            "  /health        - Server status\n" +
+                            "  /files         - List source files\n" +
+                            "  /inspect?file= - Code inspection\n" +
+                            "  /blueprints?class= - [UE5] Find derived Blueprints\n" +
+                            "  /blueprint-audit   - [UE5] Blueprint audit data\n" +
+                            "  /ue-project        - [UE5] Project detection diagnostics");
                         break;
                 }
             }
@@ -1411,18 +1428,21 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         private string BuildIndexResponse()
         {
+            var isUE = IsUnrealProject();
             return
                 "{\"endpoints\": {" +
                 "\"GET /\": \"This help message\", " +
                 "\"GET /health\": \"Server and solution status\", " +
                 "\"GET /files\": \"List all user source files under solution directory\", " +
                 "\"GET /inspect?file=path\": \"Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.\", " +
-                "\"GET /blueprints?class=ClassName\": \"List UE5 Blueprint classes deriving from a C++ class. Add &format=json for JSON.\", " +
-                "\"GET /blueprint-audit\": \"Get Blueprint audit data (returns 409 if stale, 503 if not ready)\", " +
-                "\"GET /blueprint-audit/refresh\": \"Trigger background refresh of Blueprint audit data\", " +
-                "\"GET /blueprint-audit/status\": \"Check status of Blueprint audit refresh\", " +
+                "\"GET /blueprints?class=ClassName\": \"[UE5 only] List Blueprint classes deriving from a C++ class. Add &format=json for JSON.\", " +
+                "\"GET /blueprint-audit\": \"[UE5 only] Get Blueprint audit data (returns 409 if stale, 503 if not ready)\", " +
+                "\"GET /blueprint-audit/refresh\": \"[UE5 only] Trigger background refresh of Blueprint audit data\", " +
+                "\"GET /blueprint-audit/status\": \"[UE5 only] Check status of Blueprint audit refresh\", " +
                 "\"GET /ue-project\": \"Diagnostic: show UE project detection info\"" +
-                "}}";
+                "}, " +
+                "\"isUnrealProject\": " + (isUE ? "true" : "false") +
+                "}";
         }
 
         // ── Result data structures ──
@@ -1746,6 +1766,26 @@ namespace ReSharperPlugin.RiderActionExplorer
             return result;
         }
 
+        // ── UE Project Detection (lightweight) ──
+
+        /// <summary>
+        /// Quick check for whether this is an Unreal Engine project.
+        /// Uses file system check (looks for .uproject) rather than heavy reflection.
+        /// </summary>
+        private bool IsUnrealProject()
+        {
+            try
+            {
+                var solutionDir = _solution.SolutionDirectory.FullPath;
+                var uprojectFiles = Directory.GetFiles(solutionDir, "*.uproject");
+                return uprojectFiles.Length > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         // ── Blueprint Audit Infrastructure ──
 
         private readonly object _auditLock = new object();
@@ -1860,9 +1900,18 @@ namespace ReSharperPlugin.RiderActionExplorer
 
             if (!ueInfo.IsUnrealProject)
             {
-                Respond(ctx, 400, "text/plain",
-                    "Not an Unreal project. Cannot read Blueprint audit data.\n" +
-                    (ueInfo.Error ?? ""));
+                Respond(ctx, 404, "text/plain",
+                    "This endpoint is only available for Unreal Engine projects.\n" +
+                    "No .uproject file found in solution directory.");
+                return;
+            }
+
+            // Check if we've detected the commandlet is missing
+            bool isMissing;
+            lock (_auditLock) { isMissing = _commandletMissing; }
+            if (isMissing)
+            {
+                RespondCommandletMissing(ctx, format);
                 return;
             }
 
@@ -1914,9 +1963,9 @@ namespace ReSharperPlugin.RiderActionExplorer
 
             if (!ueInfo.IsUnrealProject)
             {
-                Respond(ctx, 400, "text/plain",
-                    "Not an Unreal project. Cannot refresh Blueprint audit.\n" +
-                    (ueInfo.Error ?? ""));
+                Respond(ctx, 404, "text/plain",
+                    "This endpoint is only available for Unreal Engine projects.\n" +
+                    "No .uproject file found in solution directory.");
                 return;
             }
 
@@ -1975,6 +2024,8 @@ namespace ReSharperPlugin.RiderActionExplorer
             string output, error;
             bool bootCheckDone;
             string bootResult;
+            bool isMissing;
+            int? exitCode;
 
             lock (_auditLock)
             {
@@ -1982,6 +2033,8 @@ namespace ReSharperPlugin.RiderActionExplorer
                 lastRefresh = _lastAuditRefresh;
                 output = _auditProcessOutput;
                 error = _auditProcessError;
+                isMissing = _commandletMissing;
+                exitCode = _lastExitCode;
             }
 
             bootCheckDone = _bootCheckCompleted;
@@ -1991,11 +2044,14 @@ namespace ReSharperPlugin.RiderActionExplorer
             {
                 var json = new StringBuilder();
                 json.Append("{\"inProgress\": ").Append(inProgress ? "true" : "false");
+                json.Append(", \"commandletMissing\": ").Append(isMissing ? "true" : "false");
                 json.Append(", \"bootCheckCompleted\": ").Append(bootCheckDone ? "true" : "false");
                 if (bootResult != null)
                     json.Append(", \"bootCheckResult\": \"").Append(EscapeJson(bootResult)).Append("\"");
                 if (lastRefresh.HasValue)
                     json.Append(", \"lastRefresh\": \"").Append(lastRefresh.Value.ToString("o")).Append("\"");
+                if (exitCode.HasValue)
+                    json.Append(", \"lastExitCode\": ").Append(exitCode.Value);
                 if (output != null)
                     json.Append(", \"output\": \"").Append(EscapeJson(TruncateForJson(output, 2000))).Append("\"");
                 if (error != null)
@@ -2010,11 +2066,21 @@ namespace ReSharperPlugin.RiderActionExplorer
                 sb.AppendLine("# Blueprint Audit Status");
                 sb.AppendLine();
                 sb.Append("**In Progress:** ").AppendLine(inProgress ? "Yes" : "No");
+                if (isMissing)
+                {
+                    sb.AppendLine("**Commandlet Missing:** Yes");
+                    sb.AppendLine();
+                    sb.AppendLine("> **WARNING:** The BlueprintAudit commandlet is not installed.");
+                    sb.AppendLine("> Install the UnrealBlueprintAudit plugin in your UE project.");
+                    sb.AppendLine();
+                }
                 sb.Append("**Boot Check Completed:** ").AppendLine(bootCheckDone ? "Yes" : "No");
                 if (bootResult != null)
                     sb.Append("**Boot Check Result:** ").AppendLine(bootResult);
                 if (lastRefresh.HasValue)
                     sb.Append("**Last Refresh:** ").AppendLine(lastRefresh.Value.ToString("yyyy-MM-dd HH:mm:ss"));
+                if (exitCode.HasValue)
+                    sb.Append("**Last Exit Code:** ").AppendLine(exitCode.Value.ToString());
                 if (error != null)
                 {
                     sb.AppendLine();
@@ -2064,16 +2130,35 @@ namespace ReSharperPlugin.RiderActionExplorer
                     var error = process.StandardError.ReadToEnd();
                     process.WaitForExit();
 
+                    var exitCode = process.ExitCode;
+
+                    // Detect if commandlet is missing
+                    // UE typically outputs "Unknown command" or similar when commandlet isn't found
+                    var isMissing = IsCommandletMissingError(output, error, exitCode);
+
                     lock (_auditLock)
                     {
                         _auditProcessOutput = output;
-                        _auditProcessError = string.IsNullOrWhiteSpace(error) ? null : error;
-                        _lastAuditRefresh = DateTime.Now;
+                        _lastExitCode = exitCode;
+
+                        if (isMissing)
+                        {
+                            _commandletMissing = true;
+                            _auditProcessError = CommandletMissingMessage;
+                        }
+                        else
+                        {
+                            _commandletMissing = false;
+                            _auditProcessError = string.IsNullOrWhiteSpace(error) ? null : error;
+                            if (exitCode == 0)
+                                _lastAuditRefresh = DateTime.Now;
+                        }
+
                         _auditRefreshInProgress = false;
                         _auditProcess = null;
                     }
 
-                    Log.Warn($"InspectionHttpServer: Blueprint audit completed. Exit code: {process.ExitCode}");
+                    Log.Warn($"InspectionHttpServer: Blueprint audit completed. Exit code: {exitCode}, Missing: {isMissing}");
                 }
             }
             catch (Exception ex)
@@ -2087,6 +2172,22 @@ namespace ReSharperPlugin.RiderActionExplorer
 
                 Log.Error(ex, "InspectionHttpServer: Blueprint audit failed");
             }
+        }
+
+        private static bool IsCommandletMissingError(string output, string error, int exitCode)
+        {
+            if (exitCode == 0) return false;
+
+            var combined = (output ?? "") + (error ?? "");
+            var lower = combined.ToLowerInvariant();
+
+            // UE error patterns when commandlet is not found
+            return lower.Contains("unknown commandlet") ||
+                   lower.Contains("commandlet not found") ||
+                   lower.Contains("failed to find commandlet") ||
+                   lower.Contains("can't find commandlet") ||
+                   lower.Contains("unable to find commandlet") ||
+                   (lower.Contains("blueprintaudit") && lower.Contains("not recognized"));
         }
 
         // ── Blueprint Audit Data Structures ──
@@ -2243,6 +2344,23 @@ namespace ReSharperPlugin.RiderActionExplorer
                     "# Blueprint Audit Not Ready\n\n" +
                     message + "\n\n" +
                     "**Action:** Call `/blueprint-audit/refresh` to generate audit data.");
+            }
+        }
+
+        private void RespondCommandletMissing(HttpListenerContext ctx, string format)
+        {
+            if (format == "json")
+            {
+                Respond(ctx, 501, "application/json; charset=utf-8",
+                    "{\"status\": \"commandlet_missing\", " +
+                    "\"message\": \"" + EscapeJson(CommandletMissingMessage) + "\", " +
+                    "\"installUrl\": \"https://github.com/[your-username]/UnrealBlueprintAudit\"}");
+            }
+            else
+            {
+                Respond(ctx, 501, "text/markdown; charset=utf-8",
+                    "# Blueprint Audit - Plugin Not Installed\n\n" +
+                    CommandletMissingMessage.Replace("\n", "\n\n"));
             }
         }
 
