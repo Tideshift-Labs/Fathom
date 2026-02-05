@@ -225,7 +225,8 @@ namespace ReSharperPlugin.RiderActionExplorer
                     continue;
                 }
 
-                // Step B: Commit pending document changes to PSI before inspecting
+                // Step B: Commit pending document changes into PSI tree
+                // (runs after PSI sync so the updated document is ready to flush)
                 try
                 {
                     _solution.GetPsiServices().Files.CommitAllDocuments();
@@ -233,7 +234,6 @@ namespace ReSharperPlugin.RiderActionExplorer
                 catch (Exception ex)
                 {
                     Log.Error(ex, "InspectionHttpServer: CommitAllDocuments failed");
-                    // Non-fatal — continue with inspection anyway
                 }
 
                 // Step C: Run inspection with retry on OperationCanceledException
