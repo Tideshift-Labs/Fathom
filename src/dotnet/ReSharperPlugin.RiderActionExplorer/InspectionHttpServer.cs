@@ -43,6 +43,7 @@ using JetBrains.ReSharper.Daemon.SolutionAnalysis.InspectCode;
 using JetBrains.ReSharper.Daemon.SolutionAnalysis.Issues;
 using JetBrains.ReSharper.Feature.Services.Daemon;
 using JetBrains.ReSharper.Psi;
+using JetBrains.ReSharper.Psi.Files;
 using JetBrains.Util;
 using FileImages = JetBrains.ReSharper.Daemon.SolutionAnalysis.FileImages.FileImages;
 
@@ -224,42 +225,76 @@ namespace ReSharperPlugin.RiderActionExplorer
                     continue;
                 }
 
+                // Step B: Commit pending document changes to PSI before inspecting
                 try
                 {
-                    var inspectSw = Stopwatch.StartNew();
-                    var daemon = new InspectCodeDaemon(issueClasses, sourceFile, fileImages);
-                    daemon.DoHighlighting(DaemonProcessKind.OTHER, issue =>
-                    {
-                        var severity = issue.GetSeverity().ToString().ToUpperInvariant();
-                        var message = issue.Message ?? "";
-                        var line = 0;
-
-                        try
-                        {
-                            var doc = sourceFile.Document;
-                            if (doc != null && issue.Range.HasValue)
-                            {
-                                var offset = issue.Range.Value.StartOffset;
-                                if (offset >= 0 && offset <= doc.GetTextLength())
-                                    line = (int)new DocumentOffset(doc, offset)
-                                        .ToDocumentCoords().Line + 1;
-                            }
-                        }
-                        catch { /* ignore offset errors */ }
-
-                        result.Issues.Add(new IssueInfo
-                        {
-                            Severity = severity,
-                            Line = line,
-                            Message = message
-                        });
-                    });
-                    result.InspectionMs = (int)inspectSw.ElapsedMilliseconds;
+                    _solution.GetPsiServices().Files.CommitAllDocuments();
                 }
                 catch (Exception ex)
                 {
-                    result.Error = ex.GetType().Name + ": " + ex.Message;
+                    Log.Error(ex, "InspectionHttpServer: CommitAllDocuments failed");
+                    // Non-fatal — continue with inspection anyway
                 }
+
+                // Step C: Run inspection with retry on OperationCanceledException
+                var inspectSw = Stopwatch.StartNew();
+                for (var attempt = 1; attempt <= MaxInspectionRetries; attempt++)
+                {
+                    result.Retries = attempt - 1;
+                    result.Issues.Clear();
+                    result.Error = null;
+
+                    try
+                    {
+                        var daemon = new InspectCodeDaemon(issueClasses, sourceFile, fileImages);
+                        daemon.DoHighlighting(DaemonProcessKind.OTHER, issue =>
+                        {
+                            var severity = issue.GetSeverity().ToString().ToUpperInvariant();
+                            var message = issue.Message ?? "";
+                            var line = 0;
+
+                            try
+                            {
+                                var doc = sourceFile.Document;
+                                if (doc != null && issue.Range.HasValue)
+                                {
+                                    var offset = issue.Range.Value.StartOffset;
+                                    if (offset >= 0 && offset <= doc.GetTextLength())
+                                        line = (int)new DocumentOffset(doc, offset)
+                                            .ToDocumentCoords().Line + 1;
+                                }
+                            }
+                            catch { /* ignore offset errors */ }
+
+                            result.Issues.Add(new IssueInfo
+                            {
+                                Severity = severity,
+                                Line = line,
+                                Message = message
+                            });
+                        });
+
+                        // Success — break out of retry loop
+                        break;
+                    }
+                    catch (OperationCanceledException) when (attempt < MaxInspectionRetries)
+                    {
+                        // PSI may still be settling — wait and retry
+                        Log.Warn("InspectionHttpServer: OperationCanceledException on " +
+                                 result.ResolvedPath + ", retry " + attempt + "/" + MaxInspectionRetries);
+                        Thread.Sleep(RetryDelayMs);
+
+                        // Re-commit documents before retry
+                        try { _solution.GetPsiServices().Files.CommitAllDocuments(); }
+                        catch { /* ignore */ }
+                    }
+                    catch (Exception ex)
+                    {
+                        result.Error = ex.GetType().Name + ": " + ex.Message;
+                        break;
+                    }
+                }
+                result.InspectionMs = (int)inspectSw.ElapsedMilliseconds;
 
                 results.Add(result);
             }
@@ -317,6 +352,8 @@ namespace ReSharperPlugin.RiderActionExplorer
                         sb.Append(" (").Append(r.SyncResult.WaitedMs).Append("ms, ")
                             .Append(r.SyncResult.Attempts).Append(" attempts)");
                     sb.Append(" | Inspection: ").Append(r.InspectionMs).Append("ms");
+                    if (r.Retries > 0)
+                        sb.Append(" | Retries: ").Append(r.Retries);
                     sb.AppendLine();
                 }
 
@@ -356,7 +393,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                         ? "\"" + EscapeJson(r.Error) + "\""
                         : "null");
                 if (debug && r.SyncResult != null)
-                    entry += ", \"debug\": " + BuildFileDebugJson(r.SyncResult, r.InspectionMs);
+                    entry += ", \"debug\": " + BuildFileDebugJson(r.SyncResult, r.InspectionMs, r.Retries);
                 entry += "}";
                 fileJsons.Add(entry);
             }
@@ -373,7 +410,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             Respond(ctx, 200, "application/json; charset=utf-8", json);
         }
 
-        private static string BuildFileDebugJson(PsiSyncResult sync, int inspectMs)
+        private static string BuildFileDebugJson(PsiSyncResult sync, int inspectMs, int retries)
         {
             var sb = new StringBuilder();
             sb.Append("{\"psiSync\": {\"status\": \"").Append(EscapeJson(sync.Status)).Append("\"");
@@ -383,6 +420,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                 sb.Append(", \"message\": \"").Append(EscapeJson(sync.Message)).Append("\"");
             sb.Append("}");
             sb.Append(", \"inspectionMs\": ").Append(inspectMs);
+            sb.Append(", \"retries\": ").Append(retries);
             sb.Append("}");
             return sb.ToString();
         }
@@ -448,6 +486,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             public List<IssueInfo> Issues = new List<IssueInfo>();
             public PsiSyncResult SyncResult;
             public int InspectionMs;
+            public int Retries;     // 0 = succeeded first try, 1+ = retried after OperationCanceledException
         }
 
         private class IssueInfo
@@ -484,6 +523,8 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         private const int PsiSyncTimeoutMs = 15000;
         private const int PsiSyncPollIntervalMs = 250;
+        private const int MaxInspectionRetries = 3;
+        private const int RetryDelayMs = 1000;
 
         private static PsiSyncResult WaitForPsiSync(IPsiSourceFile sourceFile)
         {
