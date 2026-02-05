@@ -51,6 +51,8 @@ using JetBrains.ReSharper.Daemon.SolutionAnalysis.Issues;
 using JetBrains.ReSharper.Feature.Services.Daemon;
 using JetBrains.ReSharper.Psi;
 using JetBrains.Util;
+using ReSharperPlugin.RiderActionExplorer.Models;
+using ReSharperPlugin.RiderActionExplorer.Serialization;
 using FileImages = JetBrains.ReSharper.Daemon.SolutionAnalysis.FileImages.FileImages;
 
 namespace ReSharperPlugin.RiderActionExplorer
@@ -58,24 +60,33 @@ namespace ReSharperPlugin.RiderActionExplorer
     [SolutionComponent(Instantiation.ContainerAsyncAnyThreadSafe)]
     public class InspectionHttpServer
     {
-        private const int Port = 19876;
         private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<InspectionHttpServer>();
 
         private readonly ISolution _solution;
         private readonly Lifetime _lifetime;
+        private readonly ServerConfiguration _config;
         private HttpListener _listener;
 
         public InspectionHttpServer(Lifetime lifetime, ISolution solution)
+            : this(lifetime, solution, ServerConfiguration.Default)
+        {
+        }
+
+        /// <summary>
+        /// Constructor with explicit configuration (for testing).
+        /// </summary>
+        public InspectionHttpServer(Lifetime lifetime, ISolution solution, ServerConfiguration config)
         {
             _solution = solution;
             _lifetime = lifetime;
+            _config = config;
 
             try
             {
                 _listener = new HttpListener();
-                _listener.Prefixes.Add($"http://localhost:{Port}/");
+                _listener.Prefixes.Add($"http://localhost:{_config.Port}/");
                 _listener.Start();
-                Log.Warn($"InspectionHttpServer: listening on http://localhost:{Port}/");
+                Log.Warn($"InspectionHttpServer: listening on http://localhost:{_config.Port}/");
 
                 lifetime.OnTermination(() =>
                 {
@@ -89,10 +100,10 @@ namespace ReSharperPlugin.RiderActionExplorer
                 // Write a marker so the user knows the server started
                 var markerPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    "resharper-http-server.txt");
+                    _config.MarkerFileName);
                 File.WriteAllText(markerPath,
                     $"InspectionHttpServer running\n" +
-                    $"URL: http://localhost:{Port}/\n" +
+                    $"URL: http://localhost:{_config.Port}/\n" +
                     $"Solution: {solution.SolutionDirectory}\n" +
                     $"Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
 
@@ -100,7 +111,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                 // Only runs for Unreal Engine projects
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(5000); // Wait 5 seconds for solution to settle
+                    await Task.Delay(_config.BootCheckDelayMs); // Wait for solution to settle
                     if (IsUnrealProject())
                     {
                         CheckAndRefreshOnBoot();
@@ -115,7 +126,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
             catch (Exception ex)
             {
-                Log.Error(ex, $"InspectionHttpServer: failed to start on port {Port}");
+                Log.Error(ex, $"InspectionHttpServer: failed to start on port {_config.Port}");
             }
         }
 
@@ -235,13 +246,13 @@ namespace ReSharperPlugin.RiderActionExplorer
             var requestSw = Stopwatch.StartNew();
 
             // Resolve all files and pair with their source files
-            var workItems = new List<(FileResult result, IPsiSourceFile source)>();
-            var notFoundResults = new List<FileResult>();
+            var workItems = new List<(FileInspectionResult result, IPsiSourceFile source)>();
+            var notFoundResults = new List<FileInspectionResult>();
 
             foreach (var fileParam in fileParams)
             {
                 var key = NormalizePath(fileParam);
-                var result = new FileResult { RequestedPath = fileParam };
+                var result = new FileInspectionResult { RequestedPath = fileParam };
 
                 IPsiSourceFile sourceFile;
                 if (!fileIndex.TryGetValue(key, out sourceFile))
@@ -268,9 +279,11 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
 
             // Step A: Wait for PSI sync on all files in parallel
+            var psiTimeoutMs = _config.PsiSyncTimeoutMs;
+            var psiPollMs = _config.PsiSyncPollIntervalMs;
             Parallel.ForEach(workItems, item =>
             {
-                item.result.SyncResult = WaitForPsiSync(item.source);
+                item.result.SyncResult = WaitForPsiSync(item.source, psiTimeoutMs, psiPollMs);
                 if (item.result.SyncResult.Status == "timeout")
                     item.result.Error = "PSI sync timeout: document does not match disk content after " +
                                         item.result.SyncResult.WaitedMs + "ms";
@@ -284,13 +297,15 @@ namespace ReSharperPlugin.RiderActionExplorer
 
             // Step C: Run inspections in parallel with retry on OperationCanceledException
             var inspectableItems = workItems.Where(item => item.result.Error == null).ToList();
+            var maxRetries = _config.MaxInspectionRetries;
+            var retryDelayMs = _config.RetryDelayMs;
             Parallel.ForEach(inspectableItems, item =>
             {
                 var result = item.result;
                 var sourceFile = item.source;
 
                 var inspectSw = Stopwatch.StartNew();
-                for (var attempt = 1; attempt <= MaxInspectionRetries; attempt++)
+                for (var attempt = 1; attempt <= maxRetries; attempt++)
                 {
                     result.Retries = attempt - 1;
                     result.Issues.Clear();
@@ -318,7 +333,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                             }
                             catch { /* ignore offset errors */ }
 
-                            result.Issues.Add(new IssueInfo
+                            result.Issues.Add(new InspectionIssue
                             {
                                 Severity = severity,
                                 Line = line,
@@ -328,11 +343,11 @@ namespace ReSharperPlugin.RiderActionExplorer
 
                         break;
                     }
-                    catch (OperationCanceledException) when (attempt < MaxInspectionRetries)
+                    catch (OperationCanceledException) when (attempt < maxRetries)
                     {
                         Log.Warn("InspectionHttpServer: OperationCanceledException on " +
-                                 result.ResolvedPath + ", retry " + attempt + "/" + MaxInspectionRetries);
-                        Thread.Sleep(RetryDelayMs);
+                                 result.ResolvedPath + ", retry " + attempt + "/" + maxRetries);
+                        Thread.Sleep(retryDelayMs);
                     }
                     catch (Exception ex)
                     {
@@ -360,7 +375,7 @@ namespace ReSharperPlugin.RiderActionExplorer
         // ── /inspect formatters ──
 
         private static void RespondInspectMarkdown(
-            HttpListenerContext ctx, List<FileResult> results, int totalMs, bool debug)
+            HttpListenerContext ctx, List<FileInspectionResult> results, int totalMs, bool debug)
         {
             var sb = new StringBuilder();
             var totalIssues = results.Sum(r => r.Issues.Count);
@@ -423,7 +438,7 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         private void RespondInspectJson(
             HttpListenerContext ctx, VirtualFileSystemPath solutionDir,
-            List<FileResult> results, int totalMs, bool debug)
+            List<FileInspectionResult> results, int totalMs, bool debug)
         {
             var totalIssues = results.Sum(r => r.Issues.Count);
             var fileJsons = new List<string>();
@@ -477,12 +492,6 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         // ── /blueprints ──
 
-        private class BlueprintClassResult
-        {
-            public string Name;
-            public string FilePath;
-        }
-
         private void HandleBlueprints(HttpListenerContext ctx)
         {
             var className = ctx.Request.QueryString["class"];
@@ -527,7 +536,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
 
             // Query derived blueprints via reflection
-            List<BlueprintClassResult> blueprints;
+            List<BlueprintClassInfo> blueprints;
             string debugInfo = null;
             var solutionDir = _solution.SolutionDirectory;
             try
@@ -773,13 +782,13 @@ namespace ReSharperPlugin.RiderActionExplorer
             return true;
         }
 
-        private List<BlueprintClassResult> QueryDerivedBlueprints(
+        private List<BlueprintClassInfo> QueryDerivedBlueprints(
             string className, object assetsCache, VirtualFileSystemPath solutionDir,
             bool debug, out string debugInfo)
         {
             debugInfo = null;
             var debugSb = debug ? new StringBuilder() : null;
-            var results = new List<BlueprintClassResult>();
+            var results = new List<BlueprintClassInfo>();
 
             // Find a method named GetDerivedBlueprintClasses (or similar) across Cpp/Unreal assemblies
             MethodInfo targetMethod = null;
@@ -1012,7 +1021,7 @@ namespace ReSharperPlugin.RiderActionExplorer
 
                     if (!string.IsNullOrEmpty(name) && seen.Add(name))
                     {
-                        results.Add(new BlueprintClassResult { Name = name, FilePath = filePath });
+                        results.Add(new BlueprintClassInfo { Name = name, FilePath = filePath });
 
                         // Enqueue this Blueprint name for recursive search
                         // Try both with and without _C suffix
@@ -1043,7 +1052,7 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         private static void RespondBlueprintsMarkdown(
             HttpListenerContext ctx, string className, bool cacheReady,
-            string cacheStatus, List<BlueprintClassResult> blueprints,
+            string cacheStatus, List<BlueprintClassInfo> blueprints,
             bool debug, string debugInfo)
         {
             var sb = new StringBuilder();
@@ -1092,7 +1101,7 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         private static void RespondBlueprintsJson(
             HttpListenerContext ctx, string className, bool cacheReady,
-            string cacheStatus, List<BlueprintClassResult> blueprints,
+            string cacheStatus, List<BlueprintClassInfo> blueprints,
             bool debug, string debugInfo)
         {
             var bpJsons = blueprints.Select(bp =>
@@ -1247,8 +1256,8 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
 
             // Try to call GetUProjectPath() and GetUE4EngineProject() on ICppUE4SolutionDetector
-            sb.AppendLine("## UE Project Info (via GetUEProjectInfo helper)");
-            var ueInfo = GetUEProjectInfo();
+            sb.AppendLine("## UE Project Info (via GetUeProjectInfo helper)");
+            var ueInfo = GetUeProjectInfo();
             sb.AppendLine($"- IsUnrealProject: {ueInfo.IsUnrealProject}");
             sb.AppendLine($"- UProjectPath: {ueInfo.UProjectPath ?? "(null)"}");
             sb.AppendLine($"- EnginePath: {ueInfo.EnginePath ?? "(null)"}");
@@ -1418,51 +1427,34 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         private string BuildHealthResponse()
         {
-            return
-                "{\"status\": \"ok\", " +
-                "\"solution\": \"" + EscapeJson(_solution.SolutionDirectory.FullPath.Replace('\\', '/')) + "\", " +
-                "\"port\": " + Port + "}";
+            return Json.Serialize(new
+            {
+                status = "ok",
+                solution = _solution.SolutionDirectory.FullPath.Replace('\\', '/'),
+                port = _config.Port
+            });
         }
 
         // ── / ──
 
         private string BuildIndexResponse()
         {
-            var isUE = IsUnrealProject();
-            return
-                "{\"endpoints\": {" +
-                "\"GET /\": \"This help message\", " +
-                "\"GET /health\": \"Server and solution status\", " +
-                "\"GET /files\": \"List all user source files under solution directory\", " +
-                "\"GET /inspect?file=path\": \"Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.\", " +
-                "\"GET /blueprints?class=ClassName\": \"[UE5 only] List Blueprint classes deriving from a C++ class. Add &format=json for JSON.\", " +
-                "\"GET /blueprint-audit\": \"[UE5 only] Get Blueprint audit data (returns 409 if stale, 503 if not ready)\", " +
-                "\"GET /blueprint-audit/refresh\": \"[UE5 only] Trigger background refresh of Blueprint audit data\", " +
-                "\"GET /blueprint-audit/status\": \"[UE5 only] Check status of Blueprint audit refresh\", " +
-                "\"GET /ue-project\": \"Diagnostic: show UE project detection info\"" +
-                "}, " +
-                "\"isUnrealProject\": " + (isUE ? "true" : "false") +
-                "}";
-        }
-
-        // ── Result data structures ──
-
-        private class FileResult
-        {
-            public string RequestedPath;
-            public string ResolvedPath;
-            public string Error;
-            public List<IssueInfo> Issues = new List<IssueInfo>();
-            public PsiSyncResult SyncResult;
-            public int InspectionMs;
-            public int Retries;     // 0 = succeeded first try, 1+ = retried after OperationCanceledException
-        }
-
-        private class IssueInfo
-        {
-            public string Severity;
-            public int Line;
-            public string Message;
+            return Json.Serialize(new
+            {
+                endpoints = new Dictionary<string, string>
+                {
+                    ["GET /"] = "This help message",
+                    ["GET /health"] = "Server and solution status",
+                    ["GET /files"] = "List all user source files under solution directory",
+                    ["GET /inspect?file=path"] = "Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.",
+                    ["GET /blueprints?class=ClassName"] = "[UE5 only] List Blueprint classes deriving from a C++ class. Add &format=json for JSON.",
+                    ["GET /blueprint-audit"] = "[UE5 only] Get Blueprint audit data (returns 409 if stale, 503 if not ready)",
+                    ["GET /blueprint-audit/refresh"] = "[UE5 only] Trigger background refresh of Blueprint audit data",
+                    ["GET /blueprint-audit/status"] = "[UE5 only] Check status of Blueprint audit refresh",
+                    ["GET /ue-project"] = "Diagnostic: show UE project detection info"
+                },
+                isUnrealProject = IsUnrealProject()
+            });
         }
 
         // ── File index ──
@@ -1490,12 +1482,8 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         // ── PSI sync ──
 
-        private const int PsiSyncTimeoutMs = 15000;
-        private const int PsiSyncPollIntervalMs = 250;
-        private const int MaxInspectionRetries = 3;
-        private const int RetryDelayMs = 1000;
-
-        private static PsiSyncResult WaitForPsiSync(IPsiSourceFile sourceFile)
+        private static PsiSyncResult WaitForPsiSync(
+            IPsiSourceFile sourceFile, int timeoutMs, int pollIntervalMs)
         {
             var diskPath = sourceFile.GetLocation().FullPath;
             var sw = Stopwatch.StartNew();
@@ -1516,7 +1504,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
 
             var attempts = 0;
-            while (sw.ElapsedMilliseconds < PsiSyncTimeoutMs)
+            while (sw.ElapsedMilliseconds < timeoutMs)
             {
                 attempts++;
                 try
@@ -1541,7 +1529,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                     // Document may be in a transitional state, keep polling
                 }
 
-                Thread.Sleep(PsiSyncPollIntervalMs);
+                Thread.Sleep(pollIntervalMs);
             }
 
             return new PsiSyncResult
@@ -1549,21 +1537,13 @@ namespace ReSharperPlugin.RiderActionExplorer
                 Status = "timeout",
                 WaitedMs = (int)sw.ElapsedMilliseconds,
                 Attempts = attempts,
-                Message = "PSI document did not match disk content within " + PsiSyncTimeoutMs + "ms"
+                Message = "PSI document did not match disk content within " + timeoutMs + "ms"
             };
         }
 
         private static string NormalizeLineEndings(string text)
         {
             return text.Replace("\r\n", "\n").Replace("\r", "\n");
-        }
-
-        private class PsiSyncResult
-        {
-            public string Status;
-            public int WaitedMs;
-            public int Attempts;
-            public string Message;
         }
 
         // ── Helpers ──
@@ -1612,19 +1592,9 @@ namespace ReSharperPlugin.RiderActionExplorer
 
         // ── UE Project Info ──
 
-        private class UEProjectInfo
+        private UeProjectInfo GetUeProjectInfo()
         {
-            public bool IsUnrealProject;
-            public string UProjectPath;      // e.g. E:\UE\Projects\Workspace\Udemy_CUI.uproject
-            public string EnginePath;        // e.g. D:\UE\Engines\UE_5.7\Engine
-            public string EngineVersion;     // e.g. 5.7.1
-            public string CommandletExePath; // e.g. D:\UE\Engines\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe
-            public string Error;
-        }
-
-        private UEProjectInfo GetUEProjectInfo()
-        {
-            var result = new UEProjectInfo();
+            var result = new UeProjectInfo();
 
             try
             {
@@ -1811,7 +1781,7 @@ namespace ReSharperPlugin.RiderActionExplorer
         {
             try
             {
-                var ueInfo = GetUEProjectInfo();
+                var ueInfo = GetUeProjectInfo();
                 if (!ueInfo.IsUnrealProject)
                 {
                     _bootCheckResult = "Not an Unreal project - skipping boot check";
@@ -1820,7 +1790,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                     return;
                 }
 
-                var uprojectDir = Path.GetDirectoryName(ueInfo.UProjectPath);
+                var uprojectDir = ueInfo.ProjectDirectory;
                 var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", "Blueprints");
 
                 if (!Directory.Exists(auditDir))
@@ -1877,7 +1847,7 @@ namespace ReSharperPlugin.RiderActionExplorer
         /// Triggers a Blueprint audit refresh in the background.
         /// Returns true if refresh was started, false if one is already in progress.
         /// </summary>
-        private bool TriggerRefresh(UEProjectInfo ueInfo)
+        private bool TriggerRefresh(UeProjectInfo ueInfo)
         {
             lock (_auditLock)
             {
@@ -1896,7 +1866,7 @@ namespace ReSharperPlugin.RiderActionExplorer
         private void HandleBlueprintAudit(HttpListenerContext ctx)
         {
             var format = GetFormat(ctx);
-            var ueInfo = GetUEProjectInfo();
+            var ueInfo = GetUeProjectInfo();
 
             if (!ueInfo.IsUnrealProject)
             {
@@ -1916,7 +1886,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
 
             // Build path to audit directory: <ProjectDir>/Saved/Audit/Blueprints/
-            var uprojectDir = Path.GetDirectoryName(ueInfo.UProjectPath);
+            var uprojectDir = ueInfo.ProjectDirectory;
             var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", "Blueprints");
 
             if (!Directory.Exists(auditDir))
@@ -1959,7 +1929,7 @@ namespace ReSharperPlugin.RiderActionExplorer
         private void HandleBlueprintAuditRefresh(HttpListenerContext ctx)
         {
             var format = GetFormat(ctx);
-            var ueInfo = GetUEProjectInfo();
+            var ueInfo = GetUeProjectInfo();
 
             if (!ueInfo.IsUnrealProject)
             {
@@ -2102,7 +2072,7 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
         }
 
-        private void RunBlueprintAuditCommandlet(UEProjectInfo ueInfo)
+        private void RunBlueprintAuditCommandlet(UeProjectInfo ueInfo)
         {
             try
             {
@@ -2114,7 +2084,7 @@ namespace ReSharperPlugin.RiderActionExplorer
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true,
-                    WorkingDirectory = Path.GetDirectoryName(ueInfo.UProjectPath)
+                    WorkingDirectory = ueInfo.ProjectDirectory
                 };
 
                 Log.Warn($"InspectionHttpServer: Starting Blueprint audit: {startInfo.FileName} {startInfo.Arguments}");
@@ -2191,19 +2161,6 @@ namespace ReSharperPlugin.RiderActionExplorer
         }
 
         // ── Blueprint Audit Data Structures ──
-
-        private class BlueprintAuditEntry
-        {
-            public string Name;
-            public string Path;
-            public string JsonFile;
-            public string SourceFileHash;      // Hash stored in JSON
-            public string CurrentFileHash;     // Current hash of .uasset
-            public bool IsStale;
-            public bool HashCheckFailed;       // Could not compute current hash
-            public string Error;
-            public Dictionary<string, object> Data;  // Full parsed JSON data
-        }
 
         private BlueprintAuditEntry ReadAndCheckBlueprintAudit(string jsonFile, string uprojectDir)
         {

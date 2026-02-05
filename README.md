@@ -97,7 +97,7 @@ Requires the [UnrealBlueprintAudit](https://github.com/[your-username]/UnrealBlu
 - [ ] **Clean up diagnostic/debug code in `/blueprints`.** The debug dumps of all methods on `UE4SearchUtil` and `UE4AssetsCache` were useful during development but can be trimmed once the API is stable.
 - [x] ~~**UE companion plugin for Blueprint audit.**~~ Implemented as [UnrealBlueprintAudit](https://github.com/[your-username]/UnrealBlueprintAudit). The Rider plugin reads JSONs via `/blueprint-audit` endpoint and triggers commandlet runs when data is stale.
 - [ ] **`/uclass?class=ClassName`: UPROPERTY/UFUNCTION reflection endpoint.** Add an endpoint that, given a C++ class name, finds its header file and parses `UPROPERTY(...)` and `UFUNCTION(...)` macro declarations. Should return specifiers (e.g. `EditAnywhere`, `BlueprintCallable`, `Category="Foo"`), property/function types, and names. Approach: text-parse the header file directly (regex over macro blocks) rather than using the C++ PSI — this is the simplest strategy and captures the actual macro specifiers as written. Class-name-to-header lookup can reuse the `/files` endpoint's file list or the Unreal naming convention (`ClassName.h`).
-
+- [ ] Get error `ArgumentException: An item with the same key has already been added. Key: <pathtofile>` if same file is added twice to /inspect 
 ## Building and running
 
 ```bash
