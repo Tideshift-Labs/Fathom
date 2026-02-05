@@ -36,7 +36,9 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Application.Parts;
@@ -93,6 +95,13 @@ namespace ReSharperPlugin.RiderActionExplorer
                     $"URL: http://localhost:{Port}/\n" +
                     $"Solution: {solution.SolutionDirectory}\n" +
                     $"Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+
+                // Schedule on-boot staleness check (delayed to allow solution to fully load)
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000); // Wait 5 seconds for solution to settle
+                    CheckAndRefreshOnBoot();
+                });
             }
             catch (Exception ex)
             {
@@ -151,9 +160,18 @@ namespace ReSharperPlugin.RiderActionExplorer
                     case "/ue-project":
                         HandleUEProjectDiagnostics(ctx);
                         break;
+                    case "/blueprint-audit":
+                        HandleBlueprintAudit(ctx);
+                        break;
+                    case "/blueprint-audit/refresh":
+                        HandleBlueprintAuditRefresh(ctx);
+                        break;
+                    case "/blueprint-audit/status":
+                        HandleBlueprintAuditStatus(ctx);
+                        break;
                     default:
                         Respond(ctx, 404, "text/plain",
-                            "Not found. Try: /, /health, /files, /inspect?file=path, /blueprints?class=ClassName, /ue-project");
+                            "Not found. Try: /, /health, /files, /inspect?file=path, /blueprints?class=ClassName, /blueprint-audit, /ue-project");
                         break;
                 }
             }
@@ -1399,7 +1417,11 @@ namespace ReSharperPlugin.RiderActionExplorer
                 "\"GET /health\": \"Server and solution status\", " +
                 "\"GET /files\": \"List all user source files under solution directory\", " +
                 "\"GET /inspect?file=path\": \"Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.\", " +
-                "\"GET /blueprints?class=ClassName\": \"List UE5 Blueprint classes deriving from a C++ class. Add &format=json for JSON.\"" +
+                "\"GET /blueprints?class=ClassName\": \"List UE5 Blueprint classes deriving from a C++ class. Add &format=json for JSON.\", " +
+                "\"GET /blueprint-audit\": \"Get Blueprint audit data (returns 409 if stale, 503 if not ready)\", " +
+                "\"GET /blueprint-audit/refresh\": \"Trigger background refresh of Blueprint audit data\", " +
+                "\"GET /blueprint-audit/status\": \"Check status of Blueprint audit refresh\", " +
+                "\"GET /ue-project\": \"Diagnostic: show UE project detection info\"" +
                 "}}";
         }
 
@@ -1611,35 +1633,45 @@ namespace ReSharperPlugin.RiderActionExplorer
                     return result;
                 }
 
-                // Check IsUnrealSolution property
-                var isUnrealProp = detector.GetType().GetProperty("IsUnrealSolution",
-                    BindingFlags.Public | BindingFlags.Instance);
-                if (isUnrealProp != null)
-                {
-                    var isUnrealObj = isUnrealProp.GetValue(detector);
-                    // It's IProperty<bool>, get .Value
-                    var valueProp = isUnrealObj?.GetType().GetProperty("Value",
-                        BindingFlags.Public | BindingFlags.Instance);
-                    if (valueProp != null)
-                    {
-                        var val = valueProp.GetValue(isUnrealObj);
-                        result.IsUnrealProject = val is true;
-                    }
-                }
-
-                if (!result.IsUnrealProject)
-                {
-                    result.Error = "Not an Unreal project";
-                    return result;
-                }
-
-                // Get UProjectPath
+                // Get UProjectPath FIRST - this is the most reliable indicator
+                // The IsUnrealSolution property can be unreliable (timing/state issues)
                 var getUProjectPath = detector.GetType().GetMethod("GetUProjectPath",
                     BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
                 if (getUProjectPath != null)
                 {
                     var uprojectPath = getUProjectPath.Invoke(detector, null);
                     result.UProjectPath = uprojectPath?.ToString();
+                }
+
+                // Determine IsUnrealProject based on whether we have a valid .uproject path
+                // This is more reliable than the IsUnrealSolution property
+                if (!string.IsNullOrEmpty(result.UProjectPath) && File.Exists(result.UProjectPath))
+                {
+                    result.IsUnrealProject = true;
+                }
+                else
+                {
+                    // Fallback: check IsUnrealSolution property
+                    var isUnrealProp = detector.GetType().GetProperty("IsUnrealSolution",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    if (isUnrealProp != null)
+                    {
+                        var isUnrealObj = isUnrealProp.GetValue(detector);
+                        // It's IProperty<bool>, get .Value
+                        var valueProp = isUnrealObj?.GetType().GetProperty("Value",
+                            BindingFlags.Public | BindingFlags.Instance);
+                        if (valueProp != null)
+                        {
+                            var val = valueProp.GetValue(isUnrealObj);
+                            result.IsUnrealProject = val is true;
+                        }
+                    }
+                }
+
+                if (!result.IsUnrealProject)
+                {
+                    result.Error = "Not an Unreal project (no valid .uproject file found)";
+                    return result;
                 }
 
                 // Get UnrealContext property and parse engine path
@@ -1712,6 +1744,609 @@ namespace ReSharperPlugin.RiderActionExplorer
             }
 
             return result;
+        }
+
+        // ── Blueprint Audit Infrastructure ──
+
+        private readonly object _auditLock = new object();
+        private bool _auditRefreshInProgress;
+        private DateTime? _lastAuditRefresh;
+        private Process _auditProcess;
+        private string _auditProcessOutput;
+        private string _auditProcessError;
+        private bool _bootCheckCompleted;
+        private string _bootCheckResult;
+        private bool _commandletMissing;
+        private int? _lastExitCode;
+
+        private const string CommandletMissingMessage =
+            "The BlueprintAudit commandlet is not installed.\n\n" +
+            "To fix this, install the UnrealBlueprintAudit plugin in your UE project:\n" +
+            "1. Clone https://github.com/[your-username]/UnrealBlueprintAudit\n" +
+            "2. Copy or symlink it to your project's Plugins/ folder\n" +
+            "3. Rebuild your UE project\n" +
+            "4. Restart Rider and try again";
+
+        private void CheckAndRefreshOnBoot()
+        {
+            try
+            {
+                var ueInfo = GetUEProjectInfo();
+                if (!ueInfo.IsUnrealProject)
+                {
+                    _bootCheckResult = "Not an Unreal project - skipping boot check";
+                    _bootCheckCompleted = true;
+                    Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                    return;
+                }
+
+                var uprojectDir = Path.GetDirectoryName(ueInfo.UProjectPath);
+                var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", "Blueprints");
+
+                if (!Directory.Exists(auditDir))
+                {
+                    _bootCheckResult = "Audit directory does not exist - triggering refresh";
+                    _bootCheckCompleted = true;
+                    Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                    TriggerRefresh(ueInfo);
+                    return;
+                }
+
+                // Check for staleness
+                var staleCount = 0;
+                var totalCount = 0;
+
+                foreach (var jsonFile in Directory.GetFiles(auditDir, "*.json", SearchOption.AllDirectories))
+                {
+                    totalCount++;
+                    var entry = ReadAndCheckBlueprintAudit(jsonFile, uprojectDir);
+                    if (entry.IsStale) staleCount++;
+                }
+
+                if (totalCount == 0)
+                {
+                    _bootCheckResult = "No audit files found - triggering refresh";
+                    _bootCheckCompleted = true;
+                    Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                    TriggerRefresh(ueInfo);
+                    return;
+                }
+
+                if (staleCount > 0)
+                {
+                    _bootCheckResult = $"Found {staleCount}/{totalCount} stale blueprints - triggering refresh";
+                    _bootCheckCompleted = true;
+                    Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                    TriggerRefresh(ueInfo);
+                    return;
+                }
+
+                _bootCheckResult = $"All {totalCount} blueprints are fresh - no refresh needed";
+                _bootCheckCompleted = true;
+                Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+            }
+            catch (Exception ex)
+            {
+                _bootCheckResult = "Boot check failed: " + ex.Message;
+                _bootCheckCompleted = true;
+                Log.Error(ex, "InspectionHttpServer: Boot check failed");
+            }
+        }
+
+        /// <summary>
+        /// Triggers a Blueprint audit refresh in the background.
+        /// Returns true if refresh was started, false if one is already in progress.
+        /// </summary>
+        private bool TriggerRefresh(UEProjectInfo ueInfo)
+        {
+            lock (_auditLock)
+            {
+                if (_auditRefreshInProgress)
+                    return false;
+
+                _auditRefreshInProgress = true;
+                _auditProcessOutput = null;
+                _auditProcessError = null;
+            }
+
+            _ = Task.Run(() => RunBlueprintAuditCommandlet(ueInfo));
+            return true;
+        }
+
+        private void HandleBlueprintAudit(HttpListenerContext ctx)
+        {
+            var format = GetFormat(ctx);
+            var ueInfo = GetUEProjectInfo();
+
+            if (!ueInfo.IsUnrealProject)
+            {
+                Respond(ctx, 400, "text/plain",
+                    "Not an Unreal project. Cannot read Blueprint audit data.\n" +
+                    (ueInfo.Error ?? ""));
+                return;
+            }
+
+            // Build path to audit directory: <ProjectDir>/Saved/Audit/Blueprints/
+            var uprojectDir = Path.GetDirectoryName(ueInfo.UProjectPath);
+            var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", "Blueprints");
+
+            if (!Directory.Exists(auditDir))
+            {
+                RespondAuditNotReady(ctx, format, "Audit directory does not exist. Run /blueprint-audit/refresh first.");
+                return;
+            }
+
+            // Scan all JSON files and check freshness
+            var blueprints = new List<BlueprintAuditEntry>();
+            var staleCount = 0;
+            var errorCount = 0;
+
+            foreach (var jsonFile in Directory.GetFiles(auditDir, "*.json", SearchOption.AllDirectories))
+            {
+                var entry = ReadAndCheckBlueprintAudit(jsonFile, uprojectDir);
+                blueprints.Add(entry);
+
+                if (entry.IsStale) staleCount++;
+                if (entry.Error != null) errorCount++;
+            }
+
+            if (blueprints.Count == 0)
+            {
+                RespondAuditNotReady(ctx, format, "No audit files found. Run /blueprint-audit/refresh first.");
+                return;
+            }
+
+            // Per mandate: NEVER return stale data
+            if (staleCount > 0)
+            {
+                RespondAuditStale(ctx, format, blueprints, staleCount);
+                return;
+            }
+
+            // All fresh - return the data
+            RespondAuditSuccess(ctx, format, blueprints, errorCount);
+        }
+
+        private void HandleBlueprintAuditRefresh(HttpListenerContext ctx)
+        {
+            var format = GetFormat(ctx);
+            var ueInfo = GetUEProjectInfo();
+
+            if (!ueInfo.IsUnrealProject)
+            {
+                Respond(ctx, 400, "text/plain",
+                    "Not an Unreal project. Cannot refresh Blueprint audit.\n" +
+                    (ueInfo.Error ?? ""));
+                return;
+            }
+
+            if (string.IsNullOrEmpty(ueInfo.CommandletExePath) || !File.Exists(ueInfo.CommandletExePath))
+            {
+                Respond(ctx, 500, "text/plain",
+                    "Cannot find UnrealEditor-Cmd.exe.\n" +
+                    "CommandletExePath: " + (ueInfo.CommandletExePath ?? "(null)"));
+                return;
+            }
+
+            lock (_auditLock)
+            {
+                if (_auditRefreshInProgress)
+                {
+                    if (format == "json")
+                    {
+                        Respond(ctx, 202, "application/json; charset=utf-8",
+                            "{\"status\": \"in_progress\", \"message\": \"Refresh already in progress\"}");
+                    }
+                    else
+                    {
+                        Respond(ctx, 202, "text/plain", "Refresh already in progress. Check /blueprint-audit/status");
+                    }
+                    return;
+                }
+
+                _auditRefreshInProgress = true;
+                _auditProcessOutput = null;
+                _auditProcessError = null;
+            }
+
+            // Start the commandlet in background
+            _ = Task.Run(() => RunBlueprintAuditCommandlet(ueInfo));
+
+            if (format == "json")
+            {
+                Respond(ctx, 202, "application/json; charset=utf-8",
+                    "{\"status\": \"started\", \"message\": \"Blueprint audit refresh started\"}");
+            }
+            else
+            {
+                Respond(ctx, 202, "text/plain",
+                    "Blueprint audit refresh started.\n" +
+                    "Check /blueprint-audit/status for progress.\n" +
+                    "Once complete, query /blueprint-audit for results.");
+            }
+        }
+
+        private void HandleBlueprintAuditStatus(HttpListenerContext ctx)
+        {
+            var format = GetFormat(ctx);
+
+            bool inProgress;
+            DateTime? lastRefresh;
+            string output, error;
+            bool bootCheckDone;
+            string bootResult;
+
+            lock (_auditLock)
+            {
+                inProgress = _auditRefreshInProgress;
+                lastRefresh = _lastAuditRefresh;
+                output = _auditProcessOutput;
+                error = _auditProcessError;
+            }
+
+            bootCheckDone = _bootCheckCompleted;
+            bootResult = _bootCheckResult;
+
+            if (format == "json")
+            {
+                var json = new StringBuilder();
+                json.Append("{\"inProgress\": ").Append(inProgress ? "true" : "false");
+                json.Append(", \"bootCheckCompleted\": ").Append(bootCheckDone ? "true" : "false");
+                if (bootResult != null)
+                    json.Append(", \"bootCheckResult\": \"").Append(EscapeJson(bootResult)).Append("\"");
+                if (lastRefresh.HasValue)
+                    json.Append(", \"lastRefresh\": \"").Append(lastRefresh.Value.ToString("o")).Append("\"");
+                if (output != null)
+                    json.Append(", \"output\": \"").Append(EscapeJson(TruncateForJson(output, 2000))).Append("\"");
+                if (error != null)
+                    json.Append(", \"error\": \"").Append(EscapeJson(TruncateForJson(error, 1000))).Append("\"");
+                json.Append("}");
+
+                Respond(ctx, 200, "application/json; charset=utf-8", json.ToString());
+            }
+            else
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("# Blueprint Audit Status");
+                sb.AppendLine();
+                sb.Append("**In Progress:** ").AppendLine(inProgress ? "Yes" : "No");
+                sb.Append("**Boot Check Completed:** ").AppendLine(bootCheckDone ? "Yes" : "No");
+                if (bootResult != null)
+                    sb.Append("**Boot Check Result:** ").AppendLine(bootResult);
+                if (lastRefresh.HasValue)
+                    sb.Append("**Last Refresh:** ").AppendLine(lastRefresh.Value.ToString("yyyy-MM-dd HH:mm:ss"));
+                if (error != null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("## Last Error");
+                    sb.AppendLine("```");
+                    sb.AppendLine(error);
+                    sb.AppendLine("```");
+                }
+                if (output != null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("## Last Output (truncated)");
+                    sb.AppendLine("```");
+                    sb.AppendLine(TruncateForJson(output, 2000));
+                    sb.AppendLine("```");
+                }
+
+                Respond(ctx, 200, "text/markdown; charset=utf-8", sb.ToString());
+            }
+        }
+
+        private void RunBlueprintAuditCommandlet(UEProjectInfo ueInfo)
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = ueInfo.CommandletExePath,
+                    Arguments = $"\"{ueInfo.UProjectPath}\" -run=BlueprintAudit -unattended -nopause",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    WorkingDirectory = Path.GetDirectoryName(ueInfo.UProjectPath)
+                };
+
+                Log.Warn($"InspectionHttpServer: Starting Blueprint audit: {startInfo.FileName} {startInfo.Arguments}");
+
+                using (var process = Process.Start(startInfo))
+                {
+                    lock (_auditLock)
+                    {
+                        _auditProcess = process;
+                    }
+
+                    var output = process.StandardOutput.ReadToEnd();
+                    var error = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+
+                    lock (_auditLock)
+                    {
+                        _auditProcessOutput = output;
+                        _auditProcessError = string.IsNullOrWhiteSpace(error) ? null : error;
+                        _lastAuditRefresh = DateTime.Now;
+                        _auditRefreshInProgress = false;
+                        _auditProcess = null;
+                    }
+
+                    Log.Warn($"InspectionHttpServer: Blueprint audit completed. Exit code: {process.ExitCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                lock (_auditLock)
+                {
+                    _auditProcessError = ex.GetType().Name + ": " + ex.Message;
+                    _auditRefreshInProgress = false;
+                    _auditProcess = null;
+                }
+
+                Log.Error(ex, "InspectionHttpServer: Blueprint audit failed");
+            }
+        }
+
+        // ── Blueprint Audit Data Structures ──
+
+        private class BlueprintAuditEntry
+        {
+            public string Name;
+            public string Path;
+            public string JsonFile;
+            public string SourceFileHash;      // Hash stored in JSON
+            public string CurrentFileHash;     // Current hash of .uasset
+            public bool IsStale;
+            public bool HashCheckFailed;       // Could not compute current hash
+            public string Error;
+            public Dictionary<string, object> Data;  // Full parsed JSON data
+        }
+
+        private BlueprintAuditEntry ReadAndCheckBlueprintAudit(string jsonFile, string uprojectDir)
+        {
+            var entry = new BlueprintAuditEntry { JsonFile = jsonFile };
+
+            try
+            {
+                var jsonContent = File.ReadAllText(jsonFile);
+                entry.Data = ParseSimpleJson(jsonContent);
+
+                entry.Name = entry.Data.TryGetValue("Name", out var name) ? name?.ToString() : null;
+                entry.Path = entry.Data.TryGetValue("Path", out var path) ? path?.ToString() : null;
+                entry.SourceFileHash = entry.Data.TryGetValue("SourceFileHash", out var hash) ? hash?.ToString() : null;
+
+                // Compute current hash if we have a path
+                if (!string.IsNullOrEmpty(entry.Path))
+                {
+                    var uassetPath = ConvertPackagePathToFilePath(entry.Path, uprojectDir);
+                    if (!string.IsNullOrEmpty(uassetPath) && File.Exists(uassetPath))
+                    {
+                        entry.CurrentFileHash = ComputeMD5Hash(uassetPath);
+                        entry.IsStale = !string.Equals(entry.SourceFileHash, entry.CurrentFileHash,
+                            StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        entry.HashCheckFailed = true;
+                        entry.Error = "Source file not found: " + (uassetPath ?? entry.Path);
+                    }
+                }
+                else if (string.IsNullOrEmpty(entry.SourceFileHash))
+                {
+                    // No hash in file - consider stale (old format or missing data)
+                    entry.IsStale = true;
+                    entry.Error = "No SourceFileHash in audit file";
+                }
+            }
+            catch (Exception ex)
+            {
+                entry.Error = ex.GetType().Name + ": " + ex.Message;
+            }
+
+            return entry;
+        }
+
+        private static string ConvertPackagePathToFilePath(string packagePath, string uprojectDir)
+        {
+            // Package path formats:
+            //   /Game/UI/Widgets/WBP_Foo              (package only)
+            //   /Game/UI/Widgets/WBP_Foo.WBP_Foo      (package.object - common for BPs)
+            //   /Game/UI/Widgets/WBP_Foo.WBP_Foo_C    (package.class)
+            // File path: <uprojectDir>/Content/UI/Widgets/WBP_Foo.uasset
+            if (string.IsNullOrEmpty(packagePath)) return null;
+
+            var relativePath = packagePath;
+
+            // Strip object name if present (everything after the dot)
+            // The dot separates package path from object name in UE paths
+            var dotIndex = relativePath.LastIndexOf('.');
+            if (dotIndex > 0)
+            {
+                // Make sure the dot is after the last slash (it's an object separator, not a directory)
+                var lastSlash = relativePath.LastIndexOf('/');
+                if (dotIndex > lastSlash)
+                {
+                    relativePath = relativePath.Substring(0, dotIndex);
+                }
+            }
+
+            if (relativePath.StartsWith("/Game/"))
+            {
+                relativePath = relativePath.Substring(6); // Remove "/Game/"
+            }
+            else if (relativePath.StartsWith("/"))
+            {
+                // Other mount points - skip for now
+                return null;
+            }
+
+            return Path.Combine(uprojectDir, "Content", relativePath.Replace('/', Path.DirectorySeparatorChar) + ".uasset");
+        }
+
+        private static string ComputeMD5Hash(string filePath)
+        {
+            using (var md5 = MD5.Create())
+            using (var stream = File.OpenRead(filePath))
+            {
+                var hash = md5.ComputeHash(stream);
+                return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            }
+        }
+
+        private static Dictionary<string, object> ParseSimpleJson(string json)
+        {
+            // Simple JSON parser for flat objects - just extract top-level string fields
+            var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            // Match "key": "value" or "key": number or "key": bool
+            var stringPattern = new Regex(@"""(\w+)""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""");
+            var numberPattern = new Regex(@"""(\w+)""\s*:\s*(-?\d+(?:\.\d+)?)");
+            var boolPattern = new Regex(@"""(\w+)""\s*:\s*(true|false)");
+
+            // Keep first match only - top-level fields come before nested array fields
+            foreach (Match m in stringPattern.Matches(json))
+            {
+                if (!result.ContainsKey(m.Groups[1].Value))
+                    result[m.Groups[1].Value] = m.Groups[2].Value;
+            }
+
+            foreach (Match m in numberPattern.Matches(json))
+            {
+                if (!result.ContainsKey(m.Groups[1].Value))
+                    result[m.Groups[1].Value] = double.Parse(m.Groups[2].Value);
+            }
+
+            foreach (Match m in boolPattern.Matches(json))
+            {
+                if (!result.ContainsKey(m.Groups[1].Value))
+                    result[m.Groups[1].Value] = m.Groups[2].Value == "true";
+            }
+
+            return result;
+        }
+
+        // ── Blueprint Audit Response Helpers ──
+
+        private void RespondAuditNotReady(HttpListenerContext ctx, string format, string message)
+        {
+            if (format == "json")
+            {
+                Respond(ctx, 503, "application/json; charset=utf-8",
+                    "{\"status\": \"not_ready\", \"message\": \"" + EscapeJson(message) + "\", " +
+                    "\"action\": \"Call /blueprint-audit/refresh to generate audit data\"}");
+            }
+            else
+            {
+                Respond(ctx, 503, "text/markdown; charset=utf-8",
+                    "# Blueprint Audit Not Ready\n\n" +
+                    message + "\n\n" +
+                    "**Action:** Call `/blueprint-audit/refresh` to generate audit data.");
+            }
+        }
+
+        private void RespondAuditStale(HttpListenerContext ctx, string format,
+            List<BlueprintAuditEntry> blueprints, int staleCount)
+        {
+            // Per mandate: NEVER return stale data - return error instead
+            var staleEntries = blueprints.Where(b => b.IsStale).Take(10).ToList();
+
+            if (format == "json")
+            {
+                var staleJson = staleEntries.Select(e =>
+                    "{\"name\": \"" + EscapeJson(e.Name ?? "") + "\", " +
+                    "\"path\": \"" + EscapeJson(e.Path ?? "") + "\"}");
+
+                Respond(ctx, 409, "application/json; charset=utf-8",
+                    "{\"status\": \"stale\", " +
+                    "\"message\": \"Audit data is stale. Refresh required before data can be returned.\", " +
+                    "\"staleCount\": " + staleCount + ", " +
+                    "\"totalCount\": " + blueprints.Count + ", " +
+                    "\"staleExamples\": [" + string.Join(",", staleJson) + "], " +
+                    "\"action\": \"Call /blueprint-audit/refresh to update audit data\"}");
+            }
+            else
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("# Blueprint Audit - STALE DATA");
+                sb.AppendLine();
+                sb.AppendLine("**Status:** Data is stale and cannot be returned.");
+                sb.AppendLine();
+                sb.Append("**Stale Blueprints:** ").Append(staleCount).Append(" of ").AppendLine(blueprints.Count.ToString());
+                sb.AppendLine();
+                sb.AppendLine("## Stale Examples (first 10)");
+                foreach (var e in staleEntries)
+                {
+                    sb.Append("- ").AppendLine(e.Name ?? e.Path ?? "(unknown)");
+                }
+                sb.AppendLine();
+                sb.AppendLine("**Action:** Call `/blueprint-audit/refresh` to update audit data.");
+
+                Respond(ctx, 409, "text/markdown; charset=utf-8", sb.ToString());
+            }
+        }
+
+        private void RespondAuditSuccess(HttpListenerContext ctx, string format,
+            List<BlueprintAuditEntry> blueprints, int errorCount)
+        {
+            if (format == "json")
+            {
+                var bpJsons = blueprints.Select(e =>
+                {
+                    var sb = new StringBuilder();
+                    sb.Append("{\"name\": \"").Append(EscapeJson(e.Name ?? "")).Append("\", ");
+                    sb.Append("\"path\": \"").Append(EscapeJson(e.Path ?? "")).Append("\", ");
+                    sb.Append("\"jsonFile\": \"").Append(EscapeJson(e.JsonFile.Replace('\\', '/'))).Append("\"");
+                    if (e.Error != null)
+                        sb.Append(", \"error\": \"").Append(EscapeJson(e.Error)).Append("\"");
+                    sb.Append("}");
+                    return sb.ToString();
+                });
+
+                DateTime? lastRefresh;
+                lock (_auditLock) { lastRefresh = _lastAuditRefresh; }
+
+                var json = new StringBuilder();
+                json.Append("{\"status\": \"fresh\", ");
+                json.Append("\"totalCount\": ").Append(blueprints.Count).Append(", ");
+                json.Append("\"errorCount\": ").Append(errorCount).Append(", ");
+                if (lastRefresh.HasValue)
+                    json.Append("\"lastRefresh\": \"").Append(lastRefresh.Value.ToString("o")).Append("\", ");
+                json.Append("\"blueprints\": [").Append(string.Join(",", bpJsons)).Append("]}");
+
+                Respond(ctx, 200, "application/json; charset=utf-8", json.ToString());
+            }
+            else
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("# Blueprint Audit");
+                sb.AppendLine();
+                sb.AppendLine("**Status:** Fresh (all data up-to-date)");
+                sb.Append("**Total Blueprints:** ").AppendLine(blueprints.Count.ToString());
+                if (errorCount > 0)
+                    sb.Append("**Errors:** ").AppendLine(errorCount.ToString());
+                sb.AppendLine();
+
+                sb.AppendLine("## Blueprints");
+                foreach (var e in blueprints.OrderBy(b => b.Name))
+                {
+                    sb.Append("- **").Append(e.Name ?? "(unknown)").Append("**");
+                    if (!string.IsNullOrEmpty(e.Path))
+                        sb.Append(" — ").Append(e.Path);
+                    if (e.Error != null)
+                        sb.Append(" *(error: ").Append(e.Error).Append(")*");
+                    sb.AppendLine();
+                }
+
+                Respond(ctx, 200, "text/markdown; charset=utf-8", sb.ToString());
+            }
+        }
+
+        private static string TruncateForJson(string s, int maxLength)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length <= maxLength) return s;
+            return s.Substring(0, maxLength) + "... [truncated]";
         }
     }
 }
