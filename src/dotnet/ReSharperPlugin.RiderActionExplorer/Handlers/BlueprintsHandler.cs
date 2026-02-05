@@ -41,7 +41,7 @@ public class BlueprintsHandler : IRequestHandler
         object assetsCache;
         try
         {
-            assetsCache = _reflection.ResolveUE4AssetsCache();
+            assetsCache = _reflection.ResolveUe4AssetsCache();
         }
         catch (Exception ex)
         {

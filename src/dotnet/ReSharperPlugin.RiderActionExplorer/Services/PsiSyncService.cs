@@ -47,7 +47,7 @@ public class PsiSyncService
                 var doc = sourceFile.Document;
                 if (doc != null)
                 {
-                    var docContent = NormalizeLineEndings(doc.GetText().ToString());
+                    var docContent = NormalizeLineEndings(doc.GetText());
                     if (docContent == diskContent)
                     {
                         return new PsiSyncResult

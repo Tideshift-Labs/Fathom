@@ -349,7 +349,7 @@ public class BlueprintAuditService
                 var uassetPath = ConvertPackagePathToFilePath(entry.Path, uprojectDir);
                 if (!string.IsNullOrEmpty(uassetPath) && File.Exists(uassetPath))
                 {
-                    entry.CurrentFileHash = ComputeMD5Hash(uassetPath);
+                    entry.CurrentFileHash = ComputeMd5Hash(uassetPath);
                     entry.IsStale = !string.Equals(entry.SourceFileHash, entry.CurrentFileHash,
                         StringComparison.OrdinalIgnoreCase);
                 }
@@ -401,7 +401,7 @@ public class BlueprintAuditService
         return Path.Combine(uprojectDir, "Content", relativePath.Replace('/', Path.DirectorySeparatorChar) + ".uasset");
     }
 
-    private static string ComputeMD5Hash(string filePath)
+    private static string ComputeMd5Hash(string filePath)
     {
         using (var md5 = MD5.Create())
         using (var stream = File.OpenRead(filePath))

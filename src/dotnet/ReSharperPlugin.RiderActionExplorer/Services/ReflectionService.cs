@@ -76,7 +76,7 @@ public class ReflectionService
         return null;
     }
 
-    public object ResolveUE4AssetsCache()
+    public object ResolveUe4AssetsCache()
     {
         var candidateNames = new[]
         {

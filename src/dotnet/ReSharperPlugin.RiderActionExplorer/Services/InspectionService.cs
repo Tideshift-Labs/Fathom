@@ -32,10 +32,8 @@ public class InspectionService
     public List<FileInspectionResult> RunInspections(
         List<(FileInspectionResult result, IPsiSourceFile source)> workItems)
     {
-        IssueClasses issueClasses;
-        FileImages fileImages;
-        issueClasses = _solution.GetComponent<IssueClasses>();
-        fileImages = FileImages.GetInstance(_solution);
+        var issueClasses = _solution.GetComponent<IssueClasses>();
+        var fileImages = FileImages.GetInstance(_solution);
 
         // Step A: Wait for PSI sync on all files in parallel
         Parallel.ForEach(workItems, item =>
