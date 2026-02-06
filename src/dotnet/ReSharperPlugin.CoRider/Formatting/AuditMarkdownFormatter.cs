@@ -114,7 +114,7 @@ internal static class BlueprintAuditConstants
     public const string CommandletMissingMessage =
         "The BlueprintAudit commandlet is not installed.\n\n" +
         "To fix this, install the CoRider-UnrealEngine plugin in your UE project:\n" +
-        "1. Clone https://github.com/[your-username]/CoRider-UnrealEngine\n" +
+        "1. Clone https://github.com/kvirani/CoRider-UnrealEngine\n" +
         "2. Copy or symlink it to your project's Plugins/ folder\n" +
         "3. Rebuild your UE project\n" +
         "4. Restart Rider and try again";

@@ -1,12 +1,12 @@
-# UE Companion Plugin — Blueprint Audit for LLMs
+# UE Companion Plugin: Blueprint Audit for LLMs
 
 ## Problem
 
-The Rider/ReSharper plugin can inspect C++ source code and walk Blueprint derivation trees via reflection on `UE4AssetsCache`, but it has **no access to Blueprint internals**. `.uasset` is a binary format that only Unreal Engine itself can deserialize. Variables, graphs, nodes, CDO overrides, widget trees — all invisible from the Rider side.
+The Rider/ReSharper plugin can inspect C++ source code and walk Blueprint derivation trees via reflection on `UE4AssetsCache`, but it has **no access to Blueprint internals**. `.uasset` is a binary format that only Unreal Engine itself can deserialize. Variables, graphs, nodes, CDO overrides, widget trees are all invisible from the Rider side.
 
 ## Solution
 
-A companion Unreal Engine editor plugin that serializes Blueprint internals to JSON on disk. The Rider plugin reads those JSONs. The filesystem is the interface — no IPC, no sockets, no runtime coupling.
+A companion Unreal Engine editor plugin that serializes Blueprint internals to JSON on disk. The Rider plugin reads those JSONs. The filesystem is the interface: no IPC, no sockets, no runtime coupling.
 
 ## What the UE plugin does
 
@@ -17,9 +17,9 @@ Given a `UBlueprint*`, produces a JSON object containing:
 | Section | Details |
 |---------|---------|
 | Metadata | Name, path, parent class, blueprint type |
-| Source file hash | MD5 of the `.uasset` file — for stale detection |
+| Source file hash | MD5 of the `.uasset` file, used for stale detection |
 | Variables | Name, type (with container types: Array/Set/Map), category, `InstanceEditable`, `Replicated` |
-| Property overrides | CDO diff against parent class defaults — captures what the user changed in the Details panel |
+| Property overrides | CDO diff against parent class defaults. Captures what the user changed in the Details panel |
 | Interfaces | Implemented Blueprint interfaces |
 | Components | Actor component hierarchy from `SimpleConstructionScript` |
 | Widget tree | Recursive widget hierarchy (for Widget Blueprints) |
@@ -29,14 +29,14 @@ Given a `UBlueprint*`, produces a JSON object containing:
 
 ### Three execution modes
 
-1. **On-save subsystem (`UBlueprintAuditSubsystem`)** — `UEditorSubsystem` that hooks `PackageSavedWithContextEvent`. Every Blueprint save triggers an immediate re-audit. Also runs a deferred stale check on editor startup (compares `.uasset` MD5 hashes against stored hashes in audit JSONs).
+1. **On-save subsystem (`UBlueprintAuditSubsystem`)**: `UEditorSubsystem` that hooks `PackageSavedWithContextEvent`. Every Blueprint save triggers an immediate re-audit. Also runs a deferred stale check on editor startup (compares `.uasset` MD5 hashes against stored hashes in audit JSONs).
 
-2. **Batch commandlet (`UBlueprintAuditCommandlet`)** — Headless, single-run. Two modes:
+2. **Batch commandlet (`UBlueprintAuditCommandlet`)**: Headless, single-run. Two modes:
    - Single asset: `-AssetPath=/Game/UI/WBP_Foo -Output=out.json`
    - All project assets: dumps every `/Game/` Blueprint to individual JSON files
    - Invocation: `UnrealEditor-Cmd.exe Project.uproject -run=BlueprintAudit`
 
-3. **File watcher trigger from Rider** — The Rider plugin watches `Content/` for `.uasset` changes, compares timestamps against existing audit JSONs, and shells out to the commandlet for stale entries. This handles the "Rider open, editor closed" scenario (e.g. after a `git pull` brings in new Blueprint assets).
+3. **File watcher trigger from Rider**: The Rider plugin watches `Content/` for `.uasset` changes, compares timestamps against existing audit JSONs, and shells out to the commandlet for stale entries. This handles the "Rider open, editor closed" scenario (e.g. after a `git pull` brings in new Blueprint assets).
 
 ### Output location
 
@@ -49,7 +49,7 @@ Mirrors the `Content/` directory layout:
 /Game/UI/Widgets/WBP_Foo  ->  Saved/Audit/Blueprints/UI/Widgets/WBP_Foo.json
 ```
 
-## Architecture — how the two plugins couple
+## Architecture: how the two plugins couple
 
 ```
 UE Companion Plugin                       Rider Plugin (InspectionHttpServer)
@@ -67,17 +67,17 @@ UE Companion Plugin                       Rider Plugin (InspectionHttpServer)
 
 The contract between the two plugins is purely **filesystem conventions**:
 
-1. **JSON output directory**: `{ProjectDir}/Saved/Audit/Blueprints/` — both sides agree on this path.
-2. **Commandlet name**: `BlueprintAudit` — hardcoded convention the Rider plugin uses to invoke headless audits.
+1. **JSON output directory**: `{ProjectDir}/Saved/Audit/Blueprints/`. Both sides agree on this path.
+2. **Commandlet name**: `BlueprintAudit`, the hardcoded convention the Rider plugin uses to invoke headless audits.
 3. **Engine and project paths**: Rider already knows these from its Unreal Engine integration settings (needed for building/debugging).
 
 No shared config files, no runtime communication protocol, no compile-time dependencies.
 
-### Discovery — is the companion installed?
+### Discovery: is the companion installed?
 
 The Rider plugin doesn't need an explicit check. It:
-1. Looks for `Saved/Audit/Blueprints/` — if JSONs exist, reads them.
-2. If it needs to refresh, shells out to the commandlet — if it fails (commandlet not registered), the companion isn't installed; gracefully degrade.
+1. Looks for `Saved/Audit/Blueprints/`. If JSONs exist, reads them.
+2. If it needs to refresh, shells out to the commandlet. If it fails (commandlet not registered), the companion isn't installed; gracefully degrade.
 3. Optionally: check for a `.uplugin` file in `Plugins/BlueprintAudit/` to proactively hint "companion not installed."
 
 ### What each side covers
@@ -118,7 +118,7 @@ E:\UE\Projects\Workspace\Source\Udemy_CUIEditor\
 
 When integrating with the Rider plugin (`InspectionHttpServer`):
 
-1. Add a `/blueprint-audit?class=WBP_Foo` endpoint that reads from `Saved/Audit/Blueprints/` — pure file I/O, no engine coupling.
+1. Add a `/blueprint-audit?class=WBP_Foo` endpoint that reads from `Saved/Audit/Blueprints/`. Pure file I/O, no engine coupling.
 2. Add a file watcher on `Content/**/*.uasset` that compares modification timestamps against corresponding audit JSONs.
 3. When stale entries are detected, shell out to the commandlet in the background: `{EngineDir}/Binaries/Win64/UnrealEditor-Cmd.exe {Project}.uproject -run=BlueprintAudit -AssetPath={PackagePath}`
 4. Surface a staleness indicator in the response so LLM consumers know whether the data is fresh.

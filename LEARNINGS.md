@@ -19,11 +19,11 @@ These approaches were fully explored and proven to NOT work for our use case. Do
 
 - Callbacks fire: **0**
 - Issues found: **0**
-- No errors, no exceptions — **silent failure**
+- No errors, no exceptions, **silent failure**
 
 The C++ PSI is healthy (verified: `ShouldBuildPsi: True`, `ProvidesCodeModel: True`, documents present with content), but the daemon stage system simply doesn't include C++ analysis stages. RiderCpp has its own separate analysis pipeline.
 
-**What it IS good for:** C# inspection on all solution files. Our POC proved this works — 88 real issues found on a C# project without SWEA. Keep `RunLocalInspections` parked for when we add C# support.
+**What it IS good for:** C# inspection on all solution files. Our POC proved this works: 88 real issues found on a C# project without SWEA. Keep `RunLocalInspections` parked for when we add C# support.
 
 **Key working pattern (C# only):**
 ```csharp
@@ -35,18 +35,18 @@ runner.RunLocalInspections(files, (file, issues) => {
     // process issues
 }, null);
 // ... use results ...
-lifetimeDef.Terminate(); // ONLY after fully done — see Lifetime Management section below
+lifetimeDef.Terminate(); // ONLY after fully done; see Lifetime Management section below
 ```
 
 ### DEAD END #2: `IDaemon.ForceReHighlight` for non-open files
 
 **Status:** REJECTED. Requires open editor tabs, conflicts with developer IDE usage.
 
-`IDaemon.ForceReHighlight(IDocument)` and `DaemonStateChanged` work for C++ — they trigger RiderCpp analysis. However:
+`IDaemon.ForceReHighlight(IDocument)` and `DaemonStateChanged` work for C++ and they trigger RiderCpp analysis. However:
 
 - They **only work for documents with active editor sessions** (files open in editor tabs)
 - To inspect a file not currently open, you'd have to **programmatically open it in the editor**
-- This **directly interferes with the developer's normal IDE usage** — they may be editing other files, and having the plugin open/close tabs or steal focus is unacceptable
+- This **directly interferes with the developer's normal IDE usage** because they may be editing other files, and having the plugin open/close tabs or steal focus is unacceptable
 - The whole point of this project is to run inspections **without requiring UI interaction**
 
 **Do not revisit this approach.** The constraint is fundamental: the developer must be able to use the IDE normally while the LLM requests inspections in the background.
@@ -71,11 +71,11 @@ This means `CollectInspectionResults.CollectIssuesFromSolutionAnalysis()` (the s
 
 | Capability | C# | C++ | Notes |
 |---|---|---|---|
-| **`InspectCodeDaemon.DoHighlighting`** (batch, any file) | **Untested (should work)** | **34 issues on 19 files** | **THE SOLUTION — works for C++ without open editor** |
-| `RunLocalInspections` (batch, any file) | 88 issues found | 0 callbacks | ReSharper daemon stages only — C# fallback |
-| `IDaemon.ForceReHighlight` (per-document) | Works | Works | Requires open editor tab — rejected |
+| **`InspectCodeDaemon.DoHighlighting`** (batch, any file) | **Untested (should work)** | **34 issues on 19 files** | **THE SOLUTION: works for C++ without open editor** |
+| `RunLocalInspections` (batch, any file) | 88 issues found | 0 callbacks | ReSharper daemon stages only (C# fallback) |
+| `IDaemon.ForceReHighlight` (per-document) | Works | Works | Requires open editor tab (rejected) |
 | `IDaemon.DaemonStateChanged` | Works | Works | Same constraint as ForceReHighlight |
-| Rider "Inspect Code" (`kind = OTHER`) | Unknown | Works | Does NOT require open editor — `InspectCodeDaemon` is the mechanism |
+| Rider "Inspect Code" (`kind = OTHER`) | Unknown | Works | Does NOT require open editor; `InspectCodeDaemon` is the mechanism |
 | C++ PSI model (file properties, documents) | N/A | Healthy | ShouldBuildPsi, ProvidesCodeModel all true |
 | UE5 user file filtering (solution dir) | N/A | ~231 files | vs 247K+ total solution files |
 
@@ -87,7 +87,7 @@ This means `CollectInspectionResults.CollectIssuesFromSolutionAnalysis()` (the s
 
 We triggered Rider's built-in "Inspect Code" on individual C++ files and captured backend logs. This revealed that:
 
-1. **C++ daemon stages are standard `IDaemonStage` implementations** that go through the regular `DaemonImpl` / `DaemonProcessBase` infrastructure — not a separate pipeline.
+1. **C++ daemon stages are standard `IDaemonStage` implementations** that go through the regular `DaemonImpl` / `DaemonProcessBase` infrastructure, not a separate pipeline.
 2. **"Inspect Code" can analyze files without opening them in the editor.** It creates a `DaemonProcessBase` with `kind = OTHER` (vs `kind = VISIBLE_DOCUMENT` for open files).
 3. **`RunLocalInspections` failed for C++ not because C++ stages are separate**, but because it uses its own internal `InspectionDaemon` that bypasses the regular `DaemonImpl`. The regular daemon already handles C++ just fine.
 
@@ -156,11 +156,11 @@ The file was NOT open in any editor tab. No `DocumentHost` or `TextControlHost` 
 ```
 
 Key differences from the open-file run:
-- No `DocumentHost` / `TextControlHost` — file was NOT opened in the editor
-- No `CppInlayHints` or `CppGutterProcess` — these are editor-only stages
-- No `UnrealHeaderToolDaemonProcess` — UHT only runs on `.h` files
-- `CppUnusedInternalLinkageEntitiesHighlightingStage` appeared — only relevant for `.cpp` files
-- Analysis times were slightly longer (80ms for references vs 1ms) — likely because the file wasn't already cached from being viewed
+- No `DocumentHost` / `TextControlHost` because the file was NOT opened in the editor
+- No `CppInlayHints` or `CppGutterProcess` since these are editor-only stages
+- No `UnrealHeaderToolDaemonProcess` since UHT only runs on `.h` files
+- `CppUnusedInternalLinkageEntitiesHighlightingStage` appeared, only relevant for `.cpp` files
+- Analysis times were slightly longer (80ms for references vs 1ms), likely because the file wasn't already cached from being viewed
 
 ### Log: "Inspect Code" on a directory (DataObjects/, 8 .cpp files, none open)
 
@@ -195,7 +195,7 @@ Key observations:
 
 ### What this means for our approach
 
-The regular `DaemonImpl` already supports C++ analysis on non-open files via `kind = OTHER`. We do NOT need a separate C++ analysis pipeline. The mechanism is `InspectCodeDaemon` — see the breakthrough section below.
+The regular `DaemonImpl` already supports C++ analysis on non-open files via `kind = OTHER`. We do NOT need a separate C++ analysis pipeline. The mechanism is `InspectCodeDaemon`; see the breakthrough section below.
 
 ---
 
@@ -263,13 +263,13 @@ Sample issues:
 [WARNING] Source/.../Udemy_CUI.cpp:123 - Clang-Tidy: 'override' is redundant since the function is already declared 'final'
 ```
 
-Real Clang-Tidy warnings, symbol resolution errors, and style issues — all on files NOT open in the editor.
+Real Clang-Tidy warnings, symbol resolution errors, and style issues, all on files NOT open in the editor.
 
 ### Known issue: `.h` files throw `OperationCanceledException`
 
 One `.h` file (`Udemy_CUI.h`) threw `OperationCanceledException` during the experiment. This is likely caused by the `UnrealHeaderToolDaemonProcess` stage, which runs `dotnet UnrealBuildTool.dll -Mode=UnrealHeaderTool` as an external process. This external call may have a timeout or cancellation mechanism that doesn't work correctly outside the normal daemon infrastructure.
 
-From the log analysis, UHT only runs on `.h` files and can take ~850ms per file. The error needs investigation — options include:
+From the log analysis, UHT only runs on `.h` files and can take ~850ms per file. The error needs investigation. Options include:
 1. Catching and ignoring `OperationCanceledException` for `.h` files (losing UHT diagnostics but keeping other stages' results)
 2. Understanding why UHT cancels when invoked via `InspectCodeDaemon` vs the built-in "Inspect Code"
 3. Providing a longer timeout or different lifetime configuration
@@ -283,7 +283,7 @@ From the log analysis, UHT only runs on `.h` files and can take ~850ms per file.
 | Open editor required | **No** | No |
 | SWEA dependency | **None** | None |
 | Public API | **Yes** (public class) | Yes |
-| `FileImages.DisableCheckThread()` | **Yes** | No — likely the key difference |
+| `FileImages.DisableCheckThread()` | **Yes** | No (likely the key difference) |
 | `CompilationContextCookie` | **Yes** | No |
 | Threading | Background-safe | Background-safe |
 
@@ -295,16 +295,16 @@ From the log analysis, UHT only runs on `.h` files and can take ~850ms per file.
 
 ### Completed
 
-1. ~~Investigate `.h` file `OperationCanceledException`~~ — Handled via retry loop (Step C), up to 3 retries with 1s delay
-2. ~~Parallelize~~ — Done via `Parallel.ForEach` for both PSI sync and inspection phases
-3. ~~Build HTTP API~~ — Done: `InspectionHttpServer.cs` on port 19876 with `/inspect`, `/files`, `/health`
-4. ~~Handle PSI staleness~~ — Done: content comparison gate (Step A) polls until document matches disk
+1. ~~Investigate `.h` file `OperationCanceledException`~~. Handled via retry loop (Step C), up to 3 retries with 1s delay
+2. ~~Parallelize~~. Done via `Parallel.ForEach` for both PSI sync and inspection phases
+3. ~~Build HTTP API~~. Done: `InspectionHttpServer.cs` on port 19876 with `/inspect`, `/files`, `/health`
+4. ~~Handle PSI staleness~~. Done: content comparison gate (Step A) polls until document matches disk
 
 ### Next
 
-5. **Add `/blueprints` endpoint** — Expose `UE4AssetsCache.GetDerivedBlueprintClasses()` via HTTP. Requires adding `JetBrains.ReSharper.Feature.Services.Cpp` assembly reference.
-6. **Test `InspectCodeDaemon` on C# files** — Confirm it works for C# as well, potentially replacing `RunLocalInspections` entirely.
-7. **Handle new files** — Files must be in a project to get an `IPsiSourceFile`.
+5. **Add `/blueprints` endpoint**: Expose `UE4AssetsCache.GetDerivedBlueprintClasses()` via HTTP. Requires adding `JetBrains.ReSharper.Feature.Services.Cpp` assembly reference.
+6. **Test `InspectCodeDaemon` on C# files**: Confirm it works for C# as well, potentially replacing `RunLocalInspections` entirely.
+7. **Handle new files**: Files must be in a project to get an `IPsiSourceFile`.
 
 ### Constraints for the solution
 
@@ -323,11 +323,11 @@ From the log analysis, UHT only runs on `.h` files and can take ~850ms per file.
 
 `SolutionAnalysisConfiguration` (in `JetBrains.ReSharper.Daemon`, not `...Daemon.SolutionAnalysis`) is accessible via `solution.GetComponent<>()`. Its documented properties:
 
-- `CompletedOnceAfterStart` — `IProperty<bool>`, true after SWEA finishes at least one full pass
-- `Paused` — `IProperty<bool>`, true if SWEA is paused for any reason
-- `PausedByUser` — whether the user explicitly paused SWEA
+- `CompletedOnceAfterStart`: `IProperty<bool>`, true after SWEA finishes at least one full pass
+- `Paused`: `IProperty<bool>`, true if SWEA is paused for any reason
+- `PausedByUser`: whether the user explicitly paused SWEA
 
-The plan originally referenced `config.Enabled.Value` and `config.Completed.Value` — these don't exist. Use `CompletedOnceAfterStart` and `Paused` instead.
+The plan originally referenced `config.Enabled.Value` and `config.Completed.Value` but these don't exist. Use `CompletedOnceAfterStart` and `Paused` instead.
 
 ### Namespace gotcha: JetBrains.ReSharper.Daemon vs ...Daemon.SolutionAnalysis
 
@@ -354,8 +354,8 @@ In SDK version 253.x, the parameterless `[SolutionComponent]` constructor is obs
 ```
 
 The `Instantiation` enum is in `JetBrains.Application.Parts`. Common values:
-- `DemandAnyThreadSafe` — created on demand when first requested
-- `ContainerAsyncAnyThreadSafe` — created during container compose, any thread
+- `DemandAnyThreadSafe`: created on demand when first requested
+- `ContainerAsyncAnyThreadSafe`: created during container compose, any thread
 
 ### ILogger API
 
@@ -373,7 +373,7 @@ Log.Error(ex, "message");
 
 ### IProperty<T>.Advise is an extension method
 
-`IProperty<bool>.Advise(lifetime, callback)` is not a built-in method — it's an extension that requires a specific `using` directive (likely `JetBrains.DataFlow` or similar). If you just need to poll the value, use `.Value` directly instead of subscribing reactively.
+`IProperty<bool>.Advise(lifetime, callback)` is not a built-in method. It's an extension that requires a specific `using` directive (likely `JetBrains.DataFlow` or similar). If you just need to poll the value, use `.Value` directly instead of subscribing reactively.
 
 ## Lifetime Management (Critical)
 
@@ -382,7 +382,7 @@ Log.Error(ex, "message");
 This was the most impactful bug. `CollectInspectionResults.RunLocalInspections()` fires callbacks synchronously, but the daemon stages internally check `lifetime.IsAlive` during execution. Wrapping the call in `try/finally { lifetimeDef.Terminate(); }` causes the lifetime to be terminated as part of normal control flow, which interferes with the daemon's internal lifetime checks.
 
 ```csharp
-// BROKEN — returns 0 issues despite callbacks firing:
+// BROKEN: returns 0 issues despite callbacks firing:
 var lifetimeDef = lifetime.CreateNested();
 try
 {
@@ -394,7 +394,7 @@ finally
     lifetimeDef.Terminate();  // Daemon stages see dead lifetime → empty results
 }
 
-// WORKS — 88 issues found:
+// WORKS: 88 issues found:
 var lifetimeDef = lifetime.CreateNested();
 var runner = new CollectInspectionResults(solution, lifetimeDef, progress);
 runner.RunLocalInspections(files, callback, null);
@@ -455,7 +455,7 @@ Search for your component/class name. Verbose-level logging appears with `|V|` p
 
 ### The "exit code 1" on startup is normal
 
-The Rider startup log shows `ReSharperProcess has exited by request with exit code 1` early on. This is the `EarlyStartServerWire` process that exits and gets replaced by the real backend — it's not an error.
+The Rider startup log shows `ReSharperProcess has exited by request with exit code 1` early on. This is the `EarlyStartServerWire` process that exits and gets replaced by the real backend. It's not an error.
 
 ## SWEA vs Local Daemon: Independence
 
@@ -467,9 +467,9 @@ The Rider startup log shows `ReSharperProcess has exited by request with exit co
 - Runs all registered **ReSharper** daemon stages synchronously
 - Collects `HighlightingInfo` results directly from those stages
 - Never touches the SWEA cache, `SolutionAnalysisManager`, or `IssueSet`
-- **Does NOT include RiderCpp C++ analyzers** — see Dead End #1 above
+- **Does NOT include RiderCpp C++ analyzers**; see Dead End #1 above
 
-Our POC proved this works for C# — we got 88 real issues without SWEA involvement. But it produces 0 results for C++ files.
+Our POC proved this works for C#: we got 88 real issues without SWEA involvement. But it produces 0 results for C++ files.
 
 ### What SWEA on/off affects
 
@@ -478,24 +478,24 @@ Our POC proved this works for C# — we got 88 real issues without SWEA involvem
 | `RunLocalInspections` (C# only) | Works | **Works** |
 | `IDaemon.ForceReHighlight` (open files) | Works | **Works** |
 | `IDaemon.DaemonStateChanged` (open files) | Works | **Works** |
-| `CollectIssuesFromSolutionAnalysis` (cached) | Works | Dead — no cache |
+| `CollectIssuesFromSolutionAnalysis` (cached) | Works | Dead (no cache) |
 | `CompletedOnceAfterStart` | Eventually true | Always false |
 | Cross-file analysis (unused imports, etc.) | Available | **Lost** |
 
-The only thing lost with SWEA off is global cross-file analysis (e.g., detecting unused public members referenced from other files). Per-file inspections — syntax errors, type mismatches, null dereferences, style issues — all work (for C#).
+The only thing lost with SWEA off is global cross-file analysis (e.g., detecting unused public members referenced from other files). Per-file inspections (syntax errors, type mismatches, null dereferences, style issues) all still work for C#.
 
 ### UE5 C++ projects: SWEA is off by default
 
 In Unreal Engine 5 C++ projects, SWEA is disabled by default due to solution size. This means:
 
 - The SWEA cache path is dead. Don't rely on `CompletedOnceAfterStart` or `CollectIssuesFromSolutionAnalysis`.
-- `RunLocalInspections` does **NOT** work for C++ files — see Dead End #1 above.
+- `RunLocalInspections` does **NOT** work for C++ files; see Dead End #1 above.
 - **Performance is a concern**: C++ per-file analysis is heavier than C#. A UE5 file with thousands of transitive includes can take seconds to tens of seconds per file vs. milliseconds for C#.
 - **PSI readiness matters**: C++ symbol resolution depends on include paths, compilation database, and UE5 generated headers being indexed. Analysis only produces meaningful results after Rider's initial project indexing completes (can take minutes for UE5).
 
 ## SWEA Lifecycle APIs (for future use)
 
-### IDaemon — per-document lifecycle (registered component)
+### IDaemon: per-document lifecycle (registered component)
 
 The `IDaemon` interface (`JetBrains.ReSharper.Feature.Services.Daemon`) provides per-document analysis control. It is a registered component, accessible via `solution.GetComponent<IDaemon>()`.
 
@@ -508,19 +508,19 @@ The `IDaemon` interface (`JetBrains.ReSharper.Feature.Services.Daemon`) provides
 | `Invalidate()` | Mark ALL daemon results as stale |
 | `Invalidate(string, IDocument)` | Invalidate with a reason string |
 
-**Important**: `ForceReHighlight` and `DaemonStateChanged` are part of the regular daemon, not SWEA. They work regardless of SWEA state, but **only for documents with active editor sessions (open files)**. See Dead End #2 above — this is why they don't solve our problem.
+**Important**: `ForceReHighlight` and `DaemonStateChanged` are part of the regular daemon, not SWEA. They work regardless of SWEA state, but **only for documents with active editor sessions (open files)**. See Dead End #2 above; this is why they don't solve our problem.
 
-### SolutionAnalysisConfiguration — global SWEA state
+### SolutionAnalysisConfiguration: global SWEA state
 
 Already documented above. Key addition: the `Pause(Lifetime, string)` method lets you programmatically pause SWEA for a scoped lifetime, useful if you want to prevent SWEA from interfering during a batch operation.
 
 ### What's NOT available in the public API
 
-- **No global progress counter** — can't ask "how many files has SWEA analyzed out of N total"
-- **No IssueSet / HighlightingResultsMap** — locked behind internal `SolutionAnalysisManager`
-- **No per-file "last analyzed timestamp"** — you know the state enum, not when it was reached
-- **No ISwaProcessor** — internal only, not in SDK packages
-- **No file-level "is stale" query** — `IDaemonProcess.IsRangeInvalidated()` exists but only during an active daemon process
+- **No global progress counter**: can't ask "how many files has SWEA analyzed out of N total"
+- **No IssueSet / HighlightingResultsMap**: locked behind internal `SolutionAnalysisManager`
+- **No per-file "last analyzed timestamp"**: you know the state enum, not when it was reached
+- **No ISwaProcessor**: internal only, not in SDK packages
+- **No file-level "is stale" query**: `IDaemonProcess.IsRangeInvalidated()` exists but only during an active daemon process
 
 ## Architecture: On-Demand Inspection API for LLMs
 
@@ -544,7 +544,7 @@ There is an unpredictable delay between "file saved" and "PSI reflects the new c
 
 ### Threading and concurrency
 
-- `RunLocalInspections` uses daemon infrastructure — safe from background threads (our POC proves this)
+- `RunLocalInspections` uses daemon infrastructure and is safe from background threads (our POC proves this)
 - PSI access may require `ReadLockCookie.Create()` which blocks write operations while held
 - Concurrent API requests could cause read lock contention
 - A serial queue for inspection requests is the safest starting point
@@ -559,12 +559,12 @@ Both would run inside the Rider process. MCP (Model Context Protocol) is purpose
 
 ### Source: Closed-source, decompiled
 
-The Unreal Engine support in ReSharper/Rider is **closed-source** — there is no `resharper-unreal` GitHub repo (unlike `resharper-unity` which is open-source). All types live in `JetBrains.ReSharper.Feature.Services.Cpp.dll`. The decompiled reference files are in `reference_files/ue_specific/`.
+The Unreal Engine support in ReSharper/Rider is **closed-source**. There is no `resharper-unreal` GitHub repo (unlike `resharper-unity` which is open-source). All types live in `JetBrains.ReSharper.Feature.Services.Cpp.dll`. The decompiled reference files are in `reference_files/ue_specific/`.
 
 ### The Golden API: `UE4AssetsCache.GetDerivedBlueprintClasses`
 
 ```csharp
-// UE4AssetsCache is a [PsiComponent] — resolve via DI
+// UE4AssetsCache is a [PsiComponent]; resolve via DI
 var assetsCache = solution.GetComponent<UE4AssetsCache>();
 
 // Direct children only:
@@ -575,9 +575,9 @@ IEnumerable<DerivedBlueprintClass> allDescendants = UE4SearchUtil.GetDerivedBlue
 ```
 
 Each `DerivedBlueprintClass` is a readonly struct with:
-- `Name` — the Blueprint class name (e.g., `"BP_MyActor_C"`)
-- `ContainingFile` — `IPsiSourceFile` pointing to the `.uasset` file
-- `Index` — index into the `.uasset` export map
+- `Name`: the Blueprint class name (e.g., `"BP_MyActor_C"`)
+- `ContainingFile`: `IPsiSourceFile` pointing to the `.uasset` file
+- `Index`: index into the `.uasset` export map
 
 ### How the cache works
 
@@ -585,8 +585,8 @@ Each `DerivedBlueprintClass` is a readonly struct with:
 1. Scans all `.uasset` / `.umap` files (provided by `UE4AssetAdditionalFilesModuleFactory`)
 2. Parses each with `UELinker` → `UE4AssetData.FromLinker(linker)`
 3. `MergeData()` populates `myBaseTypesToInheritors` (`OneToListMap<string, DerivedBlueprintClass>`) from:
-   - `BlueprintClassObject.SuperClassName` — class inheritance
-   - `BlueprintClassObject.Interfaces[]` — interface implementations
+   - `BlueprintClassObject.SuperClassName` (class inheritance)
+   - `BlueprintClassObject.Interfaces[]` (interface implementations)
 
 The cache is **asynchronous/deferred**. It builds in the background after solution load.
 
@@ -598,22 +598,22 @@ DeferredCacheController component = solution.GetComponent<DeferredCacheControlle
 bool isReady = component.CompletedOnce.Value && !component.HasDirtyFiles();
 ```
 
-If the cache isn't ready, results will be incomplete (not wrong — just missing some Blueprints).
+If the cache isn't ready, results will be incomplete (not wrong, just missing some Blueprints).
 
 ### Rich data model: `UE4AssetData`
 
 Each parsed `.uasset` yields a `UE4AssetData` with:
-- `BlueprintClasses[]` — `BlueprintClassObject` structs with `ObjectName`, `ClassName`, `SuperClassName`, `Interfaces[]`
-- `K2VariableSets[]` — Blueprint graph nodes (variable get/set, function calls, delegate bindings)
-- `OtherClasses[]` — non-Blueprint asset objects
-- `WordHashes[]` — word index for fast text-based lookups
+- `BlueprintClasses[]`: `BlueprintClassObject` structs with `ObjectName`, `ClassName`, `SuperClassName`, `Interfaces[]`
+- `K2VariableSets[]`: Blueprint graph nodes (variable get/set, function calls, delegate bindings)
+- `OtherClasses[]`: non-Blueprint asset objects
+- `WordHashes[]`: word index for fast text-based lookups
 
 ### Additional search capabilities via `UEAssetUsagesSearcher`
 
 `UEAssetUsagesSearcher` is a `[SolutionComponent]` that provides higher-level queries:
-- `GetFindUsagesResults(sourceFile, searchTarget, searchReadOccurrences)` — find usages of C++ classes/functions/properties in `.uasset` files
-- `GetGoToInheritorsResults(searchTargets)` — find all Blueprint inheritors (classes and function overrides)
-- `FindPossibleReadWriteResults(searchTargets, cache, searchReadOccurrences)` — find property read/write in Blueprints
+- `GetFindUsagesResults(sourceFile, searchTarget, searchReadOccurrences)`: find usages of C++ classes/functions/properties in `.uasset` files
+- `GetGoToInheritorsResults(searchTargets)`: find all Blueprint inheritors (classes and function overrides)
+- `FindPossibleReadWriteResults(searchTargets, cache, searchReadOccurrences)`: find property read/write in Blueprints
 
 Search targets are built via `UE4SearchUtil.BuildUESearchTargets(declaredElement)` which accounts for:
 - Core Redirects (renamed classes/properties in `.ini` files)
@@ -646,7 +646,7 @@ A `/blueprints?class=AMyActor` endpoint could return:
 - Whether the cache is complete or still building
 - Optionally: interfaces implemented, function overrides, property usages
 
-This data is NOT available through `InspectCodeDaemon` — it comes from a completely separate cache system that parses `.uasset` binary files independently of the C++ daemon stages.
+This data is NOT available through `InspectCodeDaemon`. It comes from a completely separate cache system that parses `.uasset` binary files independently of the C++ daemon stages.
 
 ---
 
@@ -667,18 +667,18 @@ A `[SolutionComponent]` running `System.Net.HttpListener` on `http://localhost:1
 
 ### Query parameters
 
-- `&format=json` — JSON output (default is markdown)
-- `&debug=true` — include per-file diagnostic info (PSI sync timing, retries, etc.)
+- `&format=json`: JSON output (default is markdown)
+- `&debug=true`: include per-file diagnostic info (PSI sync timing, retries, etc.)
 
 ### Reliability pipeline
 
 The inspection endpoint implements a two-step reliability pipeline:
 
-**Step A: PSI Content Sync** — Before inspecting, compares disk content with `sourceFile.Document.GetText()` (normalized line endings). Polls every 250ms, up to 15s timeout. This ensures the PSI reflects the latest file content.
+**Step A: PSI Content Sync**: Before inspecting, compares disk content with `sourceFile.Document.GetText()` (normalized line endings). Polls every 250ms, up to 15s timeout. This ensures the PSI reflects the latest file content.
 
-**Step C: Retry on `OperationCanceledException`** — Up to 3 attempts with 1s delay. Handles the window where daemon stages get cancelled during re-indexing.
+**Step C: Retry on `OperationCanceledException`**: Up to 3 attempts with 1s delay. Handles the window where daemon stages get cancelled during re-indexing.
 
-**Step B (DEAD END): `CommitAllDocuments`** — `IPsiServices.Files.CommitAllDocuments()` requires the main/UI thread. Cannot be called from `HttpListener`'s ThreadPool thread. Throws: "This action cannot be executed on the .NET TP Worker thread." Removed entirely; Steps A + C are sufficient.
+**Step B (DEAD END): `CommitAllDocuments`**: `IPsiServices.Files.CommitAllDocuments()` requires the main/UI thread. Cannot be called from `HttpListener`'s ThreadPool thread. Throws: "This action cannot be executed on the .NET TP Worker thread." Removed entirely; Steps A + C are sufficient.
 
 ### Parallelization
 
@@ -694,7 +694,7 @@ If the requestor provides multiple file paths, only fail early if ALL files are 
 
 | File | Status | Purpose |
 |---|---|---|
-| `InspectionHttpServer.cs` | **Active** | **THE API** — HTTP server on port 19876 with `/inspect`, `/files`, `/health` endpoints |
+| `InspectionHttpServer.cs` | **Active** | **THE API**: HTTP server on port 19876 with `/inspect`, `/files`, `/health` endpoints |
 | `InspectCodeDaemonExperiment.cs` | Disabled | Proved `InspectCodeDaemon` works for C++ (34 issues on 19 files). Replaced by `InspectionHttpServer` |
 | `CppInspectionExperiment.cs` | Disabled | Superseded by InspectCodeDaemonExperiment. Proved C++ PSI is healthy but RunLocalInspections fails for C++ |
 | `FullInspectionTestComponent.cs` | Disabled | POC proving RunLocalInspections works for C# (88 issues) |
@@ -709,26 +709,26 @@ If the requestor provides multiple file paths, only fail early if ALL files are 
 |---|---|---|
 | `reference_files/RunInspection.cs` | `JetBrains.ReSharper.SolutionAnalysis.dll` | Entry point for "Inspect Code" feature |
 | `reference_files/CollectInspectionResults.cs` | same | Contains private `InspectionDaemon` (the broken path) and `RunLocalInspections` |
-| `reference_files/InspectCodeDaemon.cs` | same | **The working public class** — wraps in `FileImages.DisableCheckThread()` |
+| `reference_files/InspectCodeDaemon.cs` | same | **The working public class**: wraps in `FileImages.DisableCheckThread()` |
 | `reference_files/DaemonProcessBase.cs` | `JetBrains.ReSharper.Daemon.Engine.dll` | Core `DoHighlighting()` that discovers and runs all daemon stages |
 
 ### UE-specific reference files (decompiled from `JetBrains.ReSharper.Feature.Services.Cpp.dll`)
 
 | File | Namespace | Purpose |
 |---|---|---|
-| `ue_specific/UE4AssetsCache.cs` | `...UE4.UEAsset` | **Central cache** — `[PsiComponent]`, `GetDerivedBlueprintClasses()`, word index, deferred build |
-| `ue_specific/UEAssetUsagesSearcher.cs` | `...UE4.UEAsset.Search` | **Search API** — `[SolutionComponent]`, find usages/inheritors/read-write in `.uasset` files |
-| `ue_specific/UE4SearchUtil.cs` | `...UE4.UEAsset.Search` | **Search helpers** — recursive `GetDerivedBlueprintClasses()`, `BuildUESearchTargets()`, Core Redirects |
-| `ue_specific/UE4AssetData.cs` | `...UE4.UEAsset` | **Parsed .uasset data** — `BlueprintClassObject` (with `SuperClassName`, `Interfaces[]`), `K2GraphNodeObject` |
-| `ue_specific/DerivedBlueprintClass.cs` | `...UE4.UEAsset` | Result struct — `Name`, `ContainingFile`, `Index` |
-| `ue_specific/UEBlueprintGeneratedClass.cs` | `...UE4.UEAsset.Reader` | `.uasset` binary reader — parses Blueprint class properties and interfaces |
+| `ue_specific/UE4AssetsCache.cs` | `...UE4.UEAsset` | **Central cache**: `[PsiComponent]`, `GetDerivedBlueprintClasses()`, word index, deferred build |
+| `ue_specific/UEAssetUsagesSearcher.cs` | `...UE4.UEAsset.Search` | **Search API**: `[SolutionComponent]`, find usages/inheritors/read-write in `.uasset` files |
+| `ue_specific/UE4SearchUtil.cs` | `...UE4.UEAsset.Search` | **Search helpers**: recursive `GetDerivedBlueprintClasses()`, `BuildUESearchTargets()`, Core Redirects |
+| `ue_specific/UE4AssetData.cs` | `...UE4.UEAsset` | **Parsed .uasset data**: `BlueprintClassObject` (with `SuperClassName`, `Interfaces[]`), `K2GraphNodeObject` |
+| `ue_specific/DerivedBlueprintClass.cs` | `...UE4.UEAsset` | Result struct: `Name`, `ContainingFile`, `Index` |
+| `ue_specific/UEBlueprintGeneratedClass.cs` | `...UE4.UEAsset.Reader` | `.uasset` binary reader that parses Blueprint class properties and interfaces |
 | `ue_specific/UnrealBlueprintClassesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage that produces "N derived Blueprint classes" hints |
 | `ue_specific/UnrealBlueprintClassesDaemonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UCLASS symbols and queries `GetGoToInheritorsResults()` |
 | `ue_specific/UnrealBlueprintPropertiesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage for UPROPERTY Blueprint usage hints |
 | `ue_specific/UnrealBlueprintPropertiesDameonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UPROPERTY symbols and queries read/write usages |
-| `ue_specific/UnrealBlueprintDaemonStageProcessBase.cs` | `...UE4.UEAsset.Daemon` | Generic base class — cache readiness check, symbol walking, settings |
-| `ue_specific/UnrealBlueprintHighlightingProvderBase.cs` | `...UE4.UEAsset.Daemon` | Abstract highlighting provider — class/property/function highlighting factories |
+| `ue_specific/UnrealBlueprintDaemonStageProcessBase.cs` | `...UE4.UEAsset.Daemon` | Generic base class: cache readiness check, symbol walking, settings |
+| `ue_specific/UnrealBlueprintHighlightingProvderBase.cs` | `...UE4.UEAsset.Daemon` | Abstract highlighting provider: class/property/function highlighting factories |
 | `ue_specific/IUnrealAssetHighlighting.cs` | `...UE4.UEAsset.Daemon` | Highlighting interface with `OccurrencesCalculator` and `DeclaredElement` |
-| `ue_specific/UnrealAssetOccurence.cs` | `...UE4.UEAsset.Search` | Occurrence wrapper — navigation (requires UnrealLink plugin), display text |
+| `ue_specific/UnrealAssetOccurence.cs` | `...UE4.UEAsset.Search` | Occurrence wrapper: navigation (requires UnrealLink plugin), display text |
 | `ue_specific/IUnrealOccurence.cs` | `...UE4.UEAsset.Search` | Interface for occurrence results |
 | `ue_specific/IOccurrence.cs` | `...Feature.Services.Occurrences` | Base occurrence interface (from `Feature.Services.dll`, not Cpp-specific) |
