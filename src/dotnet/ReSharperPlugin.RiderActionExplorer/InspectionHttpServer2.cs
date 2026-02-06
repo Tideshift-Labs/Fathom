@@ -3,12 +3,14 @@ using System.IO;
 using System.Net;
 using System.Threading.Tasks;
 using JetBrains.Application.Parts;
+using JetBrains.Application.Settings;
 using JetBrains.Lifetimes;
 using JetBrains.ProjectModel;
 using JetBrains.Util;
 using ReSharperPlugin.RiderActionExplorer.Formatting;
 using ReSharperPlugin.RiderActionExplorer.Handlers;
 using ReSharperPlugin.RiderActionExplorer.Services;
+using ReSharperPlugin.RiderActionExplorer.Settings;
 
 namespace ReSharperPlugin.RiderActionExplorer
 {
@@ -21,13 +23,14 @@ namespace ReSharperPlugin.RiderActionExplorer
         private readonly HttpListener _listener;
         private readonly IRequestHandler[] _handlers;
 
-        public InspectionHttpServer2(Lifetime lifetime, ISolution solution)
-            : this(lifetime, solution, ServerConfiguration.Default)
+        public InspectionHttpServer2(Lifetime lifetime, ISolution solution, ISettingsStore settingsStore)
         {
-        }
+            var boundSettings = settingsStore.BindToContextLive(lifetime, ContextRange.ApplicationWide);
+            var port = boundSettings.GetValueProperty(lifetime,
+                (RiderActionExplorerSettings s) => s.Port).Value;
 
-        public InspectionHttpServer2(Lifetime lifetime, ISolution solution, ServerConfiguration config)
-        {
+            var config = ServerConfiguration.Default;
+            config.Port = port;
             _lifetime = lifetime;
 
             try
