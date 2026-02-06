@@ -14,6 +14,12 @@ namespace ReSharperPlugin.CoRider.Services;
 
 public class BlueprintAuditService
 {
+    /// <summary>
+    /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
+    /// Bump both together when the JSON schema changes.
+    /// </summary>
+    private const int AuditSchemaVersion = 1;
+
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 
     private readonly UeProjectService _ueProject;
@@ -61,7 +67,7 @@ public class BlueprintAuditService
         }
 
         var uprojectDir = ueInfo.ProjectDirectory;
-        var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", "Blueprints");
+        var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
 
         if (!Directory.Exists(auditDir))
         {
@@ -193,7 +199,7 @@ public class BlueprintAuditService
             }
 
             var uprojectDir = ueInfo.ProjectDirectory;
-            var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", "Blueprints");
+            var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
 
             if (!Directory.Exists(auditDir))
             {
