@@ -559,7 +559,7 @@ Both would run inside the Rider process. MCP (Model Context Protocol) is purpose
 
 ### Source: Closed-source, decompiled
 
-The Unreal Engine support in ReSharper/Rider is **closed-source**. There is no `resharper-unreal` GitHub repo (unlike `resharper-unity` which is open-source). All types live in `JetBrains.ReSharper.Feature.Services.Cpp.dll`. The decompiled reference files are in `reference_files/ue_specific/`.
+The Unreal Engine support in ReSharper/Rider is **closed-source**. There is no `resharper-unreal` GitHub repo (unlike `resharper-unity` which is open-source). All types live in `JetBrains.ReSharper.Feature.Services.Cpp.dll`. The decompiled reference files are in `docs/reference_files/ue_specific/`.
 
 ### The Golden API: `UE4AssetsCache.GetDerivedBlueprintClasses`
 
@@ -707,28 +707,28 @@ If the requestor provides multiple file paths, only fail early if ALL files are 
 
 | File | Source DLL | Purpose |
 |---|---|---|
-| `reference_files/RunInspection.cs` | `JetBrains.ReSharper.SolutionAnalysis.dll` | Entry point for "Inspect Code" feature |
-| `reference_files/CollectInspectionResults.cs` | same | Contains private `InspectionDaemon` (the broken path) and `RunLocalInspections` |
-| `reference_files/InspectCodeDaemon.cs` | same | **The working public class**: wraps in `FileImages.DisableCheckThread()` |
-| `reference_files/DaemonProcessBase.cs` | `JetBrains.ReSharper.Daemon.Engine.dll` | Core `DoHighlighting()` that discovers and runs all daemon stages |
+| `docs/reference_files/RunInspection.cs` | `JetBrains.ReSharper.SolutionAnalysis.dll` | Entry point for "Inspect Code" feature |
+| `docs/reference_files/CollectInspectionResults.cs` | same | Contains private `InspectionDaemon` (the broken path) and `RunLocalInspections` |
+| `docs/reference_files/InspectCodeDaemon.cs` | same | **The working public class**: wraps in `FileImages.DisableCheckThread()` |
+| `docs/reference_files/DaemonProcessBase.cs` | `JetBrains.ReSharper.Daemon.Engine.dll` | Core `DoHighlighting()` that discovers and runs all daemon stages |
 
 ### UE-specific reference files (decompiled from `JetBrains.ReSharper.Feature.Services.Cpp.dll`)
 
 | File | Namespace | Purpose |
 |---|---|---|
-| `ue_specific/UE4AssetsCache.cs` | `...UE4.UEAsset` | **Central cache**: `[PsiComponent]`, `GetDerivedBlueprintClasses()`, word index, deferred build |
-| `ue_specific/UEAssetUsagesSearcher.cs` | `...UE4.UEAsset.Search` | **Search API**: `[SolutionComponent]`, find usages/inheritors/read-write in `.uasset` files |
-| `ue_specific/UE4SearchUtil.cs` | `...UE4.UEAsset.Search` | **Search helpers**: recursive `GetDerivedBlueprintClasses()`, `BuildUESearchTargets()`, Core Redirects |
-| `ue_specific/UE4AssetData.cs` | `...UE4.UEAsset` | **Parsed .uasset data**: `BlueprintClassObject` (with `SuperClassName`, `Interfaces[]`), `K2GraphNodeObject` |
-| `ue_specific/DerivedBlueprintClass.cs` | `...UE4.UEAsset` | Result struct: `Name`, `ContainingFile`, `Index` |
-| `ue_specific/UEBlueprintGeneratedClass.cs` | `...UE4.UEAsset.Reader` | `.uasset` binary reader that parses Blueprint class properties and interfaces |
-| `ue_specific/UnrealBlueprintClassesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage that produces "N derived Blueprint classes" hints |
-| `ue_specific/UnrealBlueprintClassesDaemonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UCLASS symbols and queries `GetGoToInheritorsResults()` |
-| `ue_specific/UnrealBlueprintPropertiesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage for UPROPERTY Blueprint usage hints |
-| `ue_specific/UnrealBlueprintPropertiesDameonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UPROPERTY symbols and queries read/write usages |
-| `ue_specific/UnrealBlueprintDaemonStageProcessBase.cs` | `...UE4.UEAsset.Daemon` | Generic base class: cache readiness check, symbol walking, settings |
-| `ue_specific/UnrealBlueprintHighlightingProvderBase.cs` | `...UE4.UEAsset.Daemon` | Abstract highlighting provider: class/property/function highlighting factories |
-| `ue_specific/IUnrealAssetHighlighting.cs` | `...UE4.UEAsset.Daemon` | Highlighting interface with `OccurrencesCalculator` and `DeclaredElement` |
-| `ue_specific/UnrealAssetOccurence.cs` | `...UE4.UEAsset.Search` | Occurrence wrapper: navigation (requires UnrealLink plugin), display text |
-| `ue_specific/IUnrealOccurence.cs` | `...UE4.UEAsset.Search` | Interface for occurrence results |
-| `ue_specific/IOccurrence.cs` | `...Feature.Services.Occurrences` | Base occurrence interface (from `Feature.Services.dll`, not Cpp-specific) |
+| `docs/reference_files/ue_specific/UE4AssetsCache.cs` | `...UE4.UEAsset` | **Central cache**: `[PsiComponent]`, `GetDerivedBlueprintClasses()`, word index, deferred build |
+| `docs/reference_files/ue_specific/UEAssetUsagesSearcher.cs` | `...UE4.UEAsset.Search` | **Search API**: `[SolutionComponent]`, find usages/inheritors/read-write in `.uasset` files |
+| `docs/reference_files/ue_specific/UE4SearchUtil.cs` | `...UE4.UEAsset.Search` | **Search helpers**: recursive `GetDerivedBlueprintClasses()`, `BuildUESearchTargets()`, Core Redirects |
+| `docs/reference_files/ue_specific/UE4AssetData.cs` | `...UE4.UEAsset` | **Parsed .uasset data**: `BlueprintClassObject` (with `SuperClassName`, `Interfaces[]`), `K2GraphNodeObject` |
+| `docs/reference_files/ue_specific/DerivedBlueprintClass.cs` | `...UE4.UEAsset` | Result struct: `Name`, `ContainingFile`, `Index` |
+| `docs/reference_files/ue_specific/UEBlueprintGeneratedClass.cs` | `...UE4.UEAsset.Reader` | `.uasset` binary reader that parses Blueprint class properties and interfaces |
+| `docs/reference_files/ue_specific/UnrealBlueprintClassesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage that produces "N derived Blueprint classes" hints |
+| `docs/reference_files/ue_specific/UnrealBlueprintClassesDaemonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UCLASS symbols and queries `GetGoToInheritorsResults()` |
+| `docs/reference_files/ue_specific/UnrealBlueprintPropertiesDaemonStage.cs` | `...UE4.UEAsset.Daemon` | Daemon stage for UPROPERTY Blueprint usage hints |
+| `docs/reference_files/ue_specific/UnrealBlueprintPropertiesDameonStageProcess.cs` | `...UE4.UEAsset.Daemon` | Process that walks UPROPERTY symbols and queries read/write usages |
+| `docs/reference_files/ue_specific/UnrealBlueprintDaemonStageProcessBase.cs` | `...UE4.UEAsset.Daemon` | Generic base class: cache readiness check, symbol walking, settings |
+| `docs/reference_files/ue_specific/UnrealBlueprintHighlightingProvderBase.cs` | `...UE4.UEAsset.Daemon` | Abstract highlighting provider: class/property/function highlighting factories |
+| `docs/reference_files/ue_specific/IUnrealAssetHighlighting.cs` | `...UE4.UEAsset.Daemon` | Highlighting interface with `OccurrencesCalculator` and `DeclaredElement` |
+| `docs/reference_files/ue_specific/UnrealAssetOccurence.cs` | `...UE4.UEAsset.Search` | Occurrence wrapper: navigation (requires UnrealLink plugin), display text |
+| `docs/reference_files/ue_specific/IUnrealOccurence.cs` | `...UE4.UEAsset.Search` | Interface for occurrence results |
+| `docs/reference_files/ue_specific/IOccurrence.cs` | `...Feature.Services.Occurrences` | Base occurrence interface (from `Feature.Services.dll`, not Cpp-specific) |

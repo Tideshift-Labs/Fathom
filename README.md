@@ -109,7 +109,7 @@ Requires the [CoRider-UnrealEngine](https://github.com/kvirani/CoRider-UnrealEng
 The build requires `vswhere.exe` and `nuget.exe` in the `tools/` directory. These are gitignored, so after a fresh clone run:
 
 ```powershell
-.\setup.ps1
+.\scripts\setup.ps1
 ```
 
 This downloads both tools automatically.
@@ -160,10 +160,15 @@ CoRider/
 │   │   └── UEProjectInfo.cs              # UE project info DTO
 │   └── Serialization/
 │       └── Json.cs                       # JSON serialization helpers
+├── scripts/
+│   ├── setup.ps1                         # First-time tool download
+│   ├── settings.ps1                      # Shared build variables
+│   ├── publishPlugin.ps1                 # Publish to JetBrains marketplace
+│   └── runVisualStudio.ps1               # ReSharper hive setup
 ├── docs/
-│   └── ue-companion-plugin.md            # Blueprint audit architecture doc
+│   ├── ue-companion-plugin.md            # Blueprint audit architecture doc
+│   └── reference_files/                  # Decompiled JetBrains API references
 ├── LEARNINGS.md                          # Dead ends and hard-won lessons
-├── setup.ps1                             # First-time tool download
 └── gradlew.bat                           # Gradle wrapper
 ```
 

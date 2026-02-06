@@ -1,8 +1,9 @@
 $PluginId = "ReSharperPlugin.CoRider"
-$SolutionPath = "$PSScriptRoot\ReSharperPlugin.CoRider.sln"
-$SourceBasePath = "$PSScriptRoot\src\dotnet"
+$RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$SolutionPath = "$RepoRoot\ReSharperPlugin.CoRider.sln"
+$SourceBasePath = "$RepoRoot\src\dotnet"
 
-$VsWhereOutput = [xml] (& "$PSScriptRoot\tools\vswhere.exe" -format xml -products *)
+$VsWhereOutput = [xml] (& "$RepoRoot\tools\vswhere.exe" -format xml -products *)
 $VisualStudio = $VsWhereOutput.instances.instance |
     Where-Object { $_.channelId -match "Release" } |
     Sort-Object -Property installationVersion |
@@ -14,8 +15,8 @@ $VisualStudioInstanceId = $VisualStudio.instanceId
 $DevEnvPath = Get-ChildItem "$VisualStudioBaseDirectory\*\IDE\devenv.exe"
 $MSBuildPath = Get-ChildItem "$VisualStudioBaseDirectory\MSBuild\*\Bin\MSBuild.exe"
 
-$OutputDirectory = "$PSScriptRoot\output"
-$NuGetPath = "$PSScriptRoot\tools\nuget.exe"
+$OutputDirectory = "$RepoRoot\output"
+$NuGetPath = "$RepoRoot\tools\nuget.exe"
 
 Function Invoke-Exe {
     param(

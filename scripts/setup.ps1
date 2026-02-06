@@ -7,13 +7,14 @@
     These are gitignored and must be present before building.
 
 .EXAMPLE
-    .\setup.ps1
+    .\scripts\setup.ps1
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ToolsDir = "$PSScriptRoot\tools"
+$RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$ToolsDir = "$RepoRoot\tools"
 
 if (-not (Test-Path $ToolsDir)) {
     New-Item -ItemType Directory -Path $ToolsDir | Out-Null

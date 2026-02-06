@@ -38,7 +38,7 @@ When the Rider plugin spawns `UnrealEditor-Cmd.exe -run=BlueprintAudit`, it look
 ## Build
 
 ```powershell
-.\setup.ps1                     # First-time only
+.\scripts\setup.ps1             # First-time only
 .\gradlew.bat :compileDotNet    # Compile
 .\gradlew.bat :runIde           # Launch sandbox Rider with plugin
 ```
