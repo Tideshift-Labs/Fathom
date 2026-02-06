@@ -1,5 +1,5 @@
 Param(
-    $RootSuffix = "RiderActionExplorer",
+    $RootSuffix = "CoRider",
     $Version = "9999.0.0"
 )
 

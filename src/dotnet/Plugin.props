@@ -5,11 +5,11 @@
     <!-- Keep in sync with ProductVersion in gradle.properties -->
     <SdkVersion>2025.3.2</SdkVersion>
 
-    <Title>RiderActionExplorer</Title>
+    <Title>CoRider</Title>
     <Description>Description</Description>
 
     <Authors>Author</Authors>
-    <Copyright>Copyright $([System.DateTime]::Now.Year) Maintainers of RiderActionExplorer</Copyright>
+    <Copyright>Copyright $([System.DateTime]::Now.Year) Maintainers of CoRider</Copyright>
     <PackageTags>resharper plugin</PackageTags>
 
     <PackageProjectUrl></PackageProjectUrl>

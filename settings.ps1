@@ -1,5 +1,5 @@
-$PluginId = "ReSharperPlugin.RiderActionExplorer"
-$SolutionPath = "$PSScriptRoot\ReSharperPlugin.RiderActionExplorer.sln"
+$PluginId = "ReSharperPlugin.CoRider"
+$SolutionPath = "$PSScriptRoot\ReSharperPlugin.CoRider.sln"
 $SourceBasePath = "$PSScriptRoot\src\dotnet"
 
 $VsWhereOutput = [xml] (& "$PSScriptRoot\tools\vswhere.exe" -format xml -products *)

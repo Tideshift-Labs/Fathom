@@ -17,6 +17,6 @@ pluginManagement {
     }
 }
 
-rootProject.name = "ReSharperPlugin.RiderActionExplorer"
+rootProject.name = "ReSharperPlugin.CoRider"
 
 include(":protocol")
