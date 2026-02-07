@@ -209,6 +209,11 @@ This plugin works with the companion [CoRider-UnrealEngine](https://github.com/k
 - **Audit output path**: `Saved/Audit/v<N>/Blueprints/...`. The `v<N>` version segment invalidates cached JSON automatically. Both sides must agree on this path structure.
 - **Commandlet name**: The Rider plugin invokes `UnrealEditor-Cmd.exe -run=BlueprintAudit`. This name is hardcoded on both sides.
 
+## Proposals
+
+- [001 - Delegate Binding Map](proposals/001-delegate-binding-map.md)
+- [002 - Asset Reference Graph](proposals/002-asset-reference-graph.md)
+
 ## Important Notes
 
 - **Windows-only** currently due to hardcoded paths like `Win64`, `UnrealEditor-Cmd.exe`.
