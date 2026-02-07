@@ -67,7 +67,7 @@ namespace ReSharperPlugin.CoRider
 
                 _ = Task.Run(() => AcceptLoopAsync());
 
-                // Write marker file
+                // Write global marker file (legacy)
                 var markerPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
                     config.MarkerFileName);
@@ -76,6 +76,23 @@ namespace ReSharperPlugin.CoRider
                     $"URL: http://localhost:{config.Port}/\n" +
                     $"Solution: {solution.SolutionDirectory}\n" +
                     $"Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+
+                // Write local solution marker for MCP discovery
+                try
+                {
+                    var localMarkerPath = solution.SolutionDirectory.Combine(".corider-server.json");
+                    var json = $"{{\n  \"port\": {config.Port},\n  \"solution\": \"{solution.SolutionDirectory.FullPath.Replace("\\", "\\\\")}\",\n  \"started\": \"{DateTime.Now:O}\"\n}}";
+                    File.WriteAllText(localMarkerPath.FullPath, json);
+                    
+                    lifetime.OnTermination(() =>
+                    {
+                        try { File.Delete(localMarkerPath.FullPath); } catch { }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "InspectionHttpServer2: failed to write local marker file");
+                }
 
                 // Schedule on-boot staleness check
                 _ = Task.Run(async () =>
