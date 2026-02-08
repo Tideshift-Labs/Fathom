@@ -39,6 +39,7 @@ namespace ReSharperPlugin.CoRider
         private readonly BlueprintQueryService _blueprintQuery;
         private readonly BlueprintAuditService _blueprintAudit;
         private readonly AssetRefProxyService _assetRefProxy;
+        private readonly CodeStructureService _codeStructure;
         private readonly ServerConfiguration _config;
 
         public InspectionHttpServer2(Lifetime lifetime, ISolution solution)
@@ -56,6 +57,7 @@ namespace ReSharperPlugin.CoRider
             _blueprintQuery = new BlueprintQueryService();
             _blueprintAudit = new BlueprintAuditService(_ueProject, _config);
             _assetRefProxy = new AssetRefProxyService(_ueProject);
+            _codeStructure = new CodeStructureService(solution);
 
             // Check for env var override (takes absolute priority)
             var envPort = Environment.GetEnvironmentVariable("RIDER_INSPECTOR_PORT");
@@ -111,6 +113,7 @@ namespace ReSharperPlugin.CoRider
                         new IndexHandler(_solution, _config, _ueProject),
                         new FilesHandler(_solution, _fileIndex),
                         new InspectHandler(_solution, _fileIndex, _inspection),
+                        new DescribeCodeHandler(_solution, _fileIndex, _codeStructure),
                         new BlueprintsHandler(_solution, _reflection, _blueprintQuery, _config),
                         new BlueprintAuditHandler(_ueProject, _blueprintAudit),
                         new BlueprintInfoHandler(_blueprintAudit, _assetRefProxy, _ueProject, _config),
@@ -244,6 +247,7 @@ namespace ReSharperPlugin.CoRider
                     "  /health        - Server status\n" +
                     "  /files         - List source files\n" +
                     "  /inspect?file= - Code inspection\n" +
+                    "  /describe_code?file= - Structural code description\n" +
                     "  /blueprints?class=       - [UE5] Find derived Blueprints\n" +
                     "  /bp?file=                - [UE5] Blueprint composite info\n" +
                     "  /blueprint-audit         - [UE5] Blueprint audit data\n" +
