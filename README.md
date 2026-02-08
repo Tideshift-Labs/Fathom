@@ -100,7 +100,7 @@ Requires the [CoRider-UnrealEngine](https://github.com/kvirani/CoRider-UnrealEng
 - [ ] Get error `ArgumentException: An item with the same key has already been added. Key: <pathtofile>` if same file is added twice to /inspect
 - [ ] Add a root route that lists all the routes and their descriptions.
 - [ ] **Notification balloons on server start/failure.** The RD protocol model (`CoRiderModel`) already has a `serverStatus` signal, and the C# backend already fires it on success/failure in `StartServer()`. The Kotlin frontend just needs to `advise` on it and show `NotificationGroupManager` balloons. The blocker is getting a `Lifetime` scoped to the solution. `project.solution.lifetime` and `project.solutionLifetime` (from `com.jetbrains.rider.projectView`) both failed to resolve against Rider SDK 2025.3. The `notificationGroup` XML registration and `NotificationGroupManager` code are straightforward once the lifetime is sorted. Possible leads: check if `RdExtBase` exposes a lifetime through its protocol, or check JetBrains/resharper-unity for how they advise on RD signals from `ProjectActivity`.
-
+- [ ] The /inspect endpoint is no longer working for .cs (C#) files. It doesn't error, just reports 0 issues when there are indeed issues to report. 
 
 ## Prerequisites
 
