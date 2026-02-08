@@ -239,7 +239,13 @@ public class BlueprintQueryService
 
                 if (!string.IsNullOrEmpty(name) && seen.Add(name))
                 {
-                    result.Blueprints.Add(new BlueprintClassInfo { Name = name, FilePath = filePath });
+                    var packagePath = DerivePackagePath(filePath);
+                    result.Blueprints.Add(new BlueprintClassInfo
+                    {
+                        Name = name,
+                        FilePath = filePath,
+                        PackagePath = packagePath
+                    });
 
                     queue.Enqueue(name);
                     if (name.EndsWith("_C"))
@@ -266,5 +272,28 @@ public class BlueprintQueryService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Converts a relative file path like "Content/UI/Widgets/WBP_Foo.uasset"
+    /// to a UE package path like "/Game/UI/Widgets/WBP_Foo".
+    /// </summary>
+    private static string DerivePackagePath(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath)) return null;
+
+        var normalized = filePath.Replace('\\', '/');
+
+        // Strip "Content/" prefix and replace with "/Game/"
+        if (normalized.StartsWith("Content/"))
+            normalized = "/Game/" + normalized.Substring("Content/".Length);
+        else
+            return null;
+
+        // Strip .uasset extension
+        if (normalized.EndsWith(".uasset"))
+            normalized = normalized.Substring(0, normalized.Length - ".uasset".Length);
+
+        return normalized;
     }
 }

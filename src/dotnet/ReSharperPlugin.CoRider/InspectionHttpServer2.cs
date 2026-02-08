@@ -111,8 +111,9 @@ namespace ReSharperPlugin.CoRider
                         new IndexHandler(_solution, _config, _ueProject),
                         new FilesHandler(_solution, _fileIndex),
                         new InspectHandler(_solution, _fileIndex, _inspection),
-                        new BlueprintsHandler(_solution, _reflection, _blueprintQuery),
+                        new BlueprintsHandler(_solution, _reflection, _blueprintQuery, _config),
                         new BlueprintAuditHandler(_ueProject, _blueprintAudit),
+                        new BlueprintInfoHandler(_blueprintAudit, _assetRefProxy, _config),
                         new AssetRefHandler(_ueProject, _assetRefProxy),
                         new UeProjectHandler(_solution, _ueProject, _reflection),
                     };
@@ -244,6 +245,7 @@ namespace ReSharperPlugin.CoRider
                     "  /files         - List source files\n" +
                     "  /inspect?file= - Code inspection\n" +
                     "  /blueprints?class=       - [UE5] Find derived Blueprints\n" +
+                    "  /bp?file=                - [UE5] Blueprint composite info\n" +
                     "  /blueprint-audit         - [UE5] Blueprint audit data\n" +
                     "  /asset-refs/dependencies - [UE5] Asset dependencies\n" +
                     "  /asset-refs/referencers  - [UE5] Asset referencers\n" +

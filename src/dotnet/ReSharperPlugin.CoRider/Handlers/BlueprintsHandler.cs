@@ -12,12 +12,15 @@ public class BlueprintsHandler : IRequestHandler
     private readonly ISolution _solution;
     private readonly ReflectionService _reflection;
     private readonly BlueprintQueryService _blueprintQuery;
+    private readonly ServerConfiguration _config;
 
-    public BlueprintsHandler(ISolution solution, ReflectionService reflection, BlueprintQueryService blueprintQuery)
+    public BlueprintsHandler(ISolution solution, ReflectionService reflection,
+        BlueprintQueryService blueprintQuery, ServerConfiguration config)
     {
         _solution = solution;
         _reflection = reflection;
         _blueprintQuery = blueprintQuery;
+        _config = config;
     }
 
     public bool CanHandle(string path) => path == "/blueprints";
@@ -79,9 +82,16 @@ public class BlueprintsHandler : IRequestHandler
             if (result.Blueprints.Count == 0 && strippedName != className)
                 result = _blueprintQuery.Query(className, assetsCache, solutionDir, debug);
 
-            result.ClassName = className;
+            result.ClassName = strippedName;
             result.CacheReady = cacheReady;
             result.CacheStatus = cacheStatus;
+
+            // Populate MoreInfoUrl on each Blueprint entry
+            foreach (var bp in result.Blueprints)
+            {
+                if (!string.IsNullOrEmpty(bp.PackagePath))
+                    bp.MoreInfoUrl = $"http://localhost:{_config.Port}/bp?file={Uri.EscapeDataString(bp.PackagePath)}";
+            }
 
             if (format == "json")
             {

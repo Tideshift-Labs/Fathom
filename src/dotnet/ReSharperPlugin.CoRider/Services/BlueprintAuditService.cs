@@ -18,7 +18,7 @@ public class BlueprintAuditService
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
     /// Bump both together when the JSON schema changes.
     /// </summary>
-    private const int AuditSchemaVersion = 1;
+    private const int AuditSchemaVersion = 2;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 

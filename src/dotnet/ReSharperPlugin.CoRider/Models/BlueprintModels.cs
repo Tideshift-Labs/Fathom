@@ -17,6 +17,16 @@ public class BlueprintClassInfo
         /// File path relative to solution directory.
         /// </summary>
         public string FilePath { get; set; }
+
+        /// <summary>
+        /// UE package path (e.g., "/Game/UI/Widgets/WBP_MyWidget").
+        /// </summary>
+        public string PackagePath { get; set; }
+
+        /// <summary>
+        /// Link to the /bp composite endpoint for this Blueprint.
+        /// </summary>
+        public string MoreInfoUrl { get; set; }
     }
 
     /// <summary>

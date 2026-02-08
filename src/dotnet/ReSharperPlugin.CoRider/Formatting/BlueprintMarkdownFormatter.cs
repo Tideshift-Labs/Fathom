@@ -10,8 +10,8 @@ public static class BlueprintMarkdownFormatter
         var sb = new StringBuilder();
         sb.Append("# Blueprints derived from ").AppendLine(result.ClassName);
         sb.AppendLine();
-        sb.Append("**Cache status:** ").AppendLine(result.CacheStatus);
-        sb.Append("**Total descendants:** ").AppendLine(result.TotalCount.ToString());
+        sb.Append("Cache status: ").AppendLine(result.CacheStatus);
+        sb.Append("Total descendants: ").AppendLine(result.TotalCount.ToString());
         sb.AppendLine();
 
         if (!result.CacheReady)
@@ -28,12 +28,15 @@ public static class BlueprintMarkdownFormatter
         {
             sb.AppendLine("## Derived Blueprint Classes");
             sb.AppendLine();
-            for (var i = 0; i < result.Blueprints.Count; i++)
+            foreach (var bp in result.Blueprints)
             {
-                var bp = result.Blueprints[i];
-                sb.Append(i + 1).Append(". ").Append(bp.Name);
+                sb.Append("### ").AppendLine(bp.Name);
                 if (!string.IsNullOrEmpty(bp.FilePath))
-                    sb.Append(" — ").Append(bp.FilePath);
+                    sb.Append("Location: ").AppendLine(bp.FilePath);
+                if (!string.IsNullOrEmpty(bp.PackagePath))
+                    sb.Append("Package Path: ").AppendLine(bp.PackagePath);
+                if (!string.IsNullOrEmpty(bp.MoreInfoUrl))
+                    sb.Append("More Info: ").AppendLine(bp.MoreInfoUrl);
                 sb.AppendLine();
             }
         }

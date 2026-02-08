@@ -135,19 +135,19 @@ public class AssetRefHandler : IRequestHandler
                 }
                 else
                 {
-                    sb.AppendLine($"| Package | Category | Type |");
-                    sb.AppendLine($"|---------|----------|------|");
+                    sb.AppendLine($"**Total:** {count}");
+                    sb.AppendLine();
 
                     foreach (var item in items.EnumerateArray())
                     {
                         var pkg = item.TryGetProperty("package", out var p) ? p.GetString() : "?";
                         var cat = item.TryGetProperty("category", out var c) ? c.GetString() : "?";
                         var type = item.TryGetProperty("type", out var t) ? t.GetString() : "?";
-                        sb.AppendLine($"| `{pkg}` | {cat} | {type} |");
+                        sb.AppendLine($"### {pkg}");
+                        sb.AppendLine($"Category: {cat}");
+                        sb.AppendLine($"Type: {type}");
+                        sb.AppendLine();
                     }
-
-                    sb.AppendLine();
-                    sb.AppendLine($"**Total:** {count}");
                 }
             }
             else
