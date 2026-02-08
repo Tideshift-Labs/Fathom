@@ -1,11 +1,21 @@
 using System;
 using System.Net;
 using System.Text;
+using ReSharperPlugin.CoRider.Serialization;
 
 namespace ReSharperPlugin.CoRider.Formatting;
 
 public static class HttpHelpers
 {
+    public static void RespondWithFormat(HttpListenerContext ctx, string format, int statusCode,
+        string markdownBody, object jsonBody)
+    {
+        if (format == "json")
+            Respond(ctx, statusCode, "application/json; charset=utf-8", Json.Serialize(jsonBody));
+        else
+            Respond(ctx, statusCode, "text/markdown; charset=utf-8", markdownBody);
+    }
+
     public static void Respond(HttpListenerContext ctx, int statusCode, string contentType, string body)
     {
         var buffer = Encoding.UTF8.GetBytes(body);

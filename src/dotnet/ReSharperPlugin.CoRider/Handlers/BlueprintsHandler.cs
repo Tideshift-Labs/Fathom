@@ -37,6 +37,10 @@ public class BlueprintsHandler : IRequestHandler
         var format = HttpHelpers.GetFormat(ctx);
         var debug = HttpHelpers.IsDebug(ctx);
 
+        // Strip UE C++ prefix (U/A/F) if present, since the asset cache uses unprefixed names.
+        // Try both the original and stripped name to cover either convention.
+        var strippedName = StripUePrefix(className);
+
         // Resolve UE4AssetsCache via reflection
         object assetsCache;
         try
@@ -69,7 +73,13 @@ public class BlueprintsHandler : IRequestHandler
         var solutionDir = _solution.SolutionDirectory;
         try
         {
-            var result = _blueprintQuery.Query(className, assetsCache, solutionDir, debug);
+            var result = _blueprintQuery.Query(strippedName, assetsCache, solutionDir, debug);
+
+            // If stripping the prefix changed the name and got no results, try the original
+            if (result.Blueprints.Count == 0 && strippedName != className)
+                result = _blueprintQuery.Query(className, assetsCache, solutionDir, debug);
+
+            result.ClassName = className;
             result.CacheReady = cacheReady;
             result.CacheStatus = cacheStatus;
 
@@ -90,5 +100,21 @@ public class BlueprintsHandler : IRequestHandler
                 "This may indicate a Rider API change.\n" +
                 "Detail: " + ex.GetType().Name + ": " + ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Strips UE C++ type prefix (A for Actor, U for UObject, F for struct) if the
+    /// remainder starts with an uppercase letter. The asset cache stores unprefixed names.
+    /// </summary>
+    private static string StripUePrefix(string name)
+    {
+        if (name.Length > 1 &&
+            (name[0] == 'U' || name[0] == 'A' || name[0] == 'F') &&
+            char.IsUpper(name[1]))
+        {
+            return name.Substring(1);
+        }
+
+        return name;
     }
 }

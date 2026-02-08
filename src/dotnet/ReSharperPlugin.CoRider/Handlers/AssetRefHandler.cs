@@ -47,31 +47,26 @@ public class AssetRefHandler : IRequestHandler
 
         if (!_ueProject.IsUnrealProject())
         {
-            HttpHelpers.Respond(ctx, 404, "text/plain",
-                "This endpoint is only available for Unreal Engine projects.");
+            HttpHelpers.RespondWithFormat(ctx, format, 404,
+                "This endpoint is only available for Unreal Engine projects.",
+                new { error = "This endpoint is only available for Unreal Engine projects." });
             return;
         }
 
         var asset = ctx.Request.QueryString["asset"];
         if (string.IsNullOrEmpty(asset))
         {
-            HttpHelpers.Respond(ctx, 400, "application/json; charset=utf-8",
-                Json.Serialize(new
-                {
-                    error = "Missing required 'asset' query parameter",
-                    usage = $"/asset-refs/{queryType}?asset=/Game/Path/To/Asset"
-                }));
+            HttpHelpers.RespondWithFormat(ctx, format, 400,
+                $"Missing required 'asset' query parameter.\n\nUsage: `/asset-refs/{queryType}?asset=/Game/Path/To/Asset`",
+                new { error = "Missing required 'asset' query parameter", usage = $"/asset-refs/{queryType}?asset=/Game/Path/To/Asset" });
             return;
         }
 
         if (!_proxy.IsAvailable())
         {
-            HttpHelpers.Respond(ctx, 503, "application/json; charset=utf-8",
-                Json.Serialize(new
-                {
-                    error = "UE editor is not running. Asset reference queries require a live editor connection.",
-                    hint = "Open the UE project in the Unreal Editor with the CoRider plugin enabled."
-                }));
+            HttpHelpers.RespondWithFormat(ctx, format, 503,
+                "UE editor is not running. Asset reference queries require a live editor connection.\n\nOpen the UE project in the Unreal Editor with the CoRider plugin enabled.",
+                new { error = "UE editor is not running. Asset reference queries require a live editor connection.", hint = "Open the UE project in the Unreal Editor with the CoRider plugin enabled." });
             return;
         }
 
@@ -80,12 +75,9 @@ public class AssetRefHandler : IRequestHandler
 
         if (body == null)
         {
-            HttpHelpers.Respond(ctx, 502, "application/json; charset=utf-8",
-                Json.Serialize(new
-                {
-                    error = "Failed to connect to UE editor server",
-                    hint = "The editor may have just closed. Try again shortly."
-                }));
+            HttpHelpers.RespondWithFormat(ctx, format, 502,
+                "Failed to connect to UE editor server.\n\nThe editor may have just closed. Try again shortly.",
+                new { error = "Failed to connect to UE editor server", hint = "The editor may have just closed. Try again shortly." });
             return;
         }
 
