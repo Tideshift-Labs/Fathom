@@ -46,47 +46,38 @@ public class BlueprintInfoHandler : IRequestHandler
 
         var format = HttpHelpers.GetFormat(ctx);
         var blueprintInfos = new List<BlueprintInfo>();
-
-        // Get audit data once (may be null if not available)
-        BlueprintAuditResult auditResult = null;
-        try
-        {
-            auditResult = _auditService.GetAuditData();
-        }
-        catch
-        {
-            // Audit data not available
-        }
-
         var editorAvailable = _assetRefProxy.IsAvailable();
 
         foreach (var file in files)
         {
             var info = new BlueprintInfo { PackagePath = file };
 
-            // Find matching audit entry
-            if (auditResult?.Blueprints != null)
+            // Look up audit entry directly (works regardless of staleness)
+            try
             {
-                info.Audit = auditResult.Blueprints
-                    .FirstOrDefault(b => string.Equals(b.Path, file, StringComparison.OrdinalIgnoreCase));
+                info.Audit = _auditService.FindAuditEntry(file);
+            }
+            catch
+            {
+                // Audit data not available
             }
 
-            // Get dependencies from UE editor
+            // Get dependencies from UE editor (filter out native /Script/ refs)
             if (editorAvailable)
             {
                 var depsJson = _assetRefProxy.ProxyGet(
                     $"asset-refs/dependencies?asset={Uri.EscapeDataString(file)}");
                 if (depsJson != null)
-                    info.Dependencies = ParseAssetRefs(depsJson, "dependencies");
+                    info.Dependencies = FilterNativeRefs(ParseAssetRefs(depsJson, "dependencies"));
             }
 
-            // Get referencers from UE editor
+            // Get referencers from UE editor (filter out native /Script/ refs)
             if (editorAvailable)
             {
                 var refsJson = _assetRefProxy.ProxyGet(
                     $"asset-refs/referencers?asset={Uri.EscapeDataString(file)}");
                 if (refsJson != null)
-                    info.Referencers = ParseAssetRefs(refsJson, "referencers");
+                    info.Referencers = FilterNativeRefs(ParseAssetRefs(refsJson, "referencers"));
             }
 
             info.EditorAvailable = editorAvailable;
@@ -112,6 +103,14 @@ public class BlueprintInfoHandler : IRequestHandler
             var markdown = FormatAsMarkdown(blueprintInfos);
             HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8", markdown);
         }
+    }
+
+    /// <summary>
+    /// Removes native C++ module references (/Script/...) which are usually noise.
+    /// </summary>
+    private static List<AssetRefEntry> FilterNativeRefs(List<AssetRefEntry> refs)
+    {
+        return refs?.Where(r => !r.Package.StartsWith("/Script/", StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     private static List<AssetRefEntry> ParseAssetRefs(string jsonBody, string arrayKey)

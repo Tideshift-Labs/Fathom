@@ -250,6 +250,33 @@ public class BlueprintAuditService
         }
     }
 
+    /// <summary>
+    /// Looks up a single audit entry by package path, regardless of staleness.
+    /// Returns null if not found or if audit data is not available.
+    /// </summary>
+    public BlueprintAuditEntry FindAuditEntry(string packagePath)
+    {
+        var ueInfo = _ueProject.GetUeProjectInfo();
+        if (!ueInfo.IsUnrealProject) return null;
+
+        var uprojectDir = ueInfo.ProjectDirectory;
+        var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
+        if (!Directory.Exists(auditDir)) return null;
+
+        foreach (var jsonFile in Directory.GetFiles(auditDir, "*.json", SearchOption.AllDirectories))
+        {
+            var entry = ReadAndCheckBlueprintAudit(jsonFile, uprojectDir);
+            // entry.Path is the full object path from GetPathName(), e.g.
+            // "/Game/UI/Widgets/WBP_Foo.WBP_Foo". Strip the ".ObjectName"
+            // suffix so we can match against a plain package path.
+            var entryPackagePath = StripObjectName(entry.Path);
+            if (string.Equals(entryPackagePath, packagePath, StringComparison.OrdinalIgnoreCase))
+                return entry;
+        }
+
+        return null;
+    }
+
     public void SetBootCheckResult(string result)
     {
         _bootCheckResult = result;
@@ -377,6 +404,21 @@ public class BlueprintAuditService
         }
 
         return entry;
+    }
+
+    /// <summary>
+    /// Strips the ".ObjectName" suffix from a full UE object path.
+    /// E.g. "/Game/UI/WBP_Foo.WBP_Foo" becomes "/Game/UI/WBP_Foo".
+    /// Returns the input unchanged if there is no dot after the last slash.
+    /// </summary>
+    private static string StripObjectName(string objectPath)
+    {
+        if (string.IsNullOrEmpty(objectPath)) return objectPath;
+        var lastSlash = objectPath.LastIndexOf('/');
+        var dotIndex = objectPath.IndexOf('.', lastSlash >= 0 ? lastSlash : 0);
+        if (dotIndex > 0)
+            return objectPath.Substring(0, dotIndex);
+        return objectPath;
     }
 
     private static string ConvertPackagePathToFilePath(string packagePath, string uprojectDir)
