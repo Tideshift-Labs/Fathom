@@ -263,14 +263,14 @@ public class BlueprintAuditService
         var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
         if (!Directory.Exists(auditDir)) return null;
 
+        // Normalize input: strip ".ObjectName" suffix if caller passed a full object path
+        var normalizedInput = StripObjectName(packagePath);
+
         foreach (var jsonFile in Directory.GetFiles(auditDir, "*.json", SearchOption.AllDirectories))
         {
             var entry = ReadAndCheckBlueprintAudit(jsonFile, uprojectDir);
-            // entry.Path is the full object path from GetPathName(), e.g.
-            // "/Game/UI/Widgets/WBP_Foo.WBP_Foo". Strip the ".ObjectName"
-            // suffix so we can match against a plain package path.
             var entryPackagePath = StripObjectName(entry.Path);
-            if (string.Equals(entryPackagePath, packagePath, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(entryPackagePath, normalizedInput, StringComparison.OrdinalIgnoreCase))
                 return entry;
         }
 
