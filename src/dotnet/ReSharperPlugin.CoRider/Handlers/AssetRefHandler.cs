@@ -141,10 +141,11 @@ public class AssetRefHandler : IRequestHandler
                     foreach (var item in items.EnumerateArray())
                     {
                         var pkg = item.TryGetProperty("package", out var p) ? p.GetString() : "?";
-                        var cat = item.TryGetProperty("category", out var c) ? c.GetString() : "?";
                         var type = item.TryGetProperty("type", out var t) ? t.GetString() : "?";
+                        var assetClass = item.TryGetProperty("assetClass", out var ac) ? ac.GetString() : null;
                         sb.AppendLine($"### {pkg}");
-                        sb.AppendLine($"Category: {cat}");
+                        if (!string.IsNullOrEmpty(assetClass))
+                            sb.AppendLine($"Asset Class: {assetClass}");
                         sb.AppendLine($"Type: {type}");
                         sb.AppendLine();
                     }

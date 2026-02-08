@@ -19,13 +19,16 @@ public class BlueprintInfoHandler : IRequestHandler
 {
     private readonly BlueprintAuditService _auditService;
     private readonly AssetRefProxyService _assetRefProxy;
+    private readonly UeProjectService _ueProject;
     private readonly ServerConfiguration _config;
 
     public BlueprintInfoHandler(BlueprintAuditService auditService,
-        AssetRefProxyService assetRefProxy, ServerConfiguration config)
+        AssetRefProxyService assetRefProxy, UeProjectService ueProject,
+        ServerConfiguration config)
     {
         _auditService = auditService;
         _assetRefProxy = assetRefProxy;
+        _ueProject = ueProject;
         _config = config;
     }
 
@@ -56,6 +59,18 @@ public class BlueprintInfoHandler : IRequestHandler
             try
             {
                 info.Audit = _auditService.FindAuditEntry(file);
+                if (info.Audit?.JsonFile != null)
+                {
+                    // Make the JSON file path relative to the UE project directory
+                    var ueInfo = _ueProject.GetUeProjectInfo();
+                    if (!string.IsNullOrEmpty(ueInfo.ProjectDirectory) &&
+                        info.Audit.JsonFile.StartsWith(ueInfo.ProjectDirectory, StringComparison.OrdinalIgnoreCase))
+                    {
+                        info.AuditJsonRelPath = info.Audit.JsonFile
+                            .Substring(ueInfo.ProjectDirectory.Length)
+                            .TrimStart('\\', '/');
+                    }
+                }
             }
             catch
             {
@@ -128,7 +143,8 @@ public class BlueprintInfoHandler : IRequestHandler
                     {
                         Package = item.TryGetProperty("package", out var p) ? p.GetString() : "?",
                         Category = item.TryGetProperty("category", out var c) ? c.GetString() : "?",
-                        Type = item.TryGetProperty("type", out var t) ? t.GetString() : "?"
+                        Type = item.TryGetProperty("type", out var t) ? t.GetString() : "?",
+                        AssetClass = item.TryGetProperty("assetClass", out var ac) ? ac.GetString() : null
                     });
                 }
                 return result;
@@ -166,6 +182,8 @@ public class BlueprintInfoHandler : IRequestHandler
                 AppendDataField(sb, data, "BlueprintType", "Blueprint Type");
                 AppendDataField(sb, data, "Variables");
                 AppendDataField(sb, data, "Components");
+                if (!string.IsNullOrEmpty(info.AuditJsonRelPath))
+                    sb.Append("Full Details: ").AppendLine(info.AuditJsonRelPath);
             }
             else
             {
@@ -224,7 +242,8 @@ public class BlueprintInfoHandler : IRequestHandler
         foreach (var r in refs)
         {
             sb.Append("### ").AppendLine(r.Package);
-            sb.Append("Category: ").AppendLine(r.Category);
+            if (!string.IsNullOrEmpty(r.AssetClass))
+                sb.Append("Asset Class: ").AppendLine(r.AssetClass);
             sb.Append("Type: ").AppendLine(r.Type);
             sb.AppendLine();
         }
@@ -236,6 +255,7 @@ public class BlueprintInfoHandler : IRequestHandler
     {
         public string PackagePath { get; set; }
         public BlueprintAuditEntry Audit { get; set; }
+        public string AuditJsonRelPath { get; set; }
         public List<AssetRefEntry> Dependencies { get; set; }
         public List<AssetRefEntry> Referencers { get; set; }
         public bool EditorAvailable { get; set; }
@@ -246,6 +266,7 @@ public class BlueprintInfoHandler : IRequestHandler
         public string Package { get; set; }
         public string Category { get; set; }
         public string Type { get; set; }
+        public string AssetClass { get; set; }
     }
 
     private class BlueprintInfoJsonResult

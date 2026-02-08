@@ -113,7 +113,7 @@ namespace ReSharperPlugin.CoRider
                         new InspectHandler(_solution, _fileIndex, _inspection),
                         new BlueprintsHandler(_solution, _reflection, _blueprintQuery, _config),
                         new BlueprintAuditHandler(_ueProject, _blueprintAudit),
-                        new BlueprintInfoHandler(_blueprintAudit, _assetRefProxy, _config),
+                        new BlueprintInfoHandler(_blueprintAudit, _assetRefProxy, _ueProject, _config),
                         new AssetRefHandler(_ueProject, _assetRefProxy),
                         new UeProjectHandler(_solution, _ueProject, _reflection),
                     };

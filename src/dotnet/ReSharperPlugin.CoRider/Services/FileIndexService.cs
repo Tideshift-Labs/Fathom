@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using JetBrains.ProjectModel;
 using JetBrains.ReSharper.Psi;
+using JetBrains.ReSharper.Resources.Shell;
 using JetBrains.Util;
 
 namespace ReSharperPlugin.CoRider.Services;
@@ -17,24 +18,27 @@ public class FileIndexService
 
     public Dictionary<string, IPsiSourceFile> BuildFileIndex()
     {
-        var solutionDir = _solution.SolutionDirectory;
-        var index = new Dictionary<string, IPsiSourceFile>(StringComparer.OrdinalIgnoreCase);
-        foreach (var project in _solution.GetAllProjects())
+        return ReadLockCookie.Execute(() =>
         {
-            foreach (var projectFile in project.GetAllProjectFiles())
+            var solutionDir = _solution.SolutionDirectory;
+            var index = new Dictionary<string, IPsiSourceFile>(StringComparer.OrdinalIgnoreCase);
+            foreach (var project in _solution.GetAllProjects())
             {
-                var sourceFile = projectFile.ToSourceFile();
-                if (sourceFile == null) continue;
+                foreach (var projectFile in project.GetAllProjectFiles())
+                {
+                    var sourceFile = projectFile.ToSourceFile();
+                    if (sourceFile == null) continue;
 
-                var path = sourceFile.GetLocation();
-                if (!path.StartsWith(solutionDir)) continue;
+                    var path = sourceFile.GetLocation();
+                    if (!path.StartsWith(solutionDir)) continue;
 
-                var key = NormalizePath(path.MakeRelativeTo(solutionDir).ToString());
-                if (!index.ContainsKey(key))
-                    index[key] = sourceFile;
+                    var key = NormalizePath(path.MakeRelativeTo(solutionDir).ToString());
+                    if (!index.ContainsKey(key))
+                        index[key] = sourceFile;
+                }
             }
-        }
-        return index;
+            return index;
+        });
     }
 
     public static string NormalizePath(string path)

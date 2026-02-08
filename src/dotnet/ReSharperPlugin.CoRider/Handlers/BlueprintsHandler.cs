@@ -114,10 +114,28 @@ public class BlueprintsHandler : IRequestHandler
 
     /// <summary>
     /// Strips UE C++ type prefix (A for Actor, U for UObject, F for struct) if the
-    /// remainder starts with an uppercase letter. The asset cache stores unprefixed names.
+    /// remainder starts with an uppercase letter. Also handles full object paths like
+    /// "/Script/ModuleName.ClassName" by extracting just the class name.
+    /// The asset cache stores unprefixed names.
     /// </summary>
     private static string StripUePrefix(string name)
     {
+        // Handle full UE object paths: "/Script/ModuleName.ClassName"
+        if (name.StartsWith("/Script/") || name.StartsWith("/Game/"))
+        {
+            var dotIndex = name.LastIndexOf('.');
+            if (dotIndex >= 0 && dotIndex < name.Length - 1)
+                name = name.Substring(dotIndex + 1);
+            else
+            {
+                // No dot, take the last path segment
+                var slashIndex = name.LastIndexOf('/');
+                if (slashIndex >= 0 && slashIndex < name.Length - 1)
+                    name = name.Substring(slashIndex + 1);
+            }
+        }
+
+        // Strip single-letter UE prefix (A/U/F)
         if (name.Length > 1 &&
             (name[0] == 'U' || name[0] == 'A' || name[0] == 'F') &&
             char.IsUpper(name[1]))
