@@ -50,6 +50,9 @@ public class IndexHandler : IRequestHandler
                     ["GET /blueprint-audit"] = "[UE5 only] Get Blueprint audit data (returns 409 if stale, 503 if not ready)",
                     ["GET /blueprint-audit/refresh"] = "[UE5 only] Trigger background refresh of Blueprint audit data",
                     ["GET /blueprint-audit/status"] = "[UE5 only] Check status of Blueprint audit refresh",
+                    ["GET /asset-refs/dependencies?asset="] = "[UE5 only] Asset dependencies (requires live UE editor)",
+                    ["GET /asset-refs/referencers?asset="] = "[UE5 only] Asset referencers (requires live UE editor)",
+                    ["GET /asset-refs/status"] = "[UE5 only] UE editor connection status",
                     ["GET /ue-project"] = "Diagnostic: show UE project detection info"
                 },
                 isUnrealProject = _ueProject.IsUnrealProject()

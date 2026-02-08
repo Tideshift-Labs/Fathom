@@ -1,10 +1,14 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Application.Parts;
 using JetBrains.Lifetimes;
 using JetBrains.ProjectModel;
+using JetBrains.Rd.Base;
+using JetBrains.ReSharper.Feature.Services.Protocol;
+using JetBrains.Rider.Model;
 using JetBrains.Util;
 using ReSharperPlugin.CoRider.Formatting;
 using ReSharperPlugin.CoRider.Handlers;
@@ -18,101 +22,179 @@ namespace ReSharperPlugin.CoRider
         private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<InspectionHttpServer2>();
 
         private readonly Lifetime _lifetime;
-        private readonly HttpListener _listener;
-        private readonly IRequestHandler[] _handlers;
+        private readonly ISolution _solution;
+        private readonly object _lock = new();
+
+        private HttpListener _listener;
+        private IRequestHandler[] _handlers;
+        private int _currentPort;
+        private bool _envPortLocked;
+
+        // Services (created once, reused across restarts)
+        private readonly ReflectionService _reflection;
+        private readonly UeProjectService _ueProject;
+        private readonly FileIndexService _fileIndex;
+        private readonly PsiSyncService _psiSync;
+        private readonly InspectionService _inspection;
+        private readonly BlueprintQueryService _blueprintQuery;
+        private readonly BlueprintAuditService _blueprintAudit;
+        private readonly AssetRefProxyService _assetRefProxy;
+        private readonly ServerConfiguration _config;
 
         public InspectionHttpServer2(Lifetime lifetime, ISolution solution)
         {
-            var config = ServerConfiguration.Default;
+            _lifetime = lifetime;
+            _solution = solution;
+            _config = ServerConfiguration.Default;
+
+            // Wire services once
+            _reflection = new ReflectionService(solution);
+            _ueProject = new UeProjectService(solution, _reflection, _config);
+            _fileIndex = new FileIndexService(solution);
+            _psiSync = new PsiSyncService(_config);
+            _inspection = new InspectionService(solution, _psiSync, _config);
+            _blueprintQuery = new BlueprintQueryService();
+            _blueprintAudit = new BlueprintAuditService(_ueProject, _config);
+            _assetRefProxy = new AssetRefProxyService(_ueProject);
+
+            // Check for env var override (takes absolute priority)
             var envPort = Environment.GetEnvironmentVariable("RIDER_INSPECTOR_PORT");
             if (int.TryParse(envPort, out var port) && port > 0)
-                config.Port = port;
+            {
+                _envPortLocked = true;
+                StartServer(port);
+            }
+            else
+            {
+                // Start on default port immediately; RD model will push settings port later
+                StartServer(_config.Port);
+            }
 
-            _lifetime = lifetime;
-
+            // Wire up RD protocol model
             try
             {
-                // Wire services
-                var reflection = new ReflectionService(solution);
-                var ueProject = new UeProjectService(solution, reflection, config);
-                var fileIndex = new FileIndexService(solution);
-                var psiSync = new PsiSyncService(config);
-                var inspection = new InspectionService(solution, psiSync, config);
-                var blueprintQuery = new BlueprintQueryService();
-                var blueprintAudit = new BlueprintAuditService(ueProject, config);
+                var model = solution.GetProtocolSolution().GetCoRiderModel();
 
-                // Wire handlers
-                _handlers = new IRequestHandler[]
+                if (!_envPortLocked)
                 {
-                    new IndexHandler(solution, config, ueProject),
-                    new FilesHandler(solution, fileIndex),
-                    new InspectHandler(solution, fileIndex, inspection),
-                    new BlueprintsHandler(solution, reflection, blueprintQuery),
-                    new BlueprintAuditHandler(ueProject, blueprintAudit),
-                    new UeProjectHandler(solution, ueProject, reflection),
-                };
+                    model.Port.Advise(lifetime, newPort =>
+                    {
+                        if (newPort <= 0 || newPort == _currentPort) return;
+                        Log.Warn($"InspectionHttpServer2: port changed to {newPort} via settings");
+                        StopServer();
+                        StartServer(newPort);
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("InspectionHttpServer2: RD model not available (non-Rider host?): " + ex.Message);
+            }
+        }
 
-                // Start listener
-                _listener = new HttpListener();
-                _listener.Prefixes.Add($"http://localhost:{config.Port}/");
-                _listener.Start();
-                Log.Warn($"InspectionHttpServer2: listening on http://localhost:{config.Port}/");
-
-                lifetime.OnTermination(() =>
-                {
-                    try { _listener.Stop(); } catch { }
-                    try { _listener.Close(); } catch { }
-                    Log.Warn("InspectionHttpServer2: stopped");
-                });
-
-                _ = Task.Run(() => AcceptLoopAsync());
-
-                // Write global marker file (legacy)
-                var markerPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    config.MarkerFileName);
-                File.WriteAllText(markerPath,
-                    $"InspectionHttpServer2 running\n" +
-                    $"URL: http://localhost:{config.Port}/\n" +
-                    $"Solution: {solution.SolutionDirectory}\n" +
-                    $"Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
-
-                // Write local solution marker for MCP discovery
+        private void StartServer(int port)
+        {
+            lock (_lock)
+            {
+                CoRiderModel model = null;
                 try
                 {
-                    var localMarkerPath = solution.SolutionDirectory.Combine(".corider-server.json");
-                    var json = $"{{\n  \"port\": {config.Port},\n  \"solution\": \"{solution.SolutionDirectory.FullPath.Replace("\\", "\\\\")}\",\n  \"started\": \"{DateTime.Now:O}\"\n}}";
-                    File.WriteAllText(localMarkerPath.FullPath, json);
-                    
-                    lifetime.OnTermination(() =>
+                    model = _solution.GetProtocolSolution().GetCoRiderModel();
+                }
+                catch { /* RD model may not be available */ }
+
+                try
+                {
+                    // Wire handlers
+                    _handlers = new IRequestHandler[]
                     {
-                        try { File.Delete(localMarkerPath.FullPath); } catch { }
+                        new IndexHandler(_solution, _config, _ueProject),
+                        new FilesHandler(_solution, _fileIndex),
+                        new InspectHandler(_solution, _fileIndex, _inspection),
+                        new BlueprintsHandler(_solution, _reflection, _blueprintQuery),
+                        new BlueprintAuditHandler(_ueProject, _blueprintAudit),
+                        new AssetRefHandler(_ueProject, _assetRefProxy),
+                        new UeProjectHandler(_solution, _ueProject, _reflection),
+                    };
+
+                    _config.Port = port;
+                    _listener = new HttpListener();
+                    _listener.Prefixes.Add($"http://localhost:{port}/");
+                    _listener.Start();
+                    _currentPort = port;
+                    Log.Warn($"InspectionHttpServer2: listening on http://localhost:{port}/");
+
+                    _lifetime.OnTermination(() =>
+                    {
+                        StopServer();
+                    });
+
+                    _ = Task.Run(() => AcceptLoopAsync());
+
+                    // Write global marker file (legacy)
+                    var markerPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                        _config.MarkerFileName);
+                    File.WriteAllText(markerPath,
+                        $"InspectionHttpServer2 running\n" +
+                        $"URL: http://localhost:{port}/\n" +
+                        $"Solution: {_solution.SolutionDirectory}\n" +
+                        $"Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+
+                    // Write local solution marker for MCP discovery
+                    try
+                    {
+                        var localMarkerPath = _solution.SolutionDirectory.Combine(".corider-server.json");
+                        var json = $"{{\n  \"port\": {port},\n  \"solution\": \"{_solution.SolutionDirectory.FullPath.Replace("\\", "\\\\")}\",\n  \"started\": \"{DateTime.Now:O}\"\n}}";
+                        File.WriteAllText(localMarkerPath.FullPath, json);
+
+                        _lifetime.OnTermination(() =>
+                        {
+                            try { File.Delete(localMarkerPath.FullPath); } catch { }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "InspectionHttpServer2: failed to write local marker file");
+                    }
+
+                    // Fire success notification via RD
+                    model?.ServerStatus.Fire(new ServerStatus(true, port,
+                        $"Listening on http://localhost:{port}/"));
+
+                    // Schedule on-boot staleness check
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(_config.BootCheckDelayMs);
+                        if (_ueProject.IsUnrealProject())
+                        {
+                            _blueprintAudit.CheckAndRefreshOnBoot();
+                        }
+                        else
+                        {
+                            _blueprintAudit.SetBootCheckResult(
+                                "Not an Unreal Engine project - Blueprint audit not applicable");
+                            Log.Info("InspectionHttpServer2: Not a UE project, skipping Blueprint boot check");
+                        }
                     });
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "InspectionHttpServer2: failed to write local marker file");
+                    Log.Error(ex, $"InspectionHttpServer2: failed to start on port {port}");
+                    model?.ServerStatus.Fire(new ServerStatus(false, port, ex.Message));
                 }
-
-                // Schedule on-boot staleness check
-                _ = Task.Run(async () =>
-                {
-                    await Task.Delay(config.BootCheckDelayMs);
-                    if (ueProject.IsUnrealProject())
-                    {
-                        blueprintAudit.CheckAndRefreshOnBoot();
-                    }
-                    else
-                    {
-                        blueprintAudit.SetBootCheckResult(
-                            "Not an Unreal Engine project - Blueprint audit not applicable");
-                        Log.Info("InspectionHttpServer2: Not a UE project, skipping Blueprint boot check");
-                    }
-                });
             }
-            catch (Exception ex)
+        }
+
+        private void StopServer()
+        {
+            lock (_lock)
             {
-                Log.Error(ex, $"InspectionHttpServer2: failed to start on port {config.Port}");
+                if (_listener == null) return;
+                try { _listener.Stop(); } catch { }
+                try { _listener.Close(); } catch { }
+                _listener = null;
+                Log.Warn("InspectionHttpServer2: stopped");
             }
         }
 
@@ -161,9 +243,12 @@ namespace ReSharperPlugin.CoRider
                     "  /health        - Server status\n" +
                     "  /files         - List source files\n" +
                     "  /inspect?file= - Code inspection\n" +
-                    "  /blueprints?class= - [UE5] Find derived Blueprints\n" +
-                    "  /blueprint-audit   - [UE5] Blueprint audit data\n" +
-                    "  /ue-project        - [UE5] Project detection diagnostics");
+                    "  /blueprints?class=       - [UE5] Find derived Blueprints\n" +
+                    "  /blueprint-audit         - [UE5] Blueprint audit data\n" +
+                    "  /asset-refs/dependencies - [UE5] Asset dependencies\n" +
+                    "  /asset-refs/referencers  - [UE5] Asset referencers\n" +
+                    "  /asset-refs/status       - [UE5] UE editor connection status\n" +
+                    "  /ue-project              - [UE5] Project detection diagnostics");
             }
             catch (Exception ex)
             {

@@ -56,7 +56,13 @@ sourceSets {
 
 tasks.compileKotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -90,6 +96,7 @@ val setBuildTool by tasks.registering {
 }
 
 val compileDotNet by tasks.registering {
+    dependsOn(":protocol:rdgen")
     dependsOn(setBuildTool)
     doLast {
         val executable: String by setBuildTool.get().extra
@@ -145,7 +152,7 @@ tasks.buildPlugin {
 
 dependencies {
     intellijPlatform {
-        rider(ProductVersion)
+        rider(ProductVersion) { useInstaller = false }
         jetbrainsRuntime()
 
         // TODO: add plugins
@@ -157,6 +164,10 @@ dependencies {
 tasks.runIde {
     // Match Rider's default heap size of 1.5Gb (default for runIde is 512Mb)
     maxHeapSize = "1500m"
+}
+
+tasks.buildSearchableOptions {
+    enabled = false
 }
 
 tasks.patchPluginXml {

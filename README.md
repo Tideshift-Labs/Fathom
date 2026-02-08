@@ -97,7 +97,11 @@ Requires the [CoRider-UnrealEngine](https://github.com/kvirani/CoRider-UnrealEng
 - [ ] **Clean up diagnostic/debug code in `/blueprints`.** The debug dumps of all methods on `UE4SearchUtil` and `UE4AssetsCache` were useful during development but can be trimmed once the API is stable.
 - [x] ~~**UE companion plugin for Blueprint audit.**~~ Implemented as [CoRider-UnrealEngine](https://github.com/kvirani/CoRider-UnrealEngine). The Rider plugin reads JSONs via `/blueprint-audit` endpoint and triggers commandlet runs when data is stale.
 - [ ] **`/uclass?class=ClassName`: UPROPERTY/UFUNCTION reflection endpoint.** Add an endpoint that, given a C++ class name, finds its header file and parses `UPROPERTY(...)` and `UFUNCTION(...)` macro declarations. Should return specifiers (e.g. `EditAnywhere`, `BlueprintCallable`, `Category="Foo"`), property/function types, and names. Approach: text-parse the header file directly (regex over macro blocks) rather than using the C++ PSI. This is the simplest strategy and captures the actual macro specifiers as written. Class-name-to-header lookup can reuse the `/files` endpoint's file list or the Unreal naming convention (`ClassName.h`).
-- [ ] Get error `ArgumentException: An item with the same key has already been added. Key: <pathtofile>` if same file is added twice to /inspect 
+- [ ] Get error `ArgumentException: An item with the same key has already been added. Key: <pathtofile>` if same file is added twice to /inspect
+- [ ] Add a root route that lists all the routes and their descriptions.
+- [ ] **Notification balloons on server start/failure.** The RD protocol model (`CoRiderModel`) already has a `serverStatus` signal, and the C# backend already fires it on success/failure in `StartServer()`. The Kotlin frontend just needs to `advise` on it and show `NotificationGroupManager` balloons. The blocker is getting a `Lifetime` scoped to the solution. `project.solution.lifetime` and `project.solutionLifetime` (from `com.jetbrains.rider.projectView`) both failed to resolve against Rider SDK 2025.3. The `notificationGroup` XML registration and `NotificationGroupManager` code are straightforward once the lifetime is sorted. Possible leads: check if `RdExtBase` exposes a lifetime through its protocol, or check JetBrains/resharper-unity for how they advise on RD signals from `ProjectActivity`.
+
+
 ## Prerequisites
 
 - **JDK 17+** (for Gradle / IntelliJ Platform plugin)
@@ -160,6 +164,14 @@ CoRider/
 │   │   └── UEProjectInfo.cs              # UE project info DTO
 │   └── Serialization/
 │       └── Json.cs                       # JSON serialization helpers
+├── src/rider/main/
+│   ├── kotlin/com/jetbrains/rider/plugins/corider/
+│   │   ├── CoRiderHost.kt                  # ProjectActivity: pushes settings port to backend via RD
+│   │   └── CoRiderSettings.kt              # Settings page (Tools > CoRider) + persistent state
+│   └── resources/META-INF/
+│       └── plugin.xml                      # IntelliJ plugin descriptor
+├── protocol/src/main/kotlin/model/rider/
+│   └── CoRiderModel.kt                    # RD protocol model (generates C# + Kotlin)
 ├── scripts/
 │   ├── setup.ps1                         # First-time tool download
 │   ├── settings.ps1                      # Shared build variables
@@ -217,6 +229,6 @@ This plugin works with the companion [CoRider-UnrealEngine](https://github.com/k
 ## Important Notes
 
 - **Windows-only** currently due to hardcoded paths like `Win64`, `UnrealEditor-Cmd.exe`.
-- **Port 19876** is hardcoded. Will need configuration for multi-instance support.
+- **Port** defaults to 19876. Configurable via Settings > Tools > CoRider, or env var `RIDER_INSPECTOR_PORT` (takes priority over settings).
 - **Desktop marker file**: `resharper-http-server.txt` is written on startup to confirm the server component loaded.
 - **Symlinks on Windows**: Prefer `New-Item -ItemType Junction` over `mklink /D` for directory symlinks. Junctions don't require admin or Developer Mode, and `mklink` is a `cmd.exe` built-in that doesn't work directly in PowerShell.

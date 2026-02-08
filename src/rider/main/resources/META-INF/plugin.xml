@@ -12,4 +12,17 @@
 ]]>
   </description>
 
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationConfigurable parentId="tools"
+        instance="com.jetbrains.rider.plugins.corider.CoRiderConfigurable"
+        id="com.jetbrains.rider.plugins.corider.CoRiderConfigurable"
+        displayName="CoRider" />
+
+    <applicationService
+        serviceImplementation="com.jetbrains.rider.plugins.corider.CoRiderSettings" />
+
+    <postStartupActivity
+        implementation="com.jetbrains.rider.plugins.corider.CoRiderHost" />
+  </extensions>
+
 </idea-plugin>
