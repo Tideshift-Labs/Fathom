@@ -7,7 +7,7 @@
 ## Key Documentation
 
 - **[README.md](README.md)**: Architecture, HTTP API, build commands, development workflow.
-- **[LEARNINGS.md](LEARNINGS.md)**: Dead-end approaches and hard-won lessons. **Read the "DEAD END" sections before attempting alternative inspection APIs.** Multiple approaches (RunLocalInspections for C++, ForceReHighlight for non-open files, SolutionAnalysisManager as a component) were fully explored and proven not to work.
+- **[docs/LEARNINGS.md](docs/LEARNINGS.md)**: Dead-end approaches and hard-won lessons. **Read the "DEAD END" sections before attempting alternative inspection APIs.** Multiple approaches (RunLocalInspections for C++, ForceReHighlight for non-open files, SolutionAnalysisManager as a component) were fully explored and proven not to work.
 - **[docs/ue-companion-plugin.md](docs/ue-companion-plugin.md)**: Blueprint audit architecture, explaining how the Rider plugin and UE companion plugin couple via filesystem conventions.
 
 ## Reflection Gotchas

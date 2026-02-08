@@ -179,8 +179,8 @@ CoRider/
 │   └── runVisualStudio.ps1               # ReSharper hive setup
 ├── docs/
 │   ├── ue-companion-plugin.md            # Blueprint audit architecture doc
+│   ├── LEARNINGS.md                      # Dead ends and hard-won lessons
 │   └── reference_files/                  # Decompiled JetBrains API references
-├── LEARNINGS.md                          # Dead ends and hard-won lessons
 └── gradlew.bat                           # Gradle wrapper
 ```
 
