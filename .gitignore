@@ -22,3 +22,6 @@ _dotTrace*/
 
 # Tools
 /tools/*.exe
+
+# CoRider
+/.corider-server.json
