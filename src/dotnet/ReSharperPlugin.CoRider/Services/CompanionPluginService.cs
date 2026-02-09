@@ -157,6 +157,7 @@ public class CompanionPluginService
                 RedirectStandardError = true,
                 WorkingDirectory = ueInfo.ProjectDirectory
             };
+            ApplyDotnetRollForward(startInfo);
 
             Log.Warn($"CompanionPlugin: Regenerating project files: {startInfo.FileName} {startInfo.Arguments}");
 
@@ -210,6 +211,7 @@ public class CompanionPluginService
                 RedirectStandardError = true,
                 WorkingDirectory = ueInfo.ProjectDirectory
             };
+            ApplyDotnetRollForward(startInfo);
 
             Log.Warn($"CompanionPlugin: Building editor target: {startInfo.FileName} {startInfo.Arguments}");
 
@@ -240,6 +242,15 @@ public class CompanionPluginService
             Log.Error(ex, "CompanionPlugin.BuildEditorTarget failed");
             return (false, "Build failed: " + ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Ensures the dotnet child process can run apps targeting older major versions
+    /// (e.g. UE 5.7 UBT targets net8.0 but Rider may only bundle net9.0).
+    /// </summary>
+    private static void ApplyDotnetRollForward(ProcessStartInfo startInfo)
+    {
+        startInfo.Environment["DOTNET_ROLL_FORWARD"] = "LatestMajor";
     }
 
     public string GetBundledVersion()

@@ -25,6 +25,11 @@
         implementation="com.jetbrains.rider.plugins.corider.CoRiderHost" />
 
     <notificationGroup id="CoRider.CompanionPlugin" displayType="STICKY_BALLOON"/>
+
+    <statusBarWidgetFactory
+        id="CoRiderStatusBarWidget"
+        implementation="com.jetbrains.rider.plugins.corider.CoRiderStatusBarWidgetFactory"
+        order="after encodingWidget" />
   </extensions>
 
 </idea-plugin>
