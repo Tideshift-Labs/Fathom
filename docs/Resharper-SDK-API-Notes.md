@@ -236,6 +236,43 @@ int line = (int)coords.Line + 1;  // Line is 0-based
 
 ---
 
+## RD Protocol Threading (`JetBrains.Rd`)
+
+All RD model interactions (`Advise`, `Fire`, property read/write) must execute on the protocol's scheduler thread ("Shell Rd Dispatcher"). Components marked `ContainerAsyncAnyThreadSafe` are constructed on pool threads and will throw `LoggerException` ("Illegal scheduler") if they touch the model directly.
+
+### Key types
+
+| Type | Namespace | Notes |
+|---|---|---|
+| `IScheduler` | `JetBrains.Collections.Viewable` | Protocol thread scheduler |
+| `RdExtBase` | `JetBrains.Rd.Base` | Base class for generated models. `Proto` property is **protected** |
+| `TryGetProto()` | `JetBrains.Rd.Base` (extension) | **Public** way to access `IProtocol` from any `IRdBindable` |
+| `IProtocol.Scheduler` | `JetBrains.Rd` | The `IScheduler` for queuing RD-thread work |
+
+### Pattern
+
+```csharp
+using JetBrains.Collections.Viewable; // IScheduler
+using JetBrains.Rd.Base;              // TryGetProto() extension
+
+var protocolSolution = solution.GetProtocolSolution();
+IScheduler scheduler = protocolSolution.TryGetProto()?.Scheduler;
+
+// All RD operations go through Queue():
+scheduler?.Queue(() =>
+{
+    var model = protocolSolution.GetCoRiderModel();
+    model.Port.Advise(lifetime, newPort => { /* ... */ });
+    model.ServerStatus.Fire(new ServerStatus(true, port, "ok"));
+});
+```
+
+### `IScheduler.Queue(Action)`
+
+Enqueues the action to run on the protocol dispatcher thread. Safe to call from any thread. If the scheduler is already on the correct thread, the action runs synchronously.
+
+---
+
 ## Action Registration Pattern
 
 ```csharp

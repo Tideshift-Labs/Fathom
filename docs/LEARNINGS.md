@@ -339,6 +339,69 @@ The plan originally referenced `config.Enabled.Value` and `config.Completed.Valu
 
 Missing the `using JetBrains.ReSharper.Daemon;` directive for `SolutionAnalysisConfiguration` gives a confusing `CS0246` since the class exists but is in a parent namespace you wouldn't guess from the other imports.
 
+## RD Protocol Threading (Critical)
+
+### All RD model operations must run on the protocol scheduler thread
+
+`ContainerAsyncAnyThreadSafe` components are constructed on pool threads (`JetPool`), but the RD protocol requires **all** model interactions (`.Advise()`, `.Fire()`, property reads/writes) to execute on the "Shell Rd Dispatcher" thread. Violating this produces:
+
+```
+Illegal scheduler for current action, must be: Shell Rd Dispatcher on :2,
+current thread: JetPool(S) #4:21,
+debug info: signal `MainProtocol.SolutionModel.solutions.[1].coRiderModel.serverStatus`
+```
+
+This is a `LoggerException` that surfaces as `RuntimeExceptionWithAttachments` on the frontend.
+
+### Fix: use `TryGetProto()?.Scheduler.Queue()`
+
+The `Proto` property on `RdExtBase` is **protected** and not directly accessible from outside. Use the public extension method `TryGetProto()` (from `JetBrains.Rd.Base`) instead:
+
+```csharp
+using JetBrains.Collections.Viewable; // IScheduler
+using JetBrains.Rd.Base;              // TryGetProto()
+
+// In constructor: grab the scheduler once
+var protocolSolution = solution.GetProtocolSolution();
+_rdScheduler = protocolSolution.TryGetProto()?.Scheduler;
+
+// Wrap ALL RD model wire-up (Advise, Fire, property access) in the scheduler:
+_rdScheduler?.Queue(() =>
+{
+    var model = protocolSolution.GetCoRiderModel();
+
+    model.Port.Advise(lifetime, newPort => { /* ... */ });
+
+    model.ServerStatus.Fire(new ServerStatus(true, port, "ok"));
+});
+```
+
+### What needs scheduling
+
+| Operation | Needs scheduler? |
+|---|---|
+| `model.SomeSignal.Fire(...)` | Yes |
+| `model.SomeProperty.Advise(...)` | Yes |
+| `model.SomeSource.Advise(...)` | Yes |
+| `model.SomeProperty.Value` (read/write) | Yes |
+| `solution.GetProtocolSolution()` | No (returns RD object, no thread check) |
+| `protocolSolution.TryGetProto()` | No |
+
+### Firing from a background task
+
+When a `Task.Run()` callback needs to fire a signal, queue it back onto the scheduler:
+
+```csharp
+Task.Run(() =>
+{
+    var result = DoWork();
+    _rdScheduler?.Queue(() =>
+        model.SomeSignal.Fire(new SomeInfo(result)));
+});
+```
+
+---
+
 ## Component Registration
 
 ### [SolutionComponent] requires an Instantiation parameter
