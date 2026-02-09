@@ -66,6 +66,14 @@ java {
     }
 }
 
+val packageUePlugin by tasks.registering(Zip::class) {
+    archiveFileName.set("CoRiderUnrealEngine.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("ue-plugin"))
+    from("${rootDir}/../CoRider-UnrealEngine") {
+        exclude("Intermediate/**", "Binaries/**", ".git/**", "AGENTS.md", "README.md", "LICENSE")
+    }
+}
+
 val setBuildTool by tasks.registering {
     doLast {
         extra["executable"] = "dotnet"
@@ -164,6 +172,7 @@ dependencies {
 tasks.runIde {
     // Match Rider's default heap size of 1.5Gb (default for runIde is 512Mb)
     maxHeapSize = "1500m"
+    jvmArgs("-Didea.log.level=WARN")
 }
 
 tasks.buildSearchableOptions {
@@ -182,6 +191,7 @@ tasks.patchPluginXml {
 
 tasks.prepareSandbox {
     dependsOn(compileDotNet)
+    dependsOn(packageUePlugin)
 
     val outputFolder = "${rootDir}/src/dotnet/${DotnetPluginId}/bin/${DotnetPluginId}.Rider/${BuildConfiguration}"
     val dllFiles = listOf(
@@ -195,6 +205,10 @@ tasks.prepareSandbox {
         val file = file(f)
         from(file, { into("${rootProject.name}/dotnet") })
     })
+
+    from(packageUePlugin.map { it.archiveFile }) {
+        into("${rootProject.name}/dotnet")
+    }
 
     doLast {
         dllFiles.forEach({ f ->

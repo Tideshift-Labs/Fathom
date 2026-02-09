@@ -23,6 +23,8 @@
 
     <postStartupActivity
         implementation="com.jetbrains.rider.plugins.corider.CoRiderHost" />
+
+    <notificationGroup id="CoRider.CompanionPlugin" displayType="STICKY_BALLOON"/>
   </extensions>
 
 </idea-plugin>

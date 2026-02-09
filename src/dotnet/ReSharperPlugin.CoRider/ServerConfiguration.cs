@@ -77,6 +77,23 @@ public class ServerConfiguration
         /// </summary>
         public string CommandletExecutable { get; set; } = "UnrealEditor-Cmd.exe";
 
+        // ── Companion UE Plugin ──
+
+        /// <summary>
+        /// Name of the companion UE plugin (directory and .uplugin base name).
+        /// </summary>
+        public string CompanionPluginName { get; set; } = "CoRiderUnrealEngine";
+
+        /// <summary>
+        /// Name of the bundled ZIP file shipped alongside the DLL.
+        /// </summary>
+        public string CompanionPluginZipName { get; set; } = "CoRiderUnrealEngine.zip";
+
+        /// <summary>
+        /// Delay (ms) after boot before checking companion plugin presence.
+        /// </summary>
+        public int CompanionCheckDelayMs { get; set; } = 7000;
+
         // ── File Markers ──
 
         /// <summary>

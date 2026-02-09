@@ -13,8 +13,23 @@ object CoRiderModel : Ext(SolutionModel.Solution) {
         field("message", string)
     }
 
+    private val CompanionPluginStatus = enum("CompanionPluginStatus") {
+        +"NotInstalled"
+        +"Outdated"
+        +"UpToDate"
+    }
+
+    private val CompanionPluginInfo = structdef {
+        field("status", CompanionPluginStatus)
+        field("installedVersion", string)
+        field("bundledVersion", string)
+        field("message", string)
+    }
+
     init {
         property("port", int)
         signal("serverStatus", ServerStatus)
+        sink("companionPluginStatus", CompanionPluginInfo)
+        source("installCompanionPlugin", void)
     }
 }

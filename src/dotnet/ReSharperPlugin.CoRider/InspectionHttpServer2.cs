@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using JetBrains.Application.Parts;
 using JetBrains.Lifetimes;
 using JetBrains.ProjectModel;
+using JetBrains.Collections.Viewable;
 using JetBrains.Rd.Base;
 using JetBrains.ReSharper.Feature.Services.Protocol;
 using JetBrains.Rider.Model;
@@ -29,6 +30,7 @@ namespace ReSharperPlugin.CoRider
         private IRequestHandler[] _handlers;
         private int _currentPort;
         private bool _envPortLocked;
+        private JetBrains.Collections.Viewable.IScheduler _rdScheduler;
 
         // Services (created once, reused across restarts)
         private readonly ReflectionService _reflection;
@@ -40,6 +42,7 @@ namespace ReSharperPlugin.CoRider
         private readonly BlueprintAuditService _blueprintAudit;
         private readonly AssetRefProxyService _assetRefProxy;
         private readonly CodeStructureService _codeStructure;
+        private readonly CompanionPluginService _companionPlugin;
         private readonly ServerConfiguration _config;
 
         public InspectionHttpServer2(Lifetime lifetime, ISolution solution)
@@ -58,6 +61,7 @@ namespace ReSharperPlugin.CoRider
             _blueprintAudit = new BlueprintAuditService(_ueProject, _config);
             _assetRefProxy = new AssetRefProxyService(_ueProject);
             _codeStructure = new CodeStructureService(solution);
+            _companionPlugin = new CompanionPluginService(solution, _config);
 
             // Check for env var override (takes absolute priority)
             var envPort = Environment.GetEnvironmentVariable("RIDER_INSPECTOR_PORT");
@@ -72,19 +76,55 @@ namespace ReSharperPlugin.CoRider
                 StartServer(_config.Port);
             }
 
-            // Wire up RD protocol model
+            // Wire up RD protocol model (all RD operations must run on the protocol scheduler thread)
             try
             {
-                var model = solution.GetProtocolSolution().GetCoRiderModel();
+                var protocolSolution = solution.GetProtocolSolution();
+                _rdScheduler = protocolSolution.TryGetProto()?.Scheduler;
 
-                if (!_envPortLocked)
+                if (_rdScheduler != null)
                 {
-                    model.Port.Advise(lifetime, newPort =>
+                    _rdScheduler.Queue(() =>
                     {
-                        if (newPort <= 0 || newPort == _currentPort) return;
-                        Log.Warn($"InspectionHttpServer2: port changed to {newPort} via settings");
-                        StopServer();
-                        StartServer(newPort);
+                        try
+                        {
+                            var model = protocolSolution.GetCoRiderModel();
+
+                            if (!_envPortLocked)
+                            {
+                                model.Port.Advise(lifetime, newPort =>
+                                {
+                                    if (newPort <= 0 || newPort == _currentPort) return;
+                                    Log.Warn($"InspectionHttpServer2: port changed to {newPort} via settings");
+                                    StopServer();
+                                    StartServer(newPort);
+                                });
+                            }
+
+                            // Handle companion plugin install requests from frontend
+                            model.InstallCompanionPlugin.Advise(lifetime, _ =>
+                            {
+                                Task.Run(() =>
+                                {
+                                    var result = _companionPlugin.Install();
+                                    Log.Info($"CompanionPlugin install: success={result.success}, {result.message}");
+                                    var detection = _companionPlugin.Detect();
+                                    _rdScheduler.Queue(() =>
+                                        model.CompanionPluginStatus(new CompanionPluginInfo(
+                                            Enum.TryParse<CompanionPluginStatus>(detection.Status, out var s)
+                                                ? s : CompanionPluginStatus.NotInstalled,
+                                            detection.InstalledVersion,
+                                            detection.BundledVersion,
+                                            result.success
+                                                ? $"Installed successfully. Rebuild your UE project to compile the plugin. {result.message}"
+                                                : $"Installation failed. {result.message}")));
+                                });
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Warn("InspectionHttpServer2: RD model wire-up failed: " + ex.Message);
+                        }
                     });
                 }
             }
@@ -162,17 +202,45 @@ namespace ReSharperPlugin.CoRider
                         Log.Error(ex, "InspectionHttpServer2: failed to write local marker file");
                     }
 
-                    // Fire success notification via RD
-                    model?.ServerStatus.Fire(new ServerStatus(true, port,
-                        $"Listening on http://localhost:{port}/"));
+                    // Fire success notification via RD (must be on protocol scheduler thread)
+                    if (model != null && _rdScheduler != null)
+                        _rdScheduler.Queue(() =>
+                            model.ServerStatus.Fire(new ServerStatus(true, port,
+                                $"Listening on http://localhost:{port}/")));
 
-                    // Schedule on-boot staleness check
+                    // Schedule on-boot staleness check and companion plugin detection
                     _ = Task.Run(async () =>
                     {
                         await Task.Delay(_config.BootCheckDelayMs);
                         if (_ueProject.IsUnrealProject())
                         {
                             _blueprintAudit.CheckAndRefreshOnBoot();
+
+                            // Check companion plugin after an additional delay
+                            var extraDelay = _config.CompanionCheckDelayMs - _config.BootCheckDelayMs;
+                            if (extraDelay > 0)
+                                await Task.Delay(extraDelay);
+
+                            try
+                            {
+                                var detection = _companionPlugin.Detect();
+                                if (detection.Status != "UpToDate")
+                                {
+                                    Log.Info($"CompanionPlugin: {detection.Status} (installed={detection.InstalledVersion}, bundled={detection.BundledVersion})");
+                                    if (model != null)
+                                        _rdScheduler.Queue(() =>
+                                            model.CompanionPluginStatus(new CompanionPluginInfo(
+                                                Enum.TryParse<CompanionPluginStatus>(detection.Status, out var s)
+                                                    ? s : CompanionPluginStatus.NotInstalled,
+                                                detection.InstalledVersion,
+                                                detection.BundledVersion,
+                                                detection.Message)));
+                                }
+                            }
+                            catch (Exception cpEx)
+                            {
+                                Log.Warn("CompanionPlugin detection failed: " + cpEx.Message);
+                            }
                         }
                         else
                         {
@@ -185,7 +253,9 @@ namespace ReSharperPlugin.CoRider
                 catch (Exception ex)
                 {
                     Log.Error(ex, $"InspectionHttpServer2: failed to start on port {port}");
-                    model?.ServerStatus.Fire(new ServerStatus(false, port, ex.Message));
+                    if (model != null && _rdScheduler != null)
+                        _rdScheduler.Queue(() =>
+                            model.ServerStatus.Fire(new ServerStatus(false, port, ex.Message)));
                 }
             }
         }
