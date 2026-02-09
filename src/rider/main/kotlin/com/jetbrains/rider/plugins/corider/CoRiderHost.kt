@@ -15,45 +15,64 @@ import com.jetbrains.rider.projectView.solution
 class CoRiderHost : ProjectActivity {
 
     override suspend fun execute(project: Project) {
-        val model = project.solution.coRiderModel
+        val solution = project.solution
+        val protocol = checkNotNull(solution.protocol) {
+            "CoRiderHost: RD protocol not available at postStartupActivity time"
+        }
+        val model = solution.coRiderModel
 
-        // Push persisted port to the backend
+        // Push persisted port to the backend (must run on protocol scheduler)
         val settings = service<CoRiderSettings>()
-        model.port.set(settings.state.port)
+        protocol.scheduler.queue {
+            model.port.set(settings.state.port)
+        }
 
         // Create lifetime tied to the project
         val lifetimeDef = LifetimeDefinition()
         @Suppress("IncorrectParentDisposable")
         com.intellij.openapi.util.Disposer.register(project) { lifetimeDef.terminate() }
 
-        // Listen for companion plugin status from backend
-        model.companionPluginStatus.advise(lifetimeDef.lifetime) { info ->
-            val group = NotificationGroupManager.getInstance()
-                .getNotificationGroup("CoRider.CompanionPlugin") ?: return@advise
+        // Listen for companion plugin status from backend (advise must run on protocol scheduler)
+        protocol.scheduler.queue {
+            model.companionPluginStatus.advise(lifetimeDef.lifetime) { info ->
+                val group = NotificationGroupManager.getInstance()
+                    .getNotificationGroup("CoRider.CompanionPlugin") ?: return@advise
 
-            when (info.status) {
-                CompanionPluginStatus.NotInstalled, CompanionPluginStatus.Outdated -> {
-                    val title = if (info.status == CompanionPluginStatus.NotInstalled)
-                        "CoRider UE plugin not installed"
-                    else
-                        "CoRider UE plugin outdated"
+                when (info.status) {
+                    CompanionPluginStatus.NotInstalled, CompanionPluginStatus.Outdated -> {
+                        val title = if (info.status == CompanionPluginStatus.NotInstalled)
+                            "CoRider UE plugin not installed"
+                        else
+                            "CoRider UE plugin outdated"
 
-                    val notification = group.createNotification(title, info.message, NotificationType.WARNING)
-                    notification.addAction(NotificationAction.createSimple("Install") {
-                        notification.expire()
-                        model.installCompanionPlugin.fire(Unit)
-                    })
-                    Notifications.Bus.notify(notification, project)
-                }
-                CompanionPluginStatus.UpToDate -> {
-                    // Post-install confirmation (backend fires UpToDate after successful install)
-                    if (info.message.isNotBlank()) {
+                        val notification = group.createNotification(title, info.message, NotificationType.WARNING)
+                        notification.addAction(NotificationAction.createSimple("Install") {
+                            notification.expire()
+                            protocol.scheduler.queue { model.installCompanionPlugin.fire(Unit) }
+                        })
+                        Notifications.Bus.notify(notification, project)
+                    }
+                    CompanionPluginStatus.Installed -> {
                         val notification = group.createNotification(
                             "CoRider UE plugin installed",
                             info.message,
                             NotificationType.INFORMATION
                         )
+                        notification.addAction(NotificationAction.createSimple("Build Now") {
+                            notification.expire()
+                            protocol.scheduler.queue { model.buildCompanionPlugin.fire(Unit) }
+                        })
                         Notifications.Bus.notify(notification, project)
+                    }
+                    CompanionPluginStatus.UpToDate -> {
+                        if (info.message.isNotBlank()) {
+                            val notification = group.createNotification(
+                                "CoRider UE plugin",
+                                info.message,
+                                NotificationType.INFORMATION
+                            )
+                            Notifications.Bus.notify(notification, project)
+                        }
                     }
                 }
             }

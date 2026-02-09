@@ -31,6 +31,17 @@ public class UeProjectInfo
         public string CommandletExePath { get; set; }
 
         /// <summary>
+        /// Full path to UnrealBuildTool.dll (invoked via dotnet).
+        /// </summary>
+        public string UnrealBuildToolDllPath { get; set; }
+
+        /// <summary>
+        /// Editor target name for UBT builds (e.g., "MyGameEditor").
+        /// Derived from .uproject filename + "Editor".
+        /// </summary>
+        public string EditorTargetName { get; set; }
+
+        /// <summary>
         /// Error message if detection failed.
         /// </summary>
         public string Error { get; set; }

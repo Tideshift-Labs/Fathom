@@ -46,35 +46,41 @@ namespace JetBrains.Rider.Model
     [NotNull] public ISignal<JetBrains.Rider.Model.ServerStatus> ServerStatus => _ServerStatus;
     [NotNull] public void CompanionPluginStatus(CompanionPluginInfo value) => _CompanionPluginStatus.Fire(value);
     [NotNull] public ISource<Unit> InstallCompanionPlugin => _InstallCompanionPlugin;
+    [NotNull] public ISource<Unit> BuildCompanionPlugin => _BuildCompanionPlugin;
     
     //private fields
     [NotNull] private readonly RdProperty<int> _Port;
     [NotNull] private readonly RdSignal<JetBrains.Rider.Model.ServerStatus> _ServerStatus;
     [NotNull] private readonly RdSignal<CompanionPluginInfo> _CompanionPluginStatus;
     [NotNull] private readonly RdSignal<Unit> _InstallCompanionPlugin;
+    [NotNull] private readonly RdSignal<Unit> _BuildCompanionPlugin;
     
     //primary constructor
     private CoRiderModel(
       [NotNull] RdProperty<int> port,
       [NotNull] RdSignal<JetBrains.Rider.Model.ServerStatus> serverStatus,
       [NotNull] RdSignal<CompanionPluginInfo> companionPluginStatus,
-      [NotNull] RdSignal<Unit> installCompanionPlugin
+      [NotNull] RdSignal<Unit> installCompanionPlugin,
+      [NotNull] RdSignal<Unit> buildCompanionPlugin
     )
     {
       if (port == null) throw new ArgumentNullException("port");
       if (serverStatus == null) throw new ArgumentNullException("serverStatus");
       if (companionPluginStatus == null) throw new ArgumentNullException("companionPluginStatus");
       if (installCompanionPlugin == null) throw new ArgumentNullException("installCompanionPlugin");
+      if (buildCompanionPlugin == null) throw new ArgumentNullException("buildCompanionPlugin");
       
       _Port = port;
       _ServerStatus = serverStatus;
       _CompanionPluginStatus = companionPluginStatus;
       _InstallCompanionPlugin = installCompanionPlugin;
+      _BuildCompanionPlugin = buildCompanionPlugin;
       _Port.OptimizeNested = true;
       BindableChildren.Add(new KeyValuePair<string, object>("port", _Port));
       BindableChildren.Add(new KeyValuePair<string, object>("serverStatus", _ServerStatus));
       BindableChildren.Add(new KeyValuePair<string, object>("companionPluginStatus", _CompanionPluginStatus));
       BindableChildren.Add(new KeyValuePair<string, object>("installCompanionPlugin", _InstallCompanionPlugin));
+      BindableChildren.Add(new KeyValuePair<string, object>("buildCompanionPlugin", _BuildCompanionPlugin));
     }
     //secondary constructor
     internal CoRiderModel (
@@ -82,6 +88,7 @@ namespace JetBrains.Rider.Model
       new RdProperty<int>(JetBrains.Rd.Impl.Serializers.ReadInt, JetBrains.Rd.Impl.Serializers.WriteInt),
       new RdSignal<JetBrains.Rider.Model.ServerStatus>(JetBrains.Rider.Model.ServerStatus.Read, JetBrains.Rider.Model.ServerStatus.Write),
       new RdSignal<CompanionPluginInfo>(CompanionPluginInfo.Read, CompanionPluginInfo.Write),
+      new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid),
       new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid)
     ) {}
     //deconstruct trait
@@ -89,7 +96,7 @@ namespace JetBrains.Rider.Model
     
     
     
-    protected override long SerializationHash => 7817100614976333981L;
+    protected override long SerializationHash => 4330523225333517444L;
     
     protected override Action<ISerializers> Register => RegisterDeclaredTypesSerializers;
     public static void RegisterDeclaredTypesSerializers(ISerializers serializers)
@@ -114,6 +121,7 @@ namespace JetBrains.Rider.Model
         printer.Print("serverStatus = "); _ServerStatus.PrintEx(printer); printer.Println();
         printer.Print("companionPluginStatus = "); _CompanionPluginStatus.PrintEx(printer); printer.Println();
         printer.Print("installCompanionPlugin = "); _InstallCompanionPlugin.PrintEx(printer); printer.Println();
+        printer.Print("buildCompanionPlugin = "); _BuildCompanionPlugin.PrintEx(printer); printer.Println();
       }
       printer.Print(")");
     }
@@ -135,7 +143,7 @@ namespace JetBrains.Rider.Model
   
   
   /// <summary>
-  /// <p>Generated from: CoRiderModel.kt:22</p>
+  /// <p>Generated from: CoRiderModel.kt:23</p>
   /// </summary>
   public sealed class CompanionPluginInfo : IPrintable, IEquatable<CompanionPluginInfo>
   {
@@ -251,6 +259,7 @@ namespace JetBrains.Rider.Model
   public enum CompanionPluginStatus {
     NotInstalled,
     Outdated,
+    Installed,
     UpToDate
   }
   

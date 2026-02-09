@@ -22,7 +22,8 @@ class CoRiderModel private constructor(
     private val _port: RdOptionalProperty<Int>,
     private val _serverStatus: RdSignal<ServerStatus>,
     private val _companionPluginStatus: RdSignal<CompanionPluginInfo>,
-    private val _installCompanionPlugin: RdSignal<Unit>
+    private val _installCompanionPlugin: RdSignal<Unit>,
+    private val _buildCompanionPlugin: RdSignal<Unit>
 ) : RdExtBase() {
     //companion
     
@@ -39,7 +40,7 @@ class CoRiderModel private constructor(
         
         
         
-        const val serializationHash = 7817100614976333981L
+        const val serializationHash = 4330523225333517444L
         
     }
     override val serializersOwner: ISerializersOwner get() = CoRiderModel
@@ -50,6 +51,7 @@ class CoRiderModel private constructor(
     val serverStatus: ISignal<ServerStatus> get() = _serverStatus
     val companionPluginStatus: ISource<CompanionPluginInfo> get() = _companionPluginStatus
     val installCompanionPlugin: ISignal<Unit> get() = _installCompanionPlugin
+    val buildCompanionPlugin: ISignal<Unit> get() = _buildCompanionPlugin
     //methods
     //initializer
     init {
@@ -61,6 +63,7 @@ class CoRiderModel private constructor(
         bindableChildren.add("serverStatus" to _serverStatus)
         bindableChildren.add("companionPluginStatus" to _companionPluginStatus)
         bindableChildren.add("installCompanionPlugin" to _installCompanionPlugin)
+        bindableChildren.add("buildCompanionPlugin" to _buildCompanionPlugin)
     }
     
     //secondary constructor
@@ -69,6 +72,7 @@ class CoRiderModel private constructor(
         RdOptionalProperty<Int>(FrameworkMarshallers.Int),
         RdSignal<ServerStatus>(ServerStatus),
         RdSignal<CompanionPluginInfo>(CompanionPluginInfo),
+        RdSignal<Unit>(FrameworkMarshallers.Void),
         RdSignal<Unit>(FrameworkMarshallers.Void)
     )
     
@@ -82,6 +86,7 @@ class CoRiderModel private constructor(
             print("serverStatus = "); _serverStatus.print(printer); println()
             print("companionPluginStatus = "); _companionPluginStatus.print(printer); println()
             print("installCompanionPlugin = "); _installCompanionPlugin.print(printer); println()
+            print("buildCompanionPlugin = "); _buildCompanionPlugin.print(printer); println()
         }
         printer.print(")")
     }
@@ -91,7 +96,8 @@ class CoRiderModel private constructor(
             _port.deepClonePolymorphic(),
             _serverStatus.deepClonePolymorphic(),
             _companionPluginStatus.deepClonePolymorphic(),
-            _installCompanionPlugin.deepClonePolymorphic()
+            _installCompanionPlugin.deepClonePolymorphic(),
+            _buildCompanionPlugin.deepClonePolymorphic()
         )
     }
     //contexts
@@ -103,7 +109,7 @@ val Solution.coRiderModel get() = getOrCreateExtension("coRiderModel", ::CoRider
 
 
 /**
- * #### Generated from [CoRiderModel.kt:22]
+ * #### Generated from [CoRiderModel.kt:23]
  */
 data class CompanionPluginInfo (
     val status: CompanionPluginStatus,
@@ -185,6 +191,7 @@ data class CompanionPluginInfo (
 enum class CompanionPluginStatus {
     NotInstalled, 
     Outdated, 
+    Installed, 
     UpToDate;
     
     companion object : IMarshaller<CompanionPluginStatus> {

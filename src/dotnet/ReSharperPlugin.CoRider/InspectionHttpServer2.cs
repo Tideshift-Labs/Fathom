@@ -61,7 +61,7 @@ namespace ReSharperPlugin.CoRider
             _blueprintAudit = new BlueprintAuditService(_ueProject, _config);
             _assetRefProxy = new AssetRefProxyService(_ueProject);
             _codeStructure = new CodeStructureService(solution);
-            _companionPlugin = new CompanionPluginService(solution, _config);
+            _companionPlugin = new CompanionPluginService(solution, _config, _ueProject);
 
             // Check for env var override (takes absolute priority)
             var envPort = Environment.GetEnvironmentVariable("RIDER_INSPECTOR_PORT");
@@ -106,18 +106,70 @@ namespace ReSharperPlugin.CoRider
                             {
                                 Task.Run(() =>
                                 {
-                                    var result = _companionPlugin.Install();
-                                    Log.Info($"CompanionPlugin install: success={result.success}, {result.message}");
-                                    var detection = _companionPlugin.Detect();
+                                    var installResult = _companionPlugin.Install();
+                                    Log.Info($"CompanionPlugin install: success={installResult.success}, {installResult.message}");
+
+                                    if (!installResult.success)
+                                    {
+                                        var detection = _companionPlugin.Detect();
+                                        _rdScheduler.Queue(() =>
+                                            model.CompanionPluginStatus(new CompanionPluginInfo(
+                                                Enum.TryParse<CompanionPluginStatus>(detection.Status, out var s)
+                                                    ? s : CompanionPluginStatus.NotInstalled,
+                                                detection.InstalledVersion,
+                                                detection.BundledVersion,
+                                                $"Installation failed. {installResult.message}")));
+                                        return;
+                                    }
+
+                                    // Attempt project file regeneration so the plugin appears in the solution explorer
+                                    var ueInfo = _ueProject.GetUeProjectInfo();
+                                    var regenResult = _companionPlugin.RegenerateProjectFiles(ueInfo);
+                                    Log.Info($"CompanionPlugin regen: success={regenResult.success}, {regenResult.message}");
+
+                                    var det = _companionPlugin.Detect();
+                                    var statusMessage = regenResult.success
+                                        ? "Installed and project files regenerated. Click Build Now to compile."
+                                        : $"Installed but project file regeneration failed: {regenResult.message}. Click Build Now to compile.";
+
                                     _rdScheduler.Queue(() =>
                                         model.CompanionPluginStatus(new CompanionPluginInfo(
-                                            Enum.TryParse<CompanionPluginStatus>(detection.Status, out var s)
-                                                ? s : CompanionPluginStatus.NotInstalled,
-                                            detection.InstalledVersion,
-                                            detection.BundledVersion,
-                                            result.success
-                                                ? $"Installed successfully. Rebuild your UE project to compile the plugin. {result.message}"
-                                                : $"Installation failed. {result.message}")));
+                                            CompanionPluginStatus.Installed,
+                                            det.InstalledVersion,
+                                            det.BundledVersion,
+                                            statusMessage)));
+                                });
+                            });
+
+                            // Handle companion plugin build requests from frontend
+                            model.BuildCompanionPlugin.Advise(lifetime, _ =>
+                            {
+                                Task.Run(() =>
+                                {
+                                    var ueInfo = _ueProject.GetUeProjectInfo();
+                                    var buildResult = _companionPlugin.BuildEditorTarget(ueInfo);
+                                    Log.Info($"CompanionPlugin build: success={buildResult.success}, {buildResult.message}");
+
+                                    var det = _companionPlugin.Detect();
+
+                                    if (buildResult.success)
+                                    {
+                                        _rdScheduler.Queue(() =>
+                                            model.CompanionPluginStatus(new CompanionPluginInfo(
+                                                CompanionPluginStatus.UpToDate,
+                                                det.InstalledVersion,
+                                                det.BundledVersion,
+                                                buildResult.message)));
+                                    }
+                                    else
+                                    {
+                                        _rdScheduler.Queue(() =>
+                                            model.CompanionPluginStatus(new CompanionPluginInfo(
+                                                CompanionPluginStatus.Installed,
+                                                det.InstalledVersion,
+                                                det.BundledVersion,
+                                                $"Build failed: {buildResult.message}")));
+                                    }
                                 });
                             });
                         }

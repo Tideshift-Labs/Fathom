@@ -77,6 +77,14 @@ public class ServerConfiguration
         /// </summary>
         public string CommandletExecutable { get; set; } = "UnrealEditor-Cmd.exe";
 
+        // ── Unreal Build Tool ──
+
+        /// <summary>
+        /// Relative path from EnginePath to UnrealBuildTool.dll (invoked via dotnet).
+        /// </summary>
+        public string UnrealBuildToolDllRelativePath { get; set; } =
+            @"Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll";
+
         // ── Companion UE Plugin ──
 
         /// <summary>

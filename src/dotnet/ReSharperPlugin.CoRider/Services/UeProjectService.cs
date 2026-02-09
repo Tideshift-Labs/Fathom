@@ -161,6 +161,12 @@ public class UeProjectService
                     result.EnginePath, "Binaries",
                     _config.PlatformBinaryFolder,
                     _config.CommandletExecutable);
+
+                result.UnrealBuildToolDllPath = Path.Combine(
+                    result.EnginePath, _config.UnrealBuildToolDllRelativePath);
+
+                result.EditorTargetName =
+                    Path.GetFileNameWithoutExtension(result.UProjectPath) + "Editor";
             }
         }
         catch (Exception ex)

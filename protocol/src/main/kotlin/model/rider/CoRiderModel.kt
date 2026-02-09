@@ -16,6 +16,7 @@ object CoRiderModel : Ext(SolutionModel.Solution) {
     private val CompanionPluginStatus = enum("CompanionPluginStatus") {
         +"NotInstalled"
         +"Outdated"
+        +"Installed"
         +"UpToDate"
     }
 
@@ -31,5 +32,6 @@ object CoRiderModel : Ext(SolutionModel.Solution) {
         signal("serverStatus", ServerStatus)
         sink("companionPluginStatus", CompanionPluginInfo)
         source("installCompanionPlugin", void)
+        source("buildCompanionPlugin", void)
     }
 }

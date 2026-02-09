@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -6,6 +7,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using JetBrains.ProjectModel;
 using JetBrains.Util;
+using ReSharperPlugin.CoRider.Models;
 
 namespace ReSharperPlugin.CoRider.Services;
 
@@ -15,11 +17,13 @@ public class CompanionPluginService
 
     private readonly ISolution _solution;
     private readonly ServerConfiguration _config;
+    private readonly UeProjectService _ueProject;
 
-    public CompanionPluginService(ISolution solution, ServerConfiguration config)
+    public CompanionPluginService(ISolution solution, ServerConfiguration config, UeProjectService ueProject)
     {
         _solution = solution;
         _config = config;
+        _ueProject = ueProject;
     }
 
     public CompanionPluginDetectionResult Detect()
@@ -129,6 +133,112 @@ public class CompanionPluginService
         {
             Log.Error(ex, "CompanionPluginService.Install failed");
             return (false, "Install failed: " + ex.Message);
+        }
+    }
+
+    public (bool success, string message) RegenerateProjectFiles(UeProjectInfo ueInfo)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(ueInfo.UnrealBuildToolDllPath) ||
+                !File.Exists(ueInfo.UnrealBuildToolDllPath))
+            {
+                return (false, "UnrealBuildTool.dll not found at: " + ueInfo.UnrealBuildToolDllPath);
+            }
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"\"{ueInfo.UnrealBuildToolDllPath}\" " +
+                            $"-mode=GenerateProjectFiles " +
+                            $"-project=\"{ueInfo.UProjectPath}\" -game",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = ueInfo.ProjectDirectory
+            };
+
+            Log.Warn($"CompanionPlugin: Regenerating project files: {startInfo.FileName} {startInfo.Arguments}");
+
+            using (var process = Process.Start(startInfo))
+            {
+                if (process == null)
+                    return (false, "Failed to start dotnet process for project file regeneration.");
+
+                var output = process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode == 0)
+                {
+                    Log.Info("CompanionPlugin: Project files regenerated successfully.");
+                    return (true, "Project files regenerated.");
+                }
+
+                var msg = $"Project file regeneration exited with code {process.ExitCode}.";
+                if (!string.IsNullOrWhiteSpace(error))
+                    msg += " Error: " + error.Substring(0, Math.Min(error.Length, _config.MaxErrorLength));
+                Log.Warn("CompanionPlugin: " + msg);
+                return (false, msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "CompanionPlugin.RegenerateProjectFiles failed");
+            return (false, "Regeneration failed: " + ex.Message);
+        }
+    }
+
+    public (bool success, string message) BuildEditorTarget(UeProjectInfo ueInfo)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(ueInfo.UnrealBuildToolDllPath) ||
+                !File.Exists(ueInfo.UnrealBuildToolDllPath))
+            {
+                return (false, "UnrealBuildTool.dll not found at: " + ueInfo.UnrealBuildToolDllPath);
+            }
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"\"{ueInfo.UnrealBuildToolDllPath}\" " +
+                            $"{ueInfo.EditorTargetName} {_config.PlatformBinaryFolder} Development " +
+                            $"-project=\"{ueInfo.UProjectPath}\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = ueInfo.ProjectDirectory
+            };
+
+            Log.Warn($"CompanionPlugin: Building editor target: {startInfo.FileName} {startInfo.Arguments}");
+
+            using (var process = Process.Start(startInfo))
+            {
+                if (process == null)
+                    return (false, "Failed to start dotnet process for editor build.");
+
+                var output = process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode == 0)
+                {
+                    Log.Info("CompanionPlugin: Editor target built successfully.");
+                    return (true, "Plugin compiled successfully.");
+                }
+
+                var msg = $"Build exited with code {process.ExitCode}.";
+                if (!string.IsNullOrWhiteSpace(error))
+                    msg += " Error: " + error.Substring(0, Math.Min(error.Length, _config.MaxErrorLength));
+                Log.Warn("CompanionPlugin: " + msg);
+                return (false, msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "CompanionPlugin.BuildEditorTarget failed");
+            return (false, "Build failed: " + ex.Message);
         }
     }
 
