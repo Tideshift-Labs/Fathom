@@ -400,6 +400,57 @@ Task.Run(() =>
 });
 ```
 
+### Kotlin frontend: same rule applies
+
+`ProjectActivity.execute()` runs on a **coroutine background thread** (Dispatchers.Default), not the protocol scheduler thread. All RD model operations from the frontend must also be dispatched. Violating this produces:
+
+```
+java.lang.IllegalStateException: |E| Wrong thread RdOptionalProperty:
+`RiderBackend 0.SolutionModel.solutions.[1].coRiderModel.port`
+    at com.jetbrains.rdclient.protocol.RdDispatcher.assertThread
+```
+
+The fix is `project.solution.protocol.scheduler.queue { ... }`:
+
+```kotlin
+override suspend fun execute(project: Project) {
+    val protocol = project.solution.protocol ?: return
+    val model = project.solution.coRiderModel
+
+    // Property writes must be on protocol thread
+    protocol.scheduler.queue {
+        model.port.set(settings.state.port)
+    }
+
+    // advise() registration must also be on protocol thread
+    protocol.scheduler.queue {
+        model.someSignal.advise(lifetime) { info ->
+            // This callback already runs on the protocol thread, so
+            // reading RD properties here is safe.
+        }
+    }
+}
+```
+
+**Notification action callbacks run on the EDT**, not the protocol thread. Any `model.fire()` inside a `NotificationAction` must be wrapped:
+
+```kotlin
+notification.addAction(NotificationAction.createSimple("Do Thing") {
+    notification.expire()
+    // fire() from EDT requires dispatch to protocol thread
+    protocol.scheduler.queue { model.someSource.fire(Unit) }
+})
+```
+
+| Kotlin context | Thread | Needs `protocol.scheduler.queue`? |
+|---|---|---|
+| `ProjectActivity.execute()` body | Coroutine (background) | Yes |
+| Inside `advise {}` callback | Protocol scheduler | No (already on it) |
+| `NotificationAction` click handler | EDT (Swing) | Yes |
+| `invokeLater {}` | EDT (Swing) | Yes |
+
+Note: `project.solution.protocol` is nullable in the Kotlin API. Always use `?: return` or `?.scheduler?.queue` to guard against null.
+
 ---
 
 ## Component Registration
