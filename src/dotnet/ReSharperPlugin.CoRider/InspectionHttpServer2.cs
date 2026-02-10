@@ -210,6 +210,7 @@ namespace ReSharperPlugin.CoRider
                         new BlueprintAuditHandler(_ueProject, _blueprintAudit),
                         new BlueprintInfoHandler(_blueprintAudit, _assetRefProxy, _ueProject, _config),
                         new AssetRefHandler(_ueProject, _assetRefProxy),
+                        new AssetSearchHandler(_ueProject, _assetRefProxy),
                         new UeProjectHandler(_solution, _ueProject, _reflection),
                     };
 
@@ -376,6 +377,7 @@ namespace ReSharperPlugin.CoRider
                     "  /asset-refs/dependencies - [UE5] Asset dependencies\n" +
                     "  /asset-refs/referencers  - [UE5] Asset referencers\n" +
                     "  /asset-refs/status       - [UE5] UE editor connection status\n" +
+                    "  /uassets?search=         - [UE5] Fuzzy search for UAssets by name\n" +
                     "  /ue-project              - [UE5] Project detection diagnostics");
             }
             catch (Exception ex)
