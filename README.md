@@ -66,8 +66,9 @@ curl http://localhost:19876/health
 - [ ] **UCLASS Reflection**: Add `/uclass` endpoint for parsing `UPROPERTY`/`UFUNCTION` macros.
 - [ ] **Notification Balloons**: Show UI feedback in Rider when the server starts or fails.
 - [ ] **C# Inspection Fix**: Investigate why `.cs` files sometimes report 0 issues.
-- [ ] **Blueprint Audit Boot Check**: `BlueprintAuditService.RunBlueprintAuditCommandlet` crashes with "Cannot start process because a file name has not been provided" when the UE engine path is not yet resolved. Likely a race condition on first-time project open where Rider is still indexing. Guard the commandlet launch against a null/empty `CommandletExePath`.
+- [x] **Blueprint Audit Boot Check**: `BlueprintAuditService.RunBlueprintAuditCommandlet` crashes with "Cannot start process because a file name has not been provided" when the UE engine path is not yet resolved. Likely a race condition on first-time project open where Rider is still indexing. Guard the commandlet launch against a null/empty `CommandletExePath`.
 - [ ] **Status Bar Icon**: Show a status bar icon when the server is running. It should be used to indicate any issues or actions the user needs to take (eg: UE plugin not found, UE engine path not configured, etc).
+- [ ] **Access Log**: Allow the dev to view the log via the bottom (status) bar icon. We'd log all important stuff to a corider specific access log. Proposal md doc needed first in `proposals` dir
 
 ## License
 

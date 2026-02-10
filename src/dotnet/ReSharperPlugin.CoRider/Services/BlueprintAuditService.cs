@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Util;
 using ReSharperPlugin.CoRider.Formatting;
@@ -18,7 +19,7 @@ public class BlueprintAuditService
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
     /// Bump both together when the JSON schema changes.
     /// </summary>
-    private const int AuditSchemaVersion = 2;
+    private const int AuditSchemaVersion = 3;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 
@@ -135,6 +136,12 @@ public class BlueprintAuditService
 
     public bool TriggerRefresh(UeProjectInfo ueInfo)
     {
+        if (string.IsNullOrEmpty(ueInfo.CommandletExePath))
+        {
+            Log.Warn("InspectionHttpServer: Cannot start Blueprint audit - CommandletExePath is not resolved (engine path may still be loading)");
+            return false;
+        }
+
         lock (_auditLock)
         {
             if (_auditRefreshInProgress)
@@ -193,6 +200,26 @@ public class BlueprintAuditService
             if (!ueInfo.IsUnrealProject)
             {
                 _bootCheckResult = "Not an Unreal project - skipping boot check";
+                _bootCheckCompleted = true;
+                Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                return;
+            }
+
+            // Rider may still be indexing on first open, so the engine path
+            // (and therefore CommandletExePath) might not be resolved yet.
+            // Poll a few times before giving up.
+            var retries = 0;
+            while (string.IsNullOrEmpty(ueInfo.CommandletExePath) && retries < _config.BootCheckMaxRetries)
+            {
+                retries++;
+                Log.Warn($"InspectionHttpServer: Engine path not resolved yet, retry {retries}/{_config.BootCheckMaxRetries} in {_config.BootCheckRetryIntervalMs}ms...");
+                Thread.Sleep(_config.BootCheckRetryIntervalMs);
+                ueInfo = _ueProject.GetUeProjectInfo();
+            }
+
+            if (string.IsNullOrEmpty(ueInfo.CommandletExePath))
+            {
+                _bootCheckResult = $"Engine path not resolved after {retries} retries - skipping boot audit (use /blueprint-audit/refresh once Rider finishes indexing)";
                 _bootCheckCompleted = true;
                 Log.Warn("InspectionHttpServer: " + _bootCheckResult);
                 return;

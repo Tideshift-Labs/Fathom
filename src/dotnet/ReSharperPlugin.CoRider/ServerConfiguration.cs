@@ -51,6 +51,17 @@ public class ServerConfiguration
         public int BootCheckDelayMs { get; set; } = 5000;
 
         /// <summary>
+        /// Max retries when engine path is not yet resolved at boot (default: 5).
+        /// Each retry re-queries the UE solution detector.
+        /// </summary>
+        public int BootCheckMaxRetries { get; set; } = 5;
+
+        /// <summary>
+        /// Delay between engine-path resolution retries at boot (default: 3000ms).
+        /// </summary>
+        public int BootCheckRetryIntervalMs { get; set; } = 3000;
+
+        /// <summary>
         /// Maximum length of process output to include in status responses (default: 2000).
         /// </summary>
         public int MaxOutputLength { get; set; } = 2000;

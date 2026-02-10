@@ -87,9 +87,13 @@ public class AssetRefProxyService
 
         try
         {
+            // Sync-over-async is safe here: callers run on thread pool threads
+            // with no SynchronizationContext, and net472 has no sync HttpClient API.
             var url = $"http://localhost:{port}/{path.TrimStart('/')}";
+#pragma warning disable VSTHRD002
             var response = _httpClient.GetAsync(url).GetAwaiter().GetResult();
             var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 
             if (!response.IsSuccessStatusCode)
             {
@@ -121,8 +125,10 @@ public class AssetRefProxyService
         try
         {
             var url = $"http://localhost:{port}/{path.TrimStart('/')}";
+#pragma warning disable VSTHRD002 // Safe: runs on thread pool thread, no SynchronizationContext
             var response = _httpClient.GetAsync(url).GetAwaiter().GetResult();
             var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
             return (body, (int)response.StatusCode);
         }
         catch (Exception ex)

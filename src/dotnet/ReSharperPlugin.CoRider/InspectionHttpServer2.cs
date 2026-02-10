@@ -102,9 +102,9 @@ namespace ReSharperPlugin.CoRider
                             }
 
                             // Handle companion plugin install requests from frontend
-                            model.InstallCompanionPlugin.Advise(lifetime, _ =>
+                            model.InstallCompanionPlugin.Advise(lifetime, unit =>
                             {
-                                Task.Run(() =>
+                                _ = Task.Run(() =>
                                 {
                                     var installResult = _companionPlugin.Install();
                                     Log.Info($"CompanionPlugin install: success={installResult.success}, {installResult.message}");
@@ -142,9 +142,9 @@ namespace ReSharperPlugin.CoRider
                             });
 
                             // Handle companion plugin build requests from frontend
-                            model.BuildCompanionPlugin.Advise(lifetime, _ =>
+                            model.BuildCompanionPlugin.Advise(lifetime, unit =>
                             {
-                                Task.Run(() =>
+                                _ = Task.Run(() =>
                                 {
                                     var ueInfo = _ueProject.GetUeProjectInfo();
                                     var buildResult = _companionPlugin.BuildEditorTarget(ueInfo);

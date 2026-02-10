@@ -11,6 +11,7 @@ using JetBrains.ReSharper.Daemon.SolutionAnalysis.InspectCode;
 using JetBrains.ReSharper.Daemon.SolutionAnalysis.Issues;
 using JetBrains.ReSharper.Feature.Services.Daemon;
 using JetBrains.ReSharper.Psi;
+using JetBrains.ReSharper.Resources.Shell;
 using ReSharperPlugin.CoRider.Models;
 using FileImages = JetBrains.ReSharper.Daemon.SolutionAnalysis.FileImages.FileImages;
 
@@ -65,30 +66,33 @@ public class InspectionService
                 try
                 {
                     var daemon = new InspectCodeDaemon(issueClasses, sourceFile, fileImages);
-                    daemon.DoHighlighting(DaemonProcessKind.OTHER, issue =>
+                    ReadLockCookie.Execute(() =>
                     {
-                        var severity = issue.GetSeverity().ToString().ToUpperInvariant();
-                        var message = issue.Message ?? "";
-                        var line = 0;
-
-                        try
+                        daemon.DoHighlighting(DaemonProcessKind.OTHER, issue =>
                         {
-                            var doc = sourceFile.Document;
-                            if (doc != null && issue.Range.HasValue)
+                            var severity = issue.GetSeverity().ToString().ToUpperInvariant();
+                            var message = issue.Message ?? "";
+                            var line = 0;
+
+                            try
                             {
-                                var offset = issue.Range.Value.StartOffset;
-                                if (offset >= 0 && offset <= doc.GetTextLength())
-                                    line = (int)new DocumentOffset(doc, offset)
-                                        .ToDocumentCoords().Line + 1;
+                                var doc = sourceFile.Document;
+                                if (doc != null && issue.Range.HasValue)
+                                {
+                                    var offset = issue.Range.Value.StartOffset;
+                                    if (offset >= 0 && offset <= doc.GetTextLength())
+                                        line = (int)new DocumentOffset(doc, offset)
+                                            .ToDocumentCoords().Line + 1;
+                                }
                             }
-                        }
-                        catch { /* ignore offset errors */ }
+                            catch { /* ignore offset errors */ }
 
-                        result.Issues.Add(new InspectionIssue
-                        {
-                            Severity = severity,
-                            Line = line,
-                            Message = message
+                            result.Issues.Add(new InspectionIssue
+                            {
+                                Severity = severity,
+                                Line = line,
+                                Message = message
+                            });
                         });
                     });
 
