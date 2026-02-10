@@ -23,6 +23,7 @@ Starts automatically on port `19876` when a solution opens.
 | `GET /inspect?file=path` | Get code inspections for specific files |
 | `GET /blueprints?class=Name` | Find Blueprints derived from a C++ or Blueprint class |
 | `/blueprint-audit/*` | Access or refresh Blueprint metadata summaries |
+| `GET /uassets?search=term` | Fuzzy search for UAssets by name (requires live UE editor) |
 | `GET /files` | List all source files in the solution |
 
 ## Getting Started

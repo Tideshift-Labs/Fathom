@@ -59,6 +59,10 @@ public class AssetSearchHandler : IRequestHandler
         if (!string.IsNullOrEmpty(limit))
             proxyPath += $"&limit={System.Uri.EscapeDataString(limit)}";
 
+        var pathPrefix = ctx.Request.QueryString["pathPrefix"];
+        if (!string.IsNullOrEmpty(pathPrefix))
+            proxyPath += $"&pathPrefix={System.Uri.EscapeDataString(pathPrefix)}";
+
         var (body, statusCode) = _proxy.ProxyGetWithStatus(proxyPath);
 
         if (body == null)

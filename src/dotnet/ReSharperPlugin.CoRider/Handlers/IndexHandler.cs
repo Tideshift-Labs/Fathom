@@ -54,7 +54,7 @@ public class IndexHandler : IRequestHandler
                     ["GET /asset-refs/dependencies?asset="] = "[UE5 only] Asset dependencies (requires live UE editor)",
                     ["GET /asset-refs/referencers?asset="] = "[UE5 only] Asset referencers (requires live UE editor)",
                     ["GET /asset-refs/status"] = "[UE5 only] UE editor connection status",
-                    ["GET /uassets?search=term"] = "[UE5 only] Fuzzy search for UAssets by name (requires live UE editor)",
+                    ["GET /uassets?search=term"] = "[UE5 only] Fuzzy search for UAssets by name. Optional: &class=WidgetBlueprint (filter by asset class), &pathPrefix=/Game (filter by package path prefix), &limit=50 (max results). Requires live UE editor.",
                     ["GET /ue-project"] = "Diagnostic: show UE project detection info"
                 },
                 isUnrealProject = _ueProject.IsUnrealProject()
