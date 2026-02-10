@@ -3,7 +3,6 @@ pluginManagement {
     repositories {
         maven { setUrl("https://cache-redirector.jetbrains.com/plugins.gradle.org") }
         maven { setUrl("https://cache-redirector.jetbrains.com/maven-central") }
-        maven { setUrl("https://cache-redirector.jetbrains.com/dl.bintray.com/kotlin/kotlin-eap") }
     }
     resolutionStrategy {
         eachPlugin {
@@ -15,6 +14,10 @@ pluginManagement {
             }
         }
     }
+}
+
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.9.0"
 }
 
 rootProject.name = "ReSharperPlugin.CoRider"

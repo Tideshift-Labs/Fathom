@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.gradlew.bat:*)",
+      "Bash(powershell -Command \"cd ''E:\\\\OtherProjects\\\\rider-resharper-extension\\\\CoRider''; .\\\\gradlew.bat wrapper\")"
+    ]
+  }
+}

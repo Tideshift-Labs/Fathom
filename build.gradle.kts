@@ -1,15 +1,22 @@
 import com.jetbrains.plugin.structure.base.utils.isFile
 import groovy.ant.FileNameFinder
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.Constants
 import java.io.ByteArrayOutputStream
+import javax.inject.Inject
 
 plugins {
     id("java")
     alias(libs.plugins.kotlinJvm)
     id("org.jetbrains.intellij.platform") version "2.11.0"     // See https://github.com/JetBrains/intellij-platform-gradle-plugin/releases
-    id("me.filippov.gradle.jvm.wrapper") version "0.14.0"
 }
+
+// Inject ExecOperations to replace deprecated Project.exec() calls (removed in Gradle 9.0)
+interface ExecOps {
+    @get:Inject val exec: ExecOperations
+}
+val execOps = objects.newInstance<ExecOps>().exec
 
 val isWindows = Os.isFamily(Os.FAMILY_WINDOWS)
 extra["isWindows"] = isWindows
@@ -35,7 +42,7 @@ repositories {
 }
 
 tasks.wrapper {
-    gradleVersion = "8.8"
+    gradleVersion = "8.13"
     distributionType = Wrapper.DistributionType.ALL
     distributionUrl = "https://cache-redirector.jetbrains.com/services.gradle.org/distributions/gradle-${gradleVersion}-all.zip"
 }
@@ -81,7 +88,7 @@ val setBuildTool by tasks.registering {
 
         if (isWindows) {
             val stdout = ByteArrayOutputStream()
-            exec {
+            execOps.exec {
                 executable("${rootDir}\\tools\\vswhere.exe")
                 args("-latest", "-property", "installationPath", "-products", "*")
                 standardOutput = stdout
@@ -111,7 +118,7 @@ val compileDotNet by tasks.registering {
         @Suppress("UNCHECKED_CAST")
         val arguments = (setBuildTool.get().extra["args"] as List<String>).toMutableList()
         arguments.add("/t:Restore;Rebuild")
-        exec {
+        execOps.exec {
             executable(executable)
             args(arguments)
             workingDir(rootDir)
@@ -121,7 +128,7 @@ val compileDotNet by tasks.registering {
 
 val testDotNet by tasks.registering {
     doLast {
-        exec {
+        execOps.exec {
             executable("dotnet")
             args("test","${DotnetSolution}","--logger","GitHubActions")
             workingDir(rootDir)
@@ -150,7 +157,7 @@ tasks.buildPlugin {
         arguments.add("/p:PackageOutputPath=${rootDir}/output")
         arguments.add("/p:PackageReleaseNotes=${changeNotes}")
         arguments.add("/p:PackageVersion=${version}")
-        exec {
+        execOps.exec {
             executable(executable)
             args(arguments)
             workingDir(rootDir)
@@ -224,7 +231,7 @@ tasks.publishPlugin {
     token.set("${PublishToken}")
 
     doLast {
-        exec {
+        execOps.exec {
             executable("dotnet")
             args("nuget","push","output/${DotnetPluginId}.${version}.nupkg","--api-key","${PublishToken}","--source","https://plugins.jetbrains.com")
             workingDir(rootDir)
