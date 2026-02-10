@@ -159,7 +159,7 @@ public class CompanionPluginService
             };
             ApplyDotnetRollForward(startInfo);
 
-            Log.Warn($"CompanionPlugin: Regenerating project files: {startInfo.FileName} {startInfo.Arguments}");
+            Log.Info($"CompanionPlugin: Regenerating project files: {startInfo.FileName} {startInfo.Arguments}");
 
             using (var process = Process.Start(startInfo))
             {
@@ -213,7 +213,7 @@ public class CompanionPluginService
             };
             ApplyDotnetRollForward(startInfo);
 
-            Log.Warn($"CompanionPlugin: Building editor target: {startInfo.FileName} {startInfo.Arguments}");
+            Log.Info($"CompanionPlugin: Building editor target: {startInfo.FileName} {startInfo.Arguments}");
 
             using (var process = Process.Start(startInfo))
             {

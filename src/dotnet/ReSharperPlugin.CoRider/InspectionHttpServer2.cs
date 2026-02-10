@@ -97,7 +97,7 @@ namespace ReSharperPlugin.CoRider
                                 model.Port.Advise(lifetime, newPort =>
                                 {
                                     if (newPort <= 0 || newPort == _currentPort) return;
-                                    Log.Warn($"InspectionHttpServer2: port changed to {newPort} via settings");
+                                    Log.Info($"InspectionHttpServer2: port changed to {newPort} via settings");
                                     StopServer();
                                     StartServer(newPort);
                                 });
@@ -184,7 +184,7 @@ namespace ReSharperPlugin.CoRider
             }
             catch (Exception ex)
             {
-                Log.Warn("InspectionHttpServer2: RD model not available (non-Rider host?): " + ex.Message);
+                Log.Info("InspectionHttpServer2: RD model not available (non-Rider host?): " + ex.Message);
             }
         }
 
@@ -222,7 +222,7 @@ namespace ReSharperPlugin.CoRider
                     _listener.Prefixes.Add($"http://localhost:{port}/");
                     _listener.Start();
                     _currentPort = port;
-                    Log.Warn($"InspectionHttpServer2: listening on http://localhost:{port}/");
+                    Log.Info($"InspectionHttpServer2: listening on http://localhost:{port}/");
 
                     _lifetime.OnTermination(() =>
                     {
@@ -268,6 +268,7 @@ namespace ReSharperPlugin.CoRider
                     _ = Task.Run(async () =>
                     {
                         await Task.Delay(_config.BootCheckDelayMs);
+                        Log.Info($"InspectionHttpServer2: Boot check task running (IsUE={_ueProject.IsUnrealProject()})");
                         if (_ueProject.IsUnrealProject())
                         {
                             _blueprintAudit.CheckAndRefreshOnBoot();
@@ -324,7 +325,7 @@ namespace ReSharperPlugin.CoRider
                 try { _listener.Stop(); } catch { }
                 try { _listener.Close(); } catch { }
                 _listener = null;
-                Log.Warn("InspectionHttpServer2: stopped");
+                Log.Info("InspectionHttpServer2: stopped");
             }
         }
 

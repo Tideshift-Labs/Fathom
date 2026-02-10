@@ -135,9 +135,11 @@ public class BlueprintAuditService
 
     public bool TriggerRefresh(UeProjectInfo ueInfo)
     {
+        Log.Info("BlueprintAudit: TriggerRefresh requested");
+
         if (string.IsNullOrEmpty(ueInfo.CommandletExePath))
         {
-            Log.Warn("InspectionHttpServer: Cannot start Blueprint audit - CommandletExePath is not resolved (engine path may still be loading)");
+            Log.Warn("BlueprintAudit: Cannot start Blueprint audit - CommandletExePath is not resolved (engine path may still be loading)");
             return false;
         }
 
@@ -152,6 +154,7 @@ public class BlueprintAuditService
         }
 
         _ = Task.Run(() => RunBlueprintAuditCommandlet(ueInfo));
+        Log.Info("BlueprintAudit: Commandlet task dispatched to background");
         return true;
     }
 
@@ -193,6 +196,8 @@ public class BlueprintAuditService
 
     public void CheckAndRefreshOnBoot()
     {
+        Log.Info($"BlueprintAudit: Boot check starting (delay={_config.BootCheckDelayMs}ms, maxRetries={_config.BootCheckMaxRetries}, retryInterval={_config.BootCheckRetryIntervalMs}ms)");
+
         try
         {
             var ueInfo = _ueProject.GetUeProjectInfo();
@@ -200,7 +205,7 @@ public class BlueprintAuditService
             {
                 _bootCheckResult = "Not an Unreal project - skipping boot check";
                 _bootCheckCompleted = true;
-                Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                Log.Info("BlueprintAudit: " + _bootCheckResult);
                 return;
             }
 
@@ -211,7 +216,7 @@ public class BlueprintAuditService
             while (string.IsNullOrEmpty(ueInfo.CommandletExePath) && retries < _config.BootCheckMaxRetries)
             {
                 retries++;
-                Log.Warn($"InspectionHttpServer: Engine path not resolved yet, retry {retries}/{_config.BootCheckMaxRetries} in {_config.BootCheckRetryIntervalMs}ms...");
+                Log.Info($"BlueprintAudit: Engine path not resolved yet, retry {retries}/{_config.BootCheckMaxRetries} in {_config.BootCheckRetryIntervalMs}ms...");
                 Thread.Sleep(_config.BootCheckRetryIntervalMs);
                 ueInfo = _ueProject.GetUeProjectInfo();
             }
@@ -220,7 +225,7 @@ public class BlueprintAuditService
             {
                 _bootCheckResult = $"Engine path not resolved after {retries} retries - skipping boot audit (use /blueprint-audit/refresh once Rider finishes indexing)";
                 _bootCheckCompleted = true;
-                Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                Log.Warn("BlueprintAudit: " + _bootCheckResult);
                 return;
             }
 
@@ -231,7 +236,7 @@ public class BlueprintAuditService
             {
                 _bootCheckResult = "Audit directory does not exist - triggering refresh";
                 _bootCheckCompleted = true;
-                Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                Log.Info("BlueprintAudit: " + _bootCheckResult);
                 TriggerRefresh(ueInfo);
                 return;
             }
@@ -250,7 +255,7 @@ public class BlueprintAuditService
             {
                 _bootCheckResult = "No audit files found - triggering refresh";
                 _bootCheckCompleted = true;
-                Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                Log.Info("BlueprintAudit: " + _bootCheckResult);
                 TriggerRefresh(ueInfo);
                 return;
             }
@@ -259,20 +264,20 @@ public class BlueprintAuditService
             {
                 _bootCheckResult = $"Found {staleCount}/{totalCount} stale blueprints - triggering refresh";
                 _bootCheckCompleted = true;
-                Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+                Log.Info("BlueprintAudit: " + _bootCheckResult);
                 TriggerRefresh(ueInfo);
                 return;
             }
 
             _bootCheckResult = $"All {totalCount} blueprints are fresh - no refresh needed";
             _bootCheckCompleted = true;
-            Log.Warn("InspectionHttpServer: " + _bootCheckResult);
+            Log.Info("BlueprintAudit: " + _bootCheckResult);
         }
         catch (Exception ex)
         {
             _bootCheckResult = "Boot check failed: " + ex.Message;
             _bootCheckCompleted = true;
-            Log.Error(ex, "InspectionHttpServer: Boot check failed");
+            Log.Error(ex, "BlueprintAudit: Boot check failed");
         }
     }
 
@@ -324,7 +329,8 @@ public class BlueprintAuditService
                 WorkingDirectory = ueInfo.ProjectDirectory
             };
 
-            Log.Warn($"InspectionHttpServer: Starting Blueprint audit: {startInfo.FileName} {startInfo.Arguments}");
+            Log.Info($"BlueprintAudit: Starting Blueprint audit: {startInfo.FileName} {startInfo.Arguments}");
+            Log.Info($"BlueprintAudit: Working directory: {startInfo.WorkingDirectory}");
 
             using (var process = Process.Start(startInfo))
             {
@@ -360,7 +366,10 @@ public class BlueprintAuditService
 
                 }
 
-                Log.Warn($"InspectionHttpServer: Blueprint audit completed. Exit code: {exitCode}, Missing: {isMissing}");
+                if (exitCode == 0)
+                    Log.Info($"BlueprintAudit: Blueprint audit completed. Exit code: {exitCode}, Missing: {isMissing}");
+                else
+                    Log.Warn($"BlueprintAudit: Blueprint audit completed. Exit code: {exitCode}, Missing: {isMissing}");
             }
         }
         catch (Exception ex)
@@ -371,7 +380,7 @@ public class BlueprintAuditService
                 _auditRefreshInProgress = false;
             }
 
-            Log.Error(ex, "InspectionHttpServer: Blueprint audit failed");
+            Log.Error(ex, "BlueprintAudit: Blueprint audit failed");
         }
     }
 
