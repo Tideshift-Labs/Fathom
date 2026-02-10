@@ -59,14 +59,14 @@ public class BlueprintInfoHandler : IRequestHandler
             try
             {
                 info.Audit = _auditService.FindAuditEntry(file);
-                if (info.Audit?.JsonFile != null)
+                if (info.Audit?.AuditFile != null)
                 {
-                    // Make the JSON file path relative to the UE project directory
+                    // Make the audit file path relative to the UE project directory
                     var ueInfo = _ueProject.GetUeProjectInfo();
                     if (!string.IsNullOrEmpty(ueInfo.ProjectDirectory) &&
-                        info.Audit.JsonFile.StartsWith(ueInfo.ProjectDirectory, StringComparison.OrdinalIgnoreCase))
+                        info.Audit.AuditFile.StartsWith(ueInfo.ProjectDirectory, StringComparison.OrdinalIgnoreCase))
                     {
-                        info.AuditJsonRelPath = info.Audit.JsonFile
+                        info.AuditRelPath = info.Audit.AuditFile
                             .Substring(ueInfo.ProjectDirectory.Length)
                             .TrimStart('\\', '/');
                     }
@@ -173,17 +173,11 @@ public class BlueprintInfoHandler : IRequestHandler
 
             // Audit section
             sb.AppendLine("## Audit Data");
-            if (info.Audit?.Data != null)
+            if (!string.IsNullOrEmpty(info.Audit?.AuditContent))
             {
-                var data = info.Audit.Data;
-                AppendDataField(sb, data, "Name");
-                AppendDataField(sb, data, "Path");
-                AppendDataField(sb, data, "ParentClass", "Parent Class");
-                AppendDataField(sb, data, "BlueprintType", "Blueprint Type");
-                AppendDataField(sb, data, "Variables");
-                AppendDataField(sb, data, "Components");
-                if (!string.IsNullOrEmpty(info.AuditJsonRelPath))
-                    sb.Append("Full Details: ").AppendLine(info.AuditJsonRelPath);
+                sb.AppendLine(info.Audit.AuditContent.TrimEnd());
+                if (!string.IsNullOrEmpty(info.AuditRelPath))
+                    sb.Append("Full Details: ").AppendLine(info.AuditRelPath);
             }
             else
             {
@@ -199,15 +193,6 @@ public class BlueprintInfoHandler : IRequestHandler
         }
 
         return sb.ToString();
-    }
-
-    private static void AppendDataField(StringBuilder sb, Dictionary<string, object> data,
-        string key, string displayName = null)
-    {
-        if (data.TryGetValue(key, out var value) && value != null)
-        {
-            sb.Append(displayName ?? key).Append(": ").AppendLine(value.ToString());
-        }
     }
 
     private static void FormatRefSection(StringBuilder sb, string title,
@@ -255,7 +240,7 @@ public class BlueprintInfoHandler : IRequestHandler
     {
         public string PackagePath { get; set; }
         public BlueprintAuditEntry Audit { get; set; }
-        public string AuditJsonRelPath { get; set; }
+        public string AuditRelPath { get; set; }
         public List<AssetRefEntry> Dependencies { get; set; }
         public List<AssetRefEntry> Referencers { get; set; }
         public bool EditorAvailable { get; set; }

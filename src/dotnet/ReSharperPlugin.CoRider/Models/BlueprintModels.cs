@@ -46,9 +46,9 @@ public class BlueprintClassInfo
         public string Path { get; set; }
 
         /// <summary>
-        /// Full path to the audit JSON file.
+        /// Full path to the audit .md file.
         /// </summary>
-        public string JsonFile { get; set; }
+        public string AuditFile { get; set; }
 
         /// <summary>
         /// MD5 hash of the .uasset file when the audit was generated.
@@ -76,9 +76,14 @@ public class BlueprintClassInfo
         public string Error { get; set; }
 
         /// <summary>
-        /// Full parsed JSON data from the audit file.
+        /// Header fields parsed from the audit file (Name, Path, ParentClass, BlueprintType).
         /// </summary>
         public Dictionary<string, object> Data { get; set; }
+
+        /// <summary>
+        /// Raw markdown content of the audit file.
+        /// </summary>
+        public string AuditContent { get; set; }
     }
 
     /// <summary>

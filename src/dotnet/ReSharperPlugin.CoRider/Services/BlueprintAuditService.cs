@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Util;
@@ -17,9 +16,9 @@ public class BlueprintAuditService
 {
     /// <summary>
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
-    /// Bump both together when the JSON schema changes.
+    /// Bump both together when the audit format changes.
     /// </summary>
-    private const int AuditSchemaVersion = 3;
+    private const int AuditSchemaVersion = 4;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 
@@ -84,7 +83,7 @@ public class BlueprintAuditService
         var staleCount = 0;
         var errorCount = 0;
 
-        foreach (var jsonFile in Directory.GetFiles(auditDir, "*.json", SearchOption.AllDirectories))
+        foreach (var jsonFile in Directory.GetFiles(auditDir, "*.md", SearchOption.AllDirectories))
         {
             var entry = ReadAndCheckBlueprintAudit(jsonFile, uprojectDir);
             blueprints.Add(entry);
@@ -240,7 +239,7 @@ public class BlueprintAuditService
             var staleCount = 0;
             var totalCount = 0;
 
-            foreach (var jsonFile in Directory.GetFiles(auditDir, "*.json", SearchOption.AllDirectories))
+            foreach (var jsonFile in Directory.GetFiles(auditDir, "*.md", SearchOption.AllDirectories))
             {
                 totalCount++;
                 var entry = ReadAndCheckBlueprintAudit(jsonFile, uprojectDir);
@@ -293,7 +292,7 @@ public class BlueprintAuditService
         // Normalize input: strip ".ObjectName" suffix if caller passed a full object path
         var normalizedInput = StripObjectName(packagePath);
 
-        foreach (var jsonFile in Directory.GetFiles(auditDir, "*.json", SearchOption.AllDirectories))
+        foreach (var jsonFile in Directory.GetFiles(auditDir, "*.md", SearchOption.AllDirectories))
         {
             var entry = ReadAndCheckBlueprintAudit(jsonFile, uprojectDir);
             var entryPackagePath = StripObjectName(entry.Path);
@@ -391,18 +390,19 @@ public class BlueprintAuditService
                (lower.Contains("blueprintaudit") && lower.Contains("not recognized"));
     }
 
-    private static BlueprintAuditEntry ReadAndCheckBlueprintAudit(string jsonFile, string uprojectDir)
+    private static BlueprintAuditEntry ReadAndCheckBlueprintAudit(string auditFile, string uprojectDir)
     {
-        var entry = new BlueprintAuditEntry { JsonFile = jsonFile };
+        var entry = new BlueprintAuditEntry { AuditFile = auditFile };
 
         try
         {
-            var jsonContent = File.ReadAllText(jsonFile);
-            entry.Data = ParseSimpleJson(jsonContent);
+            var content = File.ReadAllText(auditFile);
+            entry.AuditContent = content;
+            entry.Data = ParseAuditHeader(content);
 
             entry.Name = entry.Data.TryGetValue("Name", out var name) ? name?.ToString() : null;
             entry.Path = entry.Data.TryGetValue("Path", out var path) ? path?.ToString() : null;
-            entry.SourceFileHash = entry.Data.TryGetValue("SourceFileHash", out var hash) ? hash?.ToString() : null;
+            entry.SourceFileHash = entry.Data.TryGetValue("Hash", out var hash) ? hash?.ToString() : null;
 
             if (!string.IsNullOrEmpty(entry.Path))
             {
@@ -422,7 +422,7 @@ public class BlueprintAuditService
             else if (string.IsNullOrEmpty(entry.SourceFileHash))
             {
                 entry.IsStale = true;
-                entry.Error = "No SourceFileHash in audit file";
+                entry.Error = "No Hash in audit file";
             }
         }
         catch (Exception ex)
@@ -486,30 +486,44 @@ public class BlueprintAuditService
         }
     }
 
-    private static Dictionary<string, object> ParseSimpleJson(string json)
+    /// <summary>
+    /// Parses the header lines from a markdown audit file.
+    /// Extracts Name (from the H1 heading), Path, Parent, Type, and Hash.
+    /// </summary>
+    private static Dictionary<string, object> ParseAuditHeader(string content)
     {
         var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-        var stringPattern = new Regex(@"""(\w+)""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""");
-        var numberPattern = new Regex(@"""(\w+)""\s*:\s*(-?\d+(?:\.\d+)?)");
-        var boolPattern = new Regex(@"""(\w+)""\s*:\s*(true|false)");
-
-        foreach (Match m in stringPattern.Matches(json))
+        using var reader = new StringReader(content);
+        string line;
+        while ((line = reader.ReadLine()) != null)
         {
-            if (!result.ContainsKey(m.Groups[1].Value))
-                result[m.Groups[1].Value] = m.Groups[2].Value;
-        }
+            // Stop at the first section heading (## ...)
+            if (line.StartsWith("## "))
+                break;
 
-        foreach (Match m in numberPattern.Matches(json))
-        {
-            if (!result.ContainsKey(m.Groups[1].Value))
-                result[m.Groups[1].Value] = double.Parse(m.Groups[2].Value);
-        }
+            // H1 heading: "# BlueprintName"
+            if (line.StartsWith("# ") && !result.ContainsKey("Name"))
+            {
+                result["Name"] = line.Substring(2).Trim();
+                continue;
+            }
 
-        foreach (Match m in boolPattern.Matches(json))
-        {
-            if (!result.ContainsKey(m.Groups[1].Value))
-                result[m.Groups[1].Value] = m.Groups[2].Value == "true";
+            // Key: Value lines
+            var colonIndex = line.IndexOf(": ", StringComparison.Ordinal);
+            if (colonIndex > 0)
+            {
+                var key = line.Substring(0, colonIndex).Trim();
+                var value = line.Substring(colonIndex + 2).Trim();
+
+                // Map "Parent" to "ParentClass" for backward compat with Data dict consumers
+                if (key == "Parent")
+                    result["ParentClass"] = value;
+                else if (key == "Type")
+                    result["BlueprintType"] = value;
+                else
+                    result[key] = value;
+            }
         }
 
         return result;

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using JetBrains.ReSharper.Psi;
+using JetBrains.ReSharper.Resources.Shell;
 using ReSharperPlugin.CoRider.Models;
 
 namespace ReSharperPlugin.CoRider.Services;
@@ -44,19 +45,23 @@ public class PsiSyncService
             attempts++;
             try
             {
-                var doc = sourceFile.Document;
-                if (doc != null)
+                // PSI document access requires a reader lock
+                var matched = ReadLockCookie.Execute(() =>
                 {
+                    var doc = sourceFile.Document;
+                    if (doc == null) return false;
                     var docContent = NormalizeLineEndings(doc.GetText());
-                    if (docContent == diskContent)
+                    return docContent == diskContent;
+                });
+
+                if (matched)
+                {
+                    return new PsiSyncResult
                     {
-                        return new PsiSyncResult
-                        {
-                            Status = attempts == 1 ? "synced" : "synced_after_wait",
-                            WaitedMs = (int)sw.ElapsedMilliseconds,
-                            Attempts = attempts
-                        };
-                    }
+                        Status = attempts == 1 ? "synced" : "synced_after_wait",
+                        WaitedMs = (int)sw.ElapsedMilliseconds,
+                        Attempts = attempts
+                    };
                 }
             }
             catch
