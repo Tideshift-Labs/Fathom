@@ -65,9 +65,9 @@ public class InspectionService
 
                 try
                 {
-                    var daemon = new InspectCodeDaemon(issueClasses, sourceFile, fileImages);
                     ReadLockCookie.Execute(() =>
                     {
+                        var daemon = new InspectCodeDaemon(issueClasses, sourceFile, fileImages);
                         daemon.DoHighlighting(DaemonProcessKind.OTHER, issue =>
                         {
                             var severity = issue.GetSeverity().ToString().ToUpperInvariant();
