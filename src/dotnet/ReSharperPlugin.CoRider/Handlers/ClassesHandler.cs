@@ -22,7 +22,9 @@ public class ClassesHandler : IRequestHandler
     public void Handle(HttpListenerContext ctx)
     {
         var format = HttpHelpers.GetFormat(ctx);
-        var classes = _classIndex.BuildClassIndex();
+        var search = ctx.Request.QueryString["search"];
+        var baseClass = ctx.Request.QueryString["base"];
+        var classes = _classIndex.BuildClassIndex(search, baseClass);
 
         if (format == "json")
         {

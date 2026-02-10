@@ -1,8 +1,10 @@
 package com.jetbrains.rider.plugins.corider
 
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.invokeLater
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -177,6 +179,15 @@ class CoRiderStatusBarWidget(private val project: Project) : StatusBarWidget, St
                 invokeLater {
                     FileEditorManager.getInstance(project).openFile(virtualFile, true)
                 }
+            }
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+        })
+
+        // Open in Browser action
+        group.add(object : DumbAwareAction("Open in Browser") {
+            override fun actionPerformed(e: AnActionEvent) {
+                val port = service<CoRiderSettings>().state.port
+                BrowserUtil.browse("http://localhost:$port/")
             }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
         })

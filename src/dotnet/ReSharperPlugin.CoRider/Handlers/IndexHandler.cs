@@ -45,7 +45,7 @@ public class IndexHandler : IRequestHandler
                     ["GET /"] = "This help message",
                     ["GET /health"] = "Server and solution status",
                     ["GET /files"] = "List all user source files under solution directory",
-                    ["GET /classes"] = "List game C++ classes grouped by header/source pair. Default markdown; add &format=json for JSON.",
+                    ["GET /classes"] = "List game C++ classes grouped by header/source pair. Optional: &search=term (name substring), &base=ACharacter (filter by base class). Default markdown; add &format=json for JSON.",
                     ["GET /inspect?file=path"] = "Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.",
                     ["GET /describe_code?file=path"] = "Structural description of source file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.",
                     ["GET /blueprints?class=ClassName"] = "[UE5 only] List Blueprint classes deriving from a C++ class. Add &format=json for JSON.",
@@ -55,7 +55,7 @@ public class IndexHandler : IRequestHandler
                     ["GET /asset-refs/dependencies?asset="] = "[UE5 only] Asset dependencies (requires live UE editor)",
                     ["GET /asset-refs/referencers?asset="] = "[UE5 only] Asset referencers (requires live UE editor)",
                     ["GET /asset-refs/status"] = "[UE5 only] UE editor connection status",
-                    ["GET /uassets?search=term"] = "[UE5 only] Fuzzy search for UAssets by name. Optional: &class=WidgetBlueprint (filter by asset class), &pathPrefix=/Game (filter by package path prefix), &limit=50 (max results). Requires live UE editor.",
+                    ["GET /uassets?search=term"] = "[UE5 only] Fuzzy search for UAssets by name (space-separated tokens, all must match). Optional: &class=WidgetBlueprint (filter by asset class), &pathPrefix=/Game (default; use &pathPrefix= to search all), &limit=50 (max results). Requires live UE editor.",
                     ["GET /ue-project"] = "Diagnostic: show UE project detection info"
                 },
                 isUnrealProject = _ueProject.IsUnrealProject()

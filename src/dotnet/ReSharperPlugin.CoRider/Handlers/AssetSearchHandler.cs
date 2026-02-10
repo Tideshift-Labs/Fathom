@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -10,11 +11,13 @@ public class AssetSearchHandler : IRequestHandler
 {
     private readonly UeProjectService _ueProject;
     private readonly AssetRefProxyService _proxy;
+    private readonly ServerConfiguration _config;
 
-    public AssetSearchHandler(UeProjectService ueProject, AssetRefProxyService proxy)
+    public AssetSearchHandler(UeProjectService ueProject, AssetRefProxyService proxy, ServerConfiguration config)
     {
         _ueProject = ueProject;
         _proxy = proxy;
+        _config = config;
     }
 
     public bool CanHandle(string path) => path == "/uassets";
@@ -59,7 +62,10 @@ public class AssetSearchHandler : IRequestHandler
         if (!string.IsNullOrEmpty(limit))
             proxyPath += $"&limit={System.Uri.EscapeDataString(limit)}";
 
+        // Default to /Game (project assets only). Callers can opt out with &pathPrefix= or &pathPrefix=/
         var pathPrefix = ctx.Request.QueryString["pathPrefix"];
+        if (pathPrefix == null)
+            pathPrefix = "/Game";
         if (!string.IsNullOrEmpty(pathPrefix))
             proxyPath += $"&pathPrefix={System.Uri.EscapeDataString(pathPrefix)}";
 
@@ -75,7 +81,7 @@ public class AssetSearchHandler : IRequestHandler
 
         if (format == "md")
         {
-            var mdBody = FormatAsMarkdown(body, search);
+            var mdBody = FormatAsMarkdown(body, search, _config.Port);
             HttpHelpers.Respond(ctx, statusCode, "text/markdown; charset=utf-8", mdBody);
         }
         else
@@ -84,7 +90,7 @@ public class AssetSearchHandler : IRequestHandler
         }
     }
 
-    private static string FormatAsMarkdown(string jsonBody, string query)
+    private static string FormatAsMarkdown(string jsonBody, string query, int port)
     {
         var sb = new StringBuilder();
 
@@ -96,38 +102,48 @@ public class AssetSearchHandler : IRequestHandler
             if (root.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
             {
                 var count = results.GetArrayLength();
-                sb.AppendLine($"# Asset Search: \"{query}\" ({count} {(count == 1 ? "result" : "results")})");
-                sb.AppendLine();
-
                 if (count == 0)
                 {
-                    sb.AppendLine("No assets found.");
+                    sb.AppendLine($"No assets found for \"{query}\".");
+                    return sb.ToString();
                 }
-                else
-                {
-                    sb.AppendLine("| Name | Package | Class |");
-                    sb.AppendLine("|------|---------|-------|");
 
-                    foreach (var item in results.EnumerateArray())
+                sb.AppendLine($"{count} {(count == 1 ? "result" : "results")} for \"{query}\"");
+                sb.AppendLine();
+
+                foreach (var item in results.EnumerateArray())
+                {
+                    var name = item.TryGetProperty("name", out var n) ? n.GetString() : "?";
+                    var pkg = item.TryGetProperty("package", out var p) ? p.GetString() : "?";
+                    var cls = item.TryGetProperty("assetClass", out var c) ? c.GetString() : "?";
+
+                    sb.Append("# ").Append(name).Append(" (").Append(cls).AppendLine(")");
+                    sb.Append("package: ").AppendLine(pkg);
+                    sb.AppendLine();
+
+                    var escapedPkg = Uri.EscapeDataString(pkg);
+                    sb.Append("[dependencies](http://localhost:").Append(port)
+                        .Append("/asset-refs/dependencies?asset=").Append(escapedPkg).AppendLine(")");
+                    sb.Append("[referencers](http://localhost:").Append(port)
+                        .Append("/asset-refs/referencers?asset=").Append(escapedPkg).AppendLine(")");
+
+                    // Blueprint assets get a link to the detailed audit view
+                    if (cls != null && cls.Contains("Blueprint"))
                     {
-                        var name = item.TryGetProperty("name", out var n) ? n.GetString() : "?";
-                        var pkg = item.TryGetProperty("package", out var p) ? p.GetString() : "?";
-                        var cls = item.TryGetProperty("assetClass", out var c) ? c.GetString() : "?";
-                        sb.AppendLine($"| {name} | {pkg} | {cls} |");
+                        sb.Append("[blueprint-info](http://localhost:").Append(port)
+                            .Append("/bp?file=").Append(escapedPkg).AppendLine(")");
                     }
+
+                    sb.AppendLine();
                 }
             }
             else
             {
-                sb.AppendLine($"# Asset Search: \"{query}\"");
-                sb.AppendLine();
                 sb.AppendLine("(unexpected response format)");
             }
         }
         catch
         {
-            sb.AppendLine($"# Asset Search: \"{query}\"");
-            sb.AppendLine();
             sb.AppendLine("(failed to parse response)");
             sb.AppendLine();
             sb.AppendLine("```json");

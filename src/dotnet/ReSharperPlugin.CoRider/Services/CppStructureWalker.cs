@@ -120,6 +120,9 @@ public static class CppStructureWalker
             // Skip parameter declarators (nested inside another Declarator)
             if (IsParameterDeclarator(node)) continue;
 
+            // Skip local variables (nested inside a compound statement / function body)
+            if (IsLocalDeclarator(node)) continue;
+
             var containingClassNode = FindAncestorByTypeName(node, "ClassSpecifier");
 
             if (containingClassNode != null &&
@@ -200,6 +203,31 @@ public static class CppStructureWalker
             if (name == "ClassSpecifier" || name == "CppFile" || name == "TranslationUnit")
                 return false;
             if (name == "Declarator" || name == "InitDeclarator")
+                return true;
+            parent = parent.Parent;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// A Declarator is local if it is nested inside a compound statement (function body,
+    /// loop, lambda, or block scope). Top-level function/global declarations never have
+    /// a compound statement ancestor.
+    /// </summary>
+    private static bool IsLocalDeclarator(ITreeNode node)
+    {
+        var parent = node.Parent;
+        while (parent != null)
+        {
+            var name = parent.GetType().Name;
+            if (name == "CppFile" || name == "TranslationUnit")
+                return false;
+            if (name is "CompoundStatement" or "CppChameleonCompoundStatement")
+                return true;
+            // Range-based for and if-init declarators sit directly under their
+            // statement node, outside any CompoundStatement, but are still local.
+            if (name is "RangeBasedForStatement" or "ForStatement"
+                or "IfStatement" or "LambdaDeclarator")
                 return true;
             parent = parent.Parent;
         }

@@ -28,7 +28,12 @@ public class ClassIndexService
         _codeStructure = codeStructure;
     }
 
-    public List<ClassEntry> BuildClassIndex()
+    /// <summary>
+    /// Build a list of game C++ classes from headers under Source/ (excluding Plugins/).
+    /// </summary>
+    /// <param name="search">Optional case-insensitive substring filter on class name.</param>
+    /// <param name="baseClass">Optional exact match filter on base class name.</param>
+    public List<ClassEntry> BuildClassIndex(string search = null, string baseClass = null)
     {
         var solutionDir = _solution.SolutionDirectory;
         var fileIndex = _fileIndex.BuildFileIndex();
@@ -68,6 +73,8 @@ public class ClassIndexService
         }
 
         // Step 2: For each group with a header, extract class info
+        var hasSearch = !string.IsNullOrEmpty(search);
+        var hasBase = !string.IsNullOrEmpty(baseClass);
         var classes = new List<ClassEntry>();
 
         foreach (var kvp in stemGroups)
@@ -84,6 +91,14 @@ public class ClassIndexService
             {
                 if (type.Kind != "class") continue;
                 if (string.IsNullOrEmpty(type.Name)) continue;
+
+                if (hasSearch &&
+                    type.Name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                if (hasBase &&
+                    !string.Equals(type.BaseType, baseClass, StringComparison.OrdinalIgnoreCase))
+                    continue;
 
                 classes.Add(new ClassEntry
                 {
