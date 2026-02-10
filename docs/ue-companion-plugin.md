@@ -23,9 +23,9 @@ Given a `UBlueprint*`, produces a JSON object containing:
 | Interfaces | Implemented Blueprint interfaces |
 | Components | Actor component hierarchy from `SimpleConstructionScript` |
 | Widget tree | Recursive widget hierarchy (for Widget Blueprints) |
-| Event graphs | Events, function calls (with target class), variable reads/writes, macro instances, graph topology (nodes, exec flows, data flows) |
-| Function graphs | Same detail as event graphs |
-| Macro graphs | Full graph data (same as event/function graphs, including topology) |
+| Event graphs | Full graph topology: typed node list, execution flow edges, data dependency edges |
+| Function graphs | Same as event graphs, plus function signature (input/output parameter names and types) |
+| Macro graphs | Same as function graphs |
 
 ### Three execution modes
 
