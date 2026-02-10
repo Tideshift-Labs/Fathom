@@ -45,6 +45,7 @@ public class IndexHandler : IRequestHandler
                     ["GET /"] = "This help message",
                     ["GET /health"] = "Server and solution status",
                     ["GET /files"] = "List all user source files under solution directory",
+                    ["GET /classes"] = "List game C++ classes grouped by header/source pair. Default markdown; add &format=json for JSON.",
                     ["GET /inspect?file=path"] = "Run code inspection on file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.",
                     ["GET /describe_code?file=path"] = "Structural description of source file(s). Multiple: &file=a&file=b. Default output is markdown; add &format=json for JSON. Add &debug=true for diagnostics.",
                     ["GET /blueprints?class=ClassName"] = "[UE5 only] List Blueprint classes deriving from a C++ class. Add &format=json for JSON.",

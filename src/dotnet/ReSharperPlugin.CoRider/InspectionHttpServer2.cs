@@ -42,6 +42,7 @@ namespace ReSharperPlugin.CoRider
         private readonly BlueprintAuditService _blueprintAudit;
         private readonly AssetRefProxyService _assetRefProxy;
         private readonly CodeStructureService _codeStructure;
+        private readonly ClassIndexService _classIndex;
         private readonly CompanionPluginService _companionPlugin;
         private readonly ServerConfiguration _config;
 
@@ -61,6 +62,7 @@ namespace ReSharperPlugin.CoRider
             _blueprintAudit = new BlueprintAuditService(_ueProject, _config);
             _assetRefProxy = new AssetRefProxyService(_ueProject);
             _codeStructure = new CodeStructureService(solution);
+            _classIndex = new ClassIndexService(solution, _fileIndex, _codeStructure);
             _companionPlugin = new CompanionPluginService(solution, _config, _ueProject);
 
             // Check for env var override (takes absolute priority)
@@ -204,6 +206,7 @@ namespace ReSharperPlugin.CoRider
                     {
                         new IndexHandler(_solution, _config, _ueProject),
                         new FilesHandler(_solution, _fileIndex),
+                        new ClassesHandler(_classIndex, _config),
                         new InspectHandler(_solution, _fileIndex, _inspection),
                         new DescribeCodeHandler(_solution, _fileIndex, _codeStructure),
                         new BlueprintsHandler(_solution, _reflection, _blueprintQuery, _config),
