@@ -18,7 +18,7 @@ public static class DescribeCodeMarkdownFormatter
 
             if (file.Error != null)
             {
-                sb.Append("**Error:** ").AppendLine(file.Error);
+                sb.Append("Error: ").AppendLine(file.Error);
                 sb.AppendLine();
                 continue;
             }
@@ -32,7 +32,7 @@ public static class DescribeCodeMarkdownFormatter
                 sb.AppendLine();
                 sb.AppendLine("### Includes");
                 foreach (var inc in file.Includes)
-                    sb.Append("- `").Append(inc).AppendLine("`");
+                    sb.Append("- ").AppendLine(inc);
             }
 
             // Namespaces
@@ -125,13 +125,19 @@ public static class DescribeCodeMarkdownFormatter
         if (type.Line != null)
             sb.Append(" (line ").Append(type.Line).Append(')');
 
+        if (type.Annotations != null && type.Annotations.Count > 0)
+        {
+            foreach (var ann in type.Annotations)
+                sb.Append("    [").Append(ann).Append(']');
+        }
+
         sb.AppendLine();
 
         // Inheritance
         if (type.BaseType != null)
-            sb.Append("Extends: `").Append(type.BaseType).AppendLine("`");
+            sb.Append("Extends: ").AppendLine(type.BaseType);
         if (type.Interfaces != null && type.Interfaces.Count > 0)
-            sb.Append("Implements: ").AppendLine(string.Join(", ", WrapBackticks(type.Interfaces)));
+            sb.Append("Implements: ").AppendLine(string.Join(", ", type.Interfaces));
 
         // Members
         if (type.Members != null && type.Members.Count > 0)
@@ -167,12 +173,12 @@ public static class DescribeCodeMarkdownFormatter
 
         // Return type / field type
         if (member.ReturnType != null)
-            sb.Append('`').Append(member.ReturnType).Append("` ");
+            sb.Append(member.ReturnType).Append(' ');
         else if (member.Type != null && member.Kind != "property")
-            sb.Append('`').Append(member.Type).Append("` ");
+            sb.Append(member.Type).Append(' ');
 
         // Name
-        sb.Append("**").Append(member.Name).Append("**");
+        sb.Append(member.Name);
 
         // Parameters (for methods, constructors, functions)
         if (member.Parameters != null)
@@ -198,7 +204,7 @@ public static class DescribeCodeMarkdownFormatter
         // Property type + accessors
         if (member.Kind == "property" && member.Type != null)
         {
-            sb.Append(" : `").Append(member.Type).Append('`');
+            sb.Append(" : ").Append(member.Type);
             if (member.HasGetter == true || member.HasSetter == true)
             {
                 sb.Append(" {");
@@ -214,12 +220,12 @@ public static class DescribeCodeMarkdownFormatter
             sb.Append(", line ").Append(member.Line);
         sb.Append("]*");
 
-        sb.AppendLine();
-    }
+        if (member.Annotations != null && member.Annotations.Count > 0)
+        {
+            foreach (var ann in member.Annotations)
+                sb.Append("  [").Append(ann).Append(']');
+        }
 
-    private static IEnumerable<string> WrapBackticks(List<string> items)
-    {
-        foreach (var item in items)
-            yield return "`" + item + "`";
+        sb.AppendLine();
     }
 }

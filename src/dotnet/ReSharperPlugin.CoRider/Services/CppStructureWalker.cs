@@ -89,6 +89,7 @@ public static class CppStructureWalker
 
             TryExtractBaseTypes(node, typeInfo);
             TryExtractAccess(node, element, typeInfo);
+            typeInfo.Annotations = TryExtractUeAnnotations(node);
 
             typeNodeMap[node] = typeInfo;
 
@@ -140,6 +141,14 @@ public static class CppStructureWalker
                 var memberInfo = BuildMemberInfo(node, element, null, sourceFile);
                 if (memberInfo.Kind == "method")
                     memberInfo.Kind = "function";
+
+                // Qualify out-of-line method definitions (e.g. OnPossess -> AFEPlayerController::OnPossess)
+                var containingTypeName = TryGetContainingTypeName(node, element);
+                if (containingTypeName != null)
+                {
+                    memberInfo.ContainingType = containingTypeName;
+                    memberInfo.Name = containingTypeName + "::" + element.ShortName;
+                }
 
                 var funcNs = GetNamespaceQualifiedName(element);
                 if (!string.IsNullOrEmpty(funcNs))
@@ -349,17 +358,18 @@ public static class CppStructureWalker
             else
                 info.Kind = "method";
 
-            TryExtractReturnType(element, info);
+            TryExtractReturnType(element, node, info);
             ExtractParametersFromTree(node, sourceFile, info);
         }
         else
         {
             info.Kind = "field";
-            TryExtractFieldType(element, info);
+            TryExtractFieldType(element, node, info);
         }
 
         TryExtractAccess(node, element, info);
         TryExtractModifiers(element, info);
+        info.Annotations = TryExtractUeAnnotations(node);
 
         return info;
     }
@@ -400,7 +410,7 @@ public static class CppStructureWalker
                 Name = paramElement.ShortName,
             };
 
-            TryExtractParamType(paramElement, paramInfo);
+            TryExtractParamType(paramElement, child, paramInfo);
 
             // Check for default value (InitDeclarator typically has an initializer)
             if (childTypeName == "InitDeclarator")
@@ -417,6 +427,7 @@ public static class CppStructureWalker
 
     /// <summary>
     /// Get a presentable type string from ICppTypedDeclaredElement.Type via reflection.
+    /// Tries multiple strategies: GetPresentableName, GetLongPresentableText, ToString.
     /// </summary>
     private static string GetTypePresentation(IDeclaredElement element)
     {
@@ -429,8 +440,11 @@ public static class CppStructureWalker
             var typeObj = typeProp.GetValue(element);
             if (typeObj == null) return null;
 
-            // Try GetPresentableName with a single parameter (PsiLanguageType)
-            foreach (var method in typeObj.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            var typeObjType = typeObj.GetType();
+            var methods = typeObjType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+
+            // Strategy 1: GetPresentableName with a single parameter (PsiLanguageType)
+            foreach (var method in methods)
             {
                 if (method.Name != "GetPresentableName") continue;
                 var parms = method.GetParameters();
@@ -442,7 +456,33 @@ public static class CppStructureWalker
                 }
             }
 
-            // Fallback: ToString
+            // Strategy 2: GetLongPresentableText (no parameters)
+            foreach (var method in methods)
+            {
+                if (method.Name != "GetLongPresentableText") continue;
+                var parms = method.GetParameters();
+                if (parms.Length == 0)
+                {
+                    var result = method.Invoke(typeObj, null)?.ToString();
+                    if (!string.IsNullOrEmpty(result))
+                        return result;
+                }
+            }
+
+            // Strategy 3: GetPresentableName with no parameters
+            foreach (var method in methods)
+            {
+                if (method.Name != "GetPresentableName") continue;
+                var parms = method.GetParameters();
+                if (parms.Length == 0)
+                {
+                    var result = method.Invoke(typeObj, null)?.ToString();
+                    if (!string.IsNullOrEmpty(result))
+                        return result;
+                }
+            }
+
+            // Strategy 4: ToString
             var str = typeObj.ToString();
             return string.IsNullOrEmpty(str) ? null : str;
         }
@@ -452,25 +492,328 @@ public static class CppStructureWalker
         }
     }
 
-    private static void TryExtractReturnType(IDeclaredElement element, MemberInfo info)
+    private static void TryExtractReturnType(IDeclaredElement element, ITreeNode node,
+        MemberInfo info)
     {
         var typeStr = GetTypePresentation(element);
         if (typeStr != null)
+        {
             info.ReturnType = typeStr;
+            return;
+        }
+
+        // Text-based fallback: extract return type from declaration text
+        var textType = ExtractTypeFromDeclarationText(node);
+        if (textType != null)
+            info.ReturnType = textType;
     }
 
-    private static void TryExtractFieldType(IDeclaredElement element, MemberInfo info)
+    private static void TryExtractFieldType(IDeclaredElement element, ITreeNode node,
+        MemberInfo info)
     {
         var typeStr = GetTypePresentation(element);
         if (typeStr != null)
+        {
             info.Type = typeStr;
+            return;
+        }
+
+        var textType = ExtractTypeFromDeclarationText(node);
+        if (textType != null)
+            info.Type = textType;
     }
 
-    private static void TryExtractParamType(IDeclaredElement element, Models.ParameterInfo info)
+    private static void TryExtractParamType(IDeclaredElement element, ITreeNode paramNode,
+        Models.ParameterInfo info)
     {
         var typeStr = GetTypePresentation(element);
         if (typeStr != null)
+        {
             info.Type = typeStr;
+            return;
+        }
+
+        var textType = ExtractTypeFromDeclarationText(paramNode);
+        if (textType != null)
+            info.Type = textType;
+    }
+
+    // ── Helpers: text-based type extraction ──────────────────────────────
+
+    private static readonly HashSet<string> CppStorageSpecifiers = new(StringComparer.Ordinal)
+    {
+        "static", "virtual", "inline", "explicit", "constexpr", "consteval", "constinit",
+        "extern", "mutable", "friend", "register", "thread_local",
+        "FORCEINLINE"
+    };
+
+    /// <summary>
+    /// Extract the type from the declaration text preceding a declarator node.
+    /// For "virtual void OnPossess(...)" where the declarator is "OnPossess(...)",
+    /// this returns "void" after stripping storage-class specifiers.
+    /// </summary>
+    private static string ExtractTypeFromDeclarationText(ITreeNode declaratorNode)
+    {
+        try
+        {
+            var parent = declaratorNode.Parent;
+            if (parent == null) return null;
+
+            var parentText = parent.GetText();
+            if (parentText == null) return null;
+
+            // Use tree offsets to find the text preceding the declarator within its parent
+            var nodeOffset = declaratorNode.GetTreeStartOffset().Offset
+                             - parent.GetTreeStartOffset().Offset;
+            if (nodeOffset > 0 && nodeOffset <= parentText.Length)
+            {
+                var precedingText = parentText.Substring(0, nodeOffset);
+                var cleaned = CleanTypeString(precedingText);
+                if (cleaned != null)
+                {
+                    // If the declarator text starts with pointer/reference operators,
+                    // they belong to the type (C++ grammar puts * and & on the declarator)
+                    var declText = declaratorNode.GetText();
+                    if (declText != null)
+                    {
+                        var prefix = "";
+                        for (var i = 0; i < declText.Length; i++)
+                        {
+                            if (declText[i] == '*' || declText[i] == '&')
+                                prefix += declText[i];
+                            else if (declText[i] != ' ')
+                                break;
+                        }
+
+                        if (prefix.Length > 0 && !cleaned.EndsWith("*") && !cleaned.EndsWith("&"))
+                            cleaned += prefix;
+                    }
+
+                    return cleaned;
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Clean a raw type string by stripping C++ storage-class specifiers, API export macros,
+    /// and extraneous whitespace.
+    /// </summary>
+    private static string CleanTypeString(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        var result = raw.Trim().TrimEnd(';').Trim();
+
+        // Strip leading storage-class specifiers, API macros, and UE macro invocations
+        while (true)
+        {
+            var changed = false;
+            foreach (var spec in CppStorageSpecifiers)
+            {
+                if (!result.StartsWith(spec)) continue;
+                if (result.Length > spec.Length && !char.IsWhiteSpace(result[spec.Length])) continue;
+                result = result.Length == spec.Length ? "" : result.Substring(spec.Length).TrimStart();
+                changed = true;
+                break;
+            }
+
+            // Strip API export macros (all-uppercase ending in _API, e.g. UDEMY_CUI_API)
+            if (!changed && result.Length > 4)
+            {
+                var spaceIdx = result.IndexOf(' ');
+                if (spaceIdx > 0)
+                {
+                    var token = result.Substring(0, spaceIdx);
+                    if (token.EndsWith("_API") && token == token.ToUpperInvariant())
+                    {
+                        result = result.Substring(spaceIdx).TrimStart();
+                        changed = true;
+                    }
+                }
+            }
+
+            // Strip UE macro invocations (UPROPERTY(...), UFUNCTION(...), etc.)
+            // These leak into the type text when preceding a field/method declaration.
+            if (!changed)
+            {
+                foreach (var macroName in UeMacroNames)
+                {
+                    if (!result.StartsWith(macroName + "(")) continue;
+                    var depth = 0;
+                    for (var i = macroName.Length; i < result.Length; i++)
+                    {
+                        if (result[i] == '(') depth++;
+                        else if (result[i] == ')')
+                        {
+                            depth--;
+                            if (depth == 0)
+                            {
+                                result = result.Substring(i + 1).TrimStart();
+                                changed = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (changed) break;
+                }
+            }
+
+            if (!changed) break;
+        }
+
+        return string.IsNullOrWhiteSpace(result) ? null : result;
+    }
+
+    // ── Helpers: UE macro annotations ──────────────────────────────────
+
+    private static readonly string[] UeMacroNames =
+    {
+        "UCLASS", "USTRUCT", "UENUM", "UINTERFACE", "UPROPERTY", "UFUNCTION"
+    };
+
+    /// <summary>
+    /// Extract UE macro annotations (UCLASS, UPROPERTY, etc.) by scanning the PSI tree
+    /// near the given node. Two strategies:
+    /// 1) Walk preceding siblings of the node and its parents (finds UCLASS/USTRUCT
+    ///    which are separate statement nodes before the class declaration).
+    /// 2) Search preceding text within parent nodes using LastIndexOf (finds
+    ///    UPROPERTY/UFUNCTION embedded in the parent declaration text).
+    /// </summary>
+    private static List<string> TryExtractUeAnnotations(ITreeNode node)
+    {
+        try
+        {
+            // Strategy 1: Scan preceding siblings of the node and its parent chain.
+            var current = node;
+            for (var depth = 0; depth < 4 && current != null; depth++)
+            {
+                var sibling = current.PrevSibling;
+                for (var sibCount = 0; sibCount < 10 && sibling != null; sibCount++)
+                {
+                    var sibText = sibling.GetText();
+                    if (sibText == null || string.IsNullOrWhiteSpace(sibText))
+                    {
+                        sibling = sibling.PrevSibling;
+                        continue;
+                    }
+
+                    var trimmed = sibText.Trim();
+                    var annotations = ExtractMacrosFromText(trimmed);
+                    if (annotations != null)
+                        return annotations;
+
+                    // Stop at substantive non-macro content
+                    break;
+                }
+
+                current = current.Parent;
+            }
+
+            // Strategy 2: Search text preceding the node within parent/grandparent nodes.
+            // Uses LastIndexOf to find the nearest (most relevant) macro.
+            var candidate = node.Parent;
+            for (var level = 0; level < 3 && candidate != null; level++)
+            {
+                var candidateText = candidate.GetText();
+                if (candidateText == null)
+                {
+                    candidate = candidate.Parent;
+                    continue;
+                }
+
+                var nodeOffset = node.GetTreeStartOffset().Offset
+                                 - candidate.GetTreeStartOffset().Offset;
+                if (nodeOffset <= 0)
+                {
+                    candidate = candidate.Parent;
+                    continue;
+                }
+
+                var precedingText = candidateText.Substring(0,
+                    Math.Min(nodeOffset, candidateText.Length));
+
+                List<string> annotations = null;
+                foreach (var macroName in UeMacroNames)
+                {
+                    // Use LastIndexOf to find the nearest macro before the node
+                    var searchTarget = macroName + "(";
+                    var idx = precedingText.LastIndexOf(searchTarget, StringComparison.Ordinal);
+                    if (idx < 0) continue;
+
+                    if (idx > 0 && (char.IsLetterOrDigit(precedingText[idx - 1])
+                                    || precedingText[idx - 1] == '_'))
+                        continue;
+
+                    var macroCall = ExtractBalancedMacroCall(precedingText, idx, macroName.Length);
+                    if (macroCall != null)
+                    {
+                        annotations ??= new List<string>();
+                        annotations.Add(macroCall);
+                    }
+                }
+
+                if (annotations != null)
+                    return annotations;
+
+                candidate = candidate.Parent;
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Scan a text block for UE macro invocations and return all found.
+    /// </summary>
+    private static List<string> ExtractMacrosFromText(string text)
+    {
+        List<string> annotations = null;
+        foreach (var macroName in UeMacroNames)
+        {
+            var idx = text.IndexOf(macroName + "(", StringComparison.Ordinal);
+            if (idx < 0) continue;
+            if (idx > 0 && (char.IsLetterOrDigit(text[idx - 1]) || text[idx - 1] == '_'))
+                continue;
+
+            var macroCall = ExtractBalancedMacroCall(text, idx, macroName.Length);
+            if (macroCall != null)
+            {
+                annotations ??= new List<string>();
+                annotations.Add(macroCall);
+            }
+        }
+
+        return annotations;
+    }
+
+    /// <summary>
+    /// Extract a macro call with balanced parentheses starting at the given index.
+    /// Returns null if parentheses are unbalanced.
+    /// </summary>
+    private static string ExtractBalancedMacroCall(string text, int macroStart, int nameLength)
+    {
+        var parenStart = macroStart + nameLength;
+        if (parenStart >= text.Length || text[parenStart] != '(') return null;
+
+        var depth = 0;
+        for (var i = parenStart; i < text.Length; i++)
+        {
+            if (text[i] == '(') depth++;
+            else if (text[i] == ')')
+            {
+                depth--;
+                if (depth == 0)
+                    return text.Substring(macroStart, i + 1 - macroStart);
+            }
+        }
+
+        return null; // unbalanced
     }
 
     // ── Helpers: access and modifiers ───────────────────────────────────
@@ -545,6 +888,63 @@ public static class CppStructureWalker
                 return (bool)prop.GetValue(obj);
         }
         catch { }
+        return null;
+    }
+
+    // ── Helpers: qualified names ────────────────────────────────────────
+
+    /// <summary>
+    /// Try to find the containing type name for an out-of-line definition.
+    /// Strategy A: reflection on the C++ declared element.
+    /// Strategy B: parse "ClassName::MethodName" from the node text.
+    /// </summary>
+    private static string TryGetContainingTypeName(ITreeNode node, IDeclaredElement element)
+    {
+        // Strategy A: reflection
+        try
+        {
+            foreach (var methodName in new[] { "GetContainingType", "GetClassByMember" })
+            {
+                var method = element.GetType().GetMethod(methodName,
+                    BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+                if (method == null) continue;
+                var result = method.Invoke(element, null);
+                if (result == null) continue;
+                var shortNameProp = result.GetType().GetProperty("ShortName");
+                if (shortNameProp != null)
+                {
+                    var name = shortNameProp.GetValue(result)?.ToString();
+                    if (!string.IsNullOrEmpty(name))
+                        return name;
+                }
+            }
+        }
+        catch { }
+
+        // Strategy B: text fallback - look for ClassName::MethodName in declarator text
+        try
+        {
+            var text = node.GetText();
+            if (text == null) return null;
+
+            var shortName = element.ShortName;
+            var pattern = "::" + shortName;
+            var idx = text.IndexOf(pattern, StringComparison.Ordinal);
+            if (idx <= 0) return null;
+
+            // Walk backwards from the :: to find the class name
+            var end = idx;
+            var start = end - 1;
+            while (start >= 0 && (char.IsLetterOrDigit(text[start]) || text[start] == '_'))
+                start--;
+            start++;
+
+            if (start >= end) return null;
+            var className = text.Substring(start, end - start);
+            return string.IsNullOrEmpty(className) ? null : className;
+        }
+        catch { }
+
         return null;
     }
 

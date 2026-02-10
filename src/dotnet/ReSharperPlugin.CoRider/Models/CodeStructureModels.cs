@@ -47,6 +47,7 @@ public class TypeInfo
     public List<MemberInfo> Members { get; set; }
     public List<TypeInfo> NestedTypes { get; set; }
     public int? Line { get; set; }
+    public List<string> Annotations { get; set; }
 
     public bool? IsAbstract { get; set; }
     public bool? IsSealed { get; set; }
@@ -57,11 +58,13 @@ public class MemberInfo
 {
     public string Kind { get; set; }
     public string Name { get; set; }
+    public string ContainingType { get; set; }
     public string Access { get; set; }
     public string ReturnType { get; set; }
     public string Type { get; set; }
     public List<ParameterInfo> Parameters { get; set; }
     public int? Line { get; set; }
+    public List<string> Annotations { get; set; }
 
     public bool? IsStatic { get; set; }
     public bool? IsVirtual { get; set; }
