@@ -5,6 +5,7 @@
 build/
 output/
 .gradle/
+.kotlin/
 .tmp/
 
 # User-specific files
