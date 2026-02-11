@@ -371,22 +371,7 @@ namespace ReSharperPlugin.CoRider
                 }
 
                 HttpHelpers.Respond(ctx, 404, "text/plain",
-                    "Not found. Available endpoints:\n" +
-                    "  /                        - List all endpoints (with full parameter docs)\n" +
-                    "  /health                  - Server status\n" +
-                    "  /files                   - List all source files (JSON)\n" +
-                    "  /classes                 - List game C++ classes (markdown/JSON)\n" +
-                    "  /describe_code?file=     - Structural code description\n" +
-                    "  /inspect?file=           - Code inspection\n" +
-                    "  /blueprints?class=       - [UE5] Find derived Blueprints\n" +
-                    "  /bp?file=                - [UE5] Blueprint composite info\n" +
-                    "  /blueprint-audit         - [UE5] Blueprint audit data\n" +
-                    "  /uassets?search=         - [UE5] Fuzzy search for UAssets\n" +
-                    "  /uassets/show?package=   - [UE5] Asset detail and metadata\n" +
-                    "  /asset-refs/dependencies - [UE5] Asset dependencies\n" +
-                    "  /asset-refs/referencers  - [UE5] Asset referencers\n" +
-                    "  /asset-refs/status       - [UE5] UE editor connection status\n" +
-                    "  /ue-project              - Diagnostic: UE project detection");
+                    "Not found. Visit / for the full API reference.");
             }
             catch (Exception ex)
             {
