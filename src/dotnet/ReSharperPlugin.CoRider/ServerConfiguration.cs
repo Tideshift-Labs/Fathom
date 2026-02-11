@@ -76,6 +76,14 @@ public class ServerConfiguration
         /// </summary>
         public int MaxStaleExamples { get; set; } = 10;
 
+        // ── Asset Search ──
+
+        /// <summary>
+        /// Maximum number of results returned by /uassets (default: 100).
+        /// Requests specifying a higher limit are clamped to this value.
+        /// </summary>
+        public int MaxAssetSearchResults { get; set; } = 100;
+
         // ── Platform-Specific Paths ──
 
         /// <summary>

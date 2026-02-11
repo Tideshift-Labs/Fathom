@@ -59,18 +59,6 @@ public class BlueprintInfoHandler : IRequestHandler
             try
             {
                 info.Audit = _auditService.FindAuditEntry(file);
-                if (info.Audit?.AuditFile != null)
-                {
-                    // Make the audit file path relative to the UE project directory
-                    var ueInfo = _ueProject.GetUeProjectInfo();
-                    if (!string.IsNullOrEmpty(ueInfo.ProjectDirectory) &&
-                        info.Audit.AuditFile.StartsWith(ueInfo.ProjectDirectory, StringComparison.OrdinalIgnoreCase))
-                    {
-                        info.AuditRelPath = info.Audit.AuditFile
-                            .Substring(ueInfo.ProjectDirectory.Length)
-                            .TrimStart('\\', '/');
-                    }
-                }
             }
             catch
             {
@@ -107,6 +95,7 @@ public class BlueprintInfoHandler : IRequestHandler
                 {
                     PackagePath = b.PackagePath,
                     Audit = b.Audit?.Data,
+                    AuditContent = b.Audit?.AuditContent,
                     Dependencies = b.Dependencies,
                     Referencers = b.Referencers
                 }).ToList()
@@ -176,8 +165,6 @@ public class BlueprintInfoHandler : IRequestHandler
             if (!string.IsNullOrEmpty(info.Audit?.AuditContent))
             {
                 sb.AppendLine(info.Audit.AuditContent.TrimEnd());
-                if (!string.IsNullOrEmpty(info.AuditRelPath))
-                    sb.Append("Full Details: ").AppendLine(info.AuditRelPath);
             }
             else
             {
@@ -240,7 +227,6 @@ public class BlueprintInfoHandler : IRequestHandler
     {
         public string PackagePath { get; set; }
         public BlueprintAuditEntry Audit { get; set; }
-        public string AuditRelPath { get; set; }
         public List<AssetRefEntry> Dependencies { get; set; }
         public List<AssetRefEntry> Referencers { get; set; }
         public bool EditorAvailable { get; set; }
@@ -263,6 +249,7 @@ public class BlueprintInfoHandler : IRequestHandler
     {
         public string PackagePath { get; set; }
         public Dictionary<string, object> Audit { get; set; }
+        public string AuditContent { get; set; }
         public List<AssetRefEntry> Dependencies { get; set; }
         public List<AssetRefEntry> Referencers { get; set; }
     }

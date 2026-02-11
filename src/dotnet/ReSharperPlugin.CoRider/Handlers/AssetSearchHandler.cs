@@ -35,11 +35,24 @@ public class AssetSearchHandler : IRequestHandler
         }
 
         var search = ctx.Request.QueryString["search"];
-        if (string.IsNullOrEmpty(search))
+        var classFilter = ctx.Request.QueryString["class"];
+        var pathPrefix = ctx.Request.QueryString["pathPrefix"];
+        var hasFilters = !string.IsNullOrEmpty(classFilter) || pathPrefix != null;
+
+        if (string.IsNullOrEmpty(search) && !hasFilters)
         {
             HttpHelpers.RespondWithFormat(ctx, format, 400,
-                "Missing required 'search' query parameter.\n\nUsage: `/uassets?search=term`",
-                new { error = "Missing required 'search' query parameter", usage = "/uassets?search=term" });
+                "Provide a 'search' term and/or filters ('class', 'pathPrefix').\n\nExamples:\n- `/uassets?search=player`\n- `/uassets?class=WidgetBlueprint&pathPrefix=/Game/UI`\n- `/uassets?search=main&class=Blueprint&limit=20`",
+                new { error = "Provide a 'search' term and/or filters ('class', 'pathPrefix')", usage = "/uassets?search=term or /uassets?class=X&pathPrefix=/Game/..." });
+            return;
+        }
+
+        // Detect wildcard/regex attempts and give a helpful nudge
+        if (!string.IsNullOrEmpty(search) && (search.Contains("*") || search.Contains("?") || search.Contains("[")))
+        {
+            HttpHelpers.RespondWithFormat(ctx, format, 400,
+                "Fuzzy search does not support wildcards or regex. Provide plain name substrings instead (space-separated, all must match).\n\nExample: `/uassets?search=main menu` matches assets whose name contains both \"main\" and \"menu\".",
+                new { error = "Fuzzy search does not support wildcards or regex. Provide plain name substrings instead (space-separated, all must match)." });
             return;
         }
 
@@ -52,22 +65,26 @@ public class AssetSearchHandler : IRequestHandler
         }
 
         // Build proxy URL
-        var proxyPath = $"asset-refs/search?q={System.Uri.EscapeDataString(search)}";
+        var proxyPath = "asset-refs/search?";
+        if (!string.IsNullOrEmpty(search))
+            proxyPath += $"q={System.Uri.EscapeDataString(search)}&";
 
-        var classFilter = ctx.Request.QueryString["class"];
         if (!string.IsNullOrEmpty(classFilter))
-            proxyPath += $"&class={System.Uri.EscapeDataString(classFilter)}";
+            proxyPath += $"class={System.Uri.EscapeDataString(classFilter)}&";
 
-        var limit = ctx.Request.QueryString["limit"];
-        if (!string.IsNullOrEmpty(limit))
-            proxyPath += $"&limit={System.Uri.EscapeDataString(limit)}";
+        var limitRaw = ctx.Request.QueryString["limit"];
+        var limit = _config.MaxAssetSearchResults;
+        if (int.TryParse(limitRaw, out var parsed) && parsed > 0)
+            limit = Math.Min(parsed, _config.MaxAssetSearchResults);
+        proxyPath += $"limit={limit}&";
 
         // Default to /Game (project assets only). Callers can opt out with &pathPrefix= or &pathPrefix=/
-        var pathPrefix = ctx.Request.QueryString["pathPrefix"];
         if (pathPrefix == null)
             pathPrefix = "/Game";
         if (!string.IsNullOrEmpty(pathPrefix))
-            proxyPath += $"&pathPrefix={System.Uri.EscapeDataString(pathPrefix)}";
+            proxyPath += $"pathPrefix={System.Uri.EscapeDataString(pathPrefix)}&";
+
+        proxyPath = proxyPath.TrimEnd('&');
 
         var (body, statusCode) = _proxy.ProxyGetWithStatus(proxyPath);
 
@@ -81,7 +98,7 @@ public class AssetSearchHandler : IRequestHandler
 
         if (format == "md")
         {
-            var mdBody = FormatAsMarkdown(body, search, _config.Port);
+            var mdBody = FormatAsMarkdown(body, search ?? "(browse)", _config.Port);
             HttpHelpers.Respond(ctx, statusCode, "text/markdown; charset=utf-8", mdBody);
         }
         else

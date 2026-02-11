@@ -13,6 +13,7 @@ using JetBrains.Rider.Model;
 using JetBrains.Util;
 using ReSharperPlugin.CoRider.Formatting;
 using ReSharperPlugin.CoRider.Handlers;
+using ReSharperPlugin.CoRider.Mcp;
 using ReSharperPlugin.CoRider.Services;
 
 namespace ReSharperPlugin.CoRider
@@ -202,8 +203,10 @@ namespace ReSharperPlugin.CoRider
                 try
                 {
                     // Wire handlers
+                    var mcpServer = new CoRiderMcpServer(port);
                     _handlers = new IRequestHandler[]
                     {
+                        new McpHandler(mcpServer),
                         new IndexHandler(_solution, _config, _ueProject),
                         new FilesHandler(_solution, _fileIndex),
                         new ClassesHandler(_classIndex, _config),
@@ -247,7 +250,7 @@ namespace ReSharperPlugin.CoRider
                     try
                     {
                         var localMarkerPath = _solution.SolutionDirectory.Combine(".corider-server.json");
-                        var json = $"{{\n  \"port\": {port},\n  \"solution\": \"{_solution.SolutionDirectory.FullPath.Replace("\\", "\\\\")}\",\n  \"started\": \"{DateTime.Now:O}\"\n}}";
+                        var json = $"{{\n  \"port\": {port},\n  \"mcpEndpoint\": \"http://localhost:{port}/mcp\",\n  \"mcpTransport\": \"streamable-http\",\n  \"solution\": \"{_solution.SolutionDirectory.FullPath.Replace("\\", "\\\\")}\",\n  \"started\": \"{DateTime.Now:O}\"\n}}";
                         File.WriteAllText(localMarkerPath.FullPath, json);
 
                         _lifetime.OnTermination(() =>
