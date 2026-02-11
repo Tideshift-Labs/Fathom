@@ -1,12 +1,12 @@
 # CoRider (Rider Plugin)
 
-CoRider is an open-source (MIT Licensed) and completely free tool to enhance your LLMs performance for C++ development when working with UE5 C++ projects using [Jetbrains Rider](https://www.jetbrains.com/rider/). 
+CoRider is an open-source (MIT Licensed) and completely free tool to enhance your LLM's performance for C++ development when working with UE5 C++ projects using [Jetbrains Rider](https://www.jetbrains.com/rider/).
 
-The plugin leverages Rider/ReSharper as well as UE5's internal APIs to expose more context, details using MCP tools and skills. Whether you use Claude, Gemini, Codex or any other LLM, CoRider helps any of them by providing MCP tools and skills to feed them with the right information at the right time, reducing hallucinations and crashes, therefore increasing your productivity.
+The plugin leverages Rider/ReSharper as well as UE5's internal APIs to expose more context and details using MCP tools and skills. Whether you use Claude, Gemini, Codex or any other LLM, CoRider feeds them with the right information at the right time, reducing hallucinations and crashes, and increasing your productivity.
 
 ## Core Philosophy
 
-Unlike other GenAI / LLM coding tools in game development, CoRider is not here to automate everything. It exists to reduce the friction of using LLMs with UE5, especially for C++ development. It does not provide blueprint / uasset editing capabilities intentionally. Instead it focuses on helping your LLM agents to better understand the full codebase (C++ _and_ blueprints). 
+Unlike other GenAI / LLM coding tools in game development, CoRider is not here to automate everything. It exists to reduce the friction of using LLMs with UE5, especially for C++ development. It intentionally does not provide blueprint / uasset editing capabilities. Instead it focuses on helping your LLM agents to better understand the full codebase (C++ _and_ blueprints). 
 
 ### Core Capabilities
 
@@ -33,7 +33,7 @@ Install the latest CoRider plugin from JetBrains Marketplace (coming soon) or fr
 
 ## Building From Source
 
-If you wish to contribute or for some other reason, build the plugin from source, this section will help you with that. 
+If you wish to contribute or build the plugin from source for any other reason, this section will help.
 
 ### First-Time Setup
 
@@ -52,7 +52,7 @@ Initialize the required build tools (downloads `nuget.exe` and `vswhere.exe`):
 
 Once Rider is running with your project open, verify the server is active:
 ```powershell
-curl http://localhost:19876/health
+Invoke-RestMethod http://localhost:19876/health
 ```
 
 
