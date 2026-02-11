@@ -121,19 +121,26 @@ Check the status of a Blueprint audit refresh.
 
 ### GET `/uassets`
 
-Fuzzy search for UAssets by name. Multi-word queries match each token independently.
+Search or browse UAssets. Provide a `search` term and/or filters (`class`, `pathPrefix`). At least one must be provided. Search uses plain name substrings (space-separated, all must match). Wildcards and regex are not supported.
 
 | Param | Required | Description |
 |-------|----------|-------------|
-| `search` | Yes | Search terms (space-separated, all must match) |
-| `class` | No | Filter by asset class (e.g. `WidgetBlueprint`) |
+| `search` | No* | Plain name substrings (space-separated, all must match; no wildcards/regex) |
+| `class` | No* | Filter by asset class (e.g. `WidgetBlueprint`) |
 | `pathPrefix` | No | Path prefix filter (default: `/Game`; use `&pathPrefix=` for all) |
 | `limit` | No | Max results |
 | `format` | No | `json` for JSON output |
 
+\* At least `search` or one filter (`class`, `pathPrefix`) is required.
+
 Requires a live UE editor. Returns 503 if the editor is not running.
 
 **Scoring:** exact name match > name prefix > name substring > path-only match. Final score is the minimum across all tokens.
+
+**Examples:**
+- `/uassets?search=player` - find assets with "player" in the name
+- `/uassets?class=WidgetBlueprint&pathPrefix=/Game/UI` - list all widget blueprints under /Game/UI
+- `/uassets?search=main menu&limit=10` - assets matching both "main" and "menu"
 
 ### GET `/uassets/show`
 
@@ -220,6 +227,51 @@ Raw PSI tree dump for a source file. Useful for debugging ReSharper analysis.
 | `maxtext` | No | Max text length per node (default: 100) |
 
 **Response format:** Markdown only
+
+## MCP (Model Context Protocol)
+
+### POST `/mcp`
+
+MCP Streamable HTTP endpoint. Accepts JSON-RPC 2.0 requests and exposes all CoRider functionality as MCP tools.
+
+**Content-Type:** `application/json`
+
+**Supported methods:**
+
+| Method | Description |
+|--------|-------------|
+| `initialize` | Handshake, returns server capabilities |
+| `tools/list` | Returns all 15 available tools with input schemas |
+| `tools/call` | Execute a tool by name with arguments |
+| `ping` | Liveness check |
+
+**Available tools:** `list_solution_files`, `list_cpp_classes`, `describe_code`, `inspect_code`, `find_derived_blueprints`, `get_blueprint_info`, `get_blueprint_audit`, `refresh_blueprint_audit`, `get_audit_status`, `search_assets`, `show_asset`, `get_asset_dependencies`, `get_asset_referencers`, `get_ue_project_info`, `get_editor_status`.
+
+**Example: initialize**
+```bash
+curl -X POST http://localhost:19876/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"}}}"
+```
+
+**Example: list tools**
+```bash
+curl -X POST http://localhost:19876/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"
+```
+
+**Example: call a tool**
+```bash
+curl -X POST http://localhost:19876/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"list_solution_files\",\"arguments\":{}}}"
+```
+
+**AI client configuration (Streamable HTTP):**
+```json
+{
+  "mcpServers": {
+    "corider": {
+      "url": "http://localhost:19876/mcp"
+    }
+  }
+}
+```
 
 ## Common Conventions
 
