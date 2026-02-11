@@ -1,10 +1,16 @@
 # CoRider (Rider Plugin)
 
-A Rider/ReSharper plugin that exposes IDE intelligence (code inspections, Blueprint hierarchies, asset queries) via a local HTTP API. Designed to bridge the gap between your IDE and external tools or LLMs.
+If you are using Jetbrains Rider along with LLMs for UE5 ([Unreal Engine 5](https://www.unrealengine.com/en-US)) C++ development, you should consider this Rider plugin.
 
-## What is CoRider?
+CoRider is an open-source and completely free tool to enhance your LLMs performance for C++ development when working with UE5. 
 
-CoRider transforms Rider's deep understanding of your codebase into a format external tools can consume. Instead of just seeing errors in your editor, you can query your entire solution for inspections, find Blueprint derivation chains, and audit asset metadata via simple HTTP requests.
+The plugin leverages Rider/ReSharper as well as UE5 to expose more context, details using MCP tools and skills. Whether you use Claude, Gemini, Codex or any other LLM, CoRider provides an MCP server to feed them with the right information.
+
+It's best used with Claude CLI or Desktop for developers working on UE5 C++ projects using [Jetbrains Rider](https://www.jetbrains.com/rider/). 
+
+## Core Philosophy
+
+Unlike other GenAI / LLM coding tools in game development, CoRider is not here to automate everything. It exists to reduce the friction of using LLMs with UE5, especially for C++ development. It does not try to edit blueprints or other uassets for you. It will understand them better and therefore make less mistakes when working on your C++ code. 
 
 ### Core Capabilities
 
@@ -13,49 +19,25 @@ CoRider transforms Rider's deep understanding of your codebase into a format ext
 - **Tool Friendly**: Native support for Markdown and JSON output formats.
 - **Headless Refresh**: Automatically triggers Unreal Engine commandlets to keep asset data fresh.
 
-## HTTP API Quick Reference
-
-Starts automatically on port `19876` when a solution opens. See the [full API reference](docs/api_reference.md) for parameters, response formats, and examples.
-
-**Source Code**
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /files` | List all source files in the solution |
-| `GET /classes` | List game C++ classes with headers/sources and base class |
-| `GET /describe_code` | Structural description of source files |
-| `GET /inspect` | Run code inspection on files |
-
-**Unreal Engine** (some require live UE editor with companion plugin)
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /blueprints` | Find Blueprints derived from a C++ class |
-| `GET /bp` | Blueprint composite: audit + dependencies + referencers |
-| `GET /blueprint-audit` | Get Blueprint audit data |
-| `GET /blueprint-audit/refresh` | Trigger background audit refresh |
-| `GET /blueprint-audit/status` | Check audit refresh status |
-| `GET /uassets` | Fuzzy search for UAssets by name |
-| `GET /uassets/show` | Asset detail: metadata, disk size, tags, ref counts |
-| `GET /asset-refs/dependencies` | Asset dependencies |
-| `GET /asset-refs/referencers` | Asset referencers |
-| `GET /asset-refs/status` | UE editor connection status |
-
-**Diagnostics**
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Server and solution health check |
-| `GET /ue-project` | UE project detection diagnostics |
-| `GET /debug-psi-tree` | Raw PSI tree dump for a source file |
-
 ## Getting Started
 
-### Prerequisites
+Install the latest CoRider plugin from JetBrains Marketplace (coming soon) or from the [releases page](https://github.com/kvirani/CoRider/releases).
 
-- **Rider**: 2024.3+
-- **JDK 17+** (for building the plugin)
+### Prerequisites
+- **Rider**: 2025.3+
 - **Windows** (current primary support)
+
+## Documentation
+
+- **[API Reference](docs/api_reference.md)**: Full endpoint documentation with parameters, response formats, and status codes.
+- **[Technical Overview](docs/technical_overview.md)**: Deep dive into architecture, APIs, and design decisions.
+- **[Learnings & Troubleshooting](docs/LEARNINGS.md)**: Hard-won lessons and ReSharper SDK quirks.
+- **[ReSharper SDK Notes](docs/Resharper-SDK-API-Notes.md)**: Specific API details for future contributors.
+- **[Unreal Companion Doc](docs/ue-companion-plugin.md)**: Details on the integration with Unreal Engine.
+
+## Building From Source
+
+If you wish to contribute or for some other reason, build the plugin from source, this section will help you with that. 
 
 ### First-Time Setup
 
@@ -77,13 +59,6 @@ Once Rider is running with your project open, verify the server is active:
 curl http://localhost:19876/health
 ```
 
-## Documentation
-
-- **[API Reference](docs/api_reference.md)**: Full endpoint documentation with parameters, response formats, and status codes.
-- **[Technical Overview](docs/technical_overview.md)**: Deep dive into architecture, APIs, and design decisions.
-- **[Learnings & Troubleshooting](docs/LEARNINGS.md)**: Hard-won lessons and ReSharper SDK quirks.
-- **[ReSharper SDK Notes](docs/Resharper-SDK-API-Notes.md)**: Specific API details for future contributors.
-- **[Unreal Companion Doc](docs/ue-companion-plugin.md)**: Details on the integration with Unreal Engine.
 
 ## TODOs
 
@@ -91,10 +66,7 @@ curl http://localhost:19876/health
 - [ ] **UCLASS Reflection**: Add `/uclass` endpoint for parsing `UPROPERTY`/`UFUNCTION` macros.
 - [ ] **Notification Balloons**: Show UI feedback in Rider when the server starts or fails.
 - [ ] **C# Inspection Fix**: Investigate why `.cs` files sometimes report 0 issues.
-- [x] **Blueprint Audit Boot Check**: `BlueprintAuditService.RunBlueprintAuditCommandlet` crashes with "Cannot start process because a file name has not been provided" when the UE engine path is not yet resolved. Likely a race condition on first-time project open where Rider is still indexing. Guard the commandlet launch against a null/empty `CommandletExePath`.
-- [ ] **Status Bar Icon**: Show a status bar icon when the server is running. It should be used to indicate any issues or actions the user needs to take (eg: UE plugin not found, UE engine path not configured, etc).
-- [ ] **Access Log**: Allow the dev to view the log via the bottom (status) bar icon. We'd log all important stuff to a corider specific access log. Proposal md doc needed first in `proposals` dir
-- [ ] Describe Code should also include comments that are assigned to functions or properties
+- [ ] **Describe Code** action should also include comments that are assigned to functions or properties
 
 ## License
 
