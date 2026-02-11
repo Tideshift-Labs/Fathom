@@ -1,16 +1,12 @@
 # CoRider (Rider Plugin)
 
-If you are using Jetbrains Rider along with LLMs for UE5 ([Unreal Engine 5](https://www.unrealengine.com/en-US)) C++ development, you should consider this Rider plugin.
+CoRider is an open-source (MIT Licensed) and completely free tool to enhance your LLMs performance for C++ development when working with UE5 C++ projects using [Jetbrains Rider](https://www.jetbrains.com/rider/). 
 
-CoRider is an open-source and completely free tool to enhance your LLMs performance for C++ development when working with UE5. 
-
-The plugin leverages Rider/ReSharper as well as UE5 to expose more context, details using MCP tools and skills. Whether you use Claude, Gemini, Codex or any other LLM, CoRider provides an MCP server to feed them with the right information.
-
-It's best used with Claude CLI or Desktop for developers working on UE5 C++ projects using [Jetbrains Rider](https://www.jetbrains.com/rider/). 
+The plugin leverages Rider/ReSharper as well as UE5's internal APIs to expose more context, details using MCP tools and skills. Whether you use Claude, Gemini, Codex or any other LLM, CoRider helps any of them by providing MCP tools and skills to feed them with the right information at the right time, reducing hallucinations and crashes, therefore increasing your productivity.
 
 ## Core Philosophy
 
-Unlike other GenAI / LLM coding tools in game development, CoRider is not here to automate everything. It exists to reduce the friction of using LLMs with UE5, especially for C++ development. It does not try to edit blueprints or other uassets for you. It will understand them better and therefore make less mistakes when working on your C++ code. 
+Unlike other GenAI / LLM coding tools in game development, CoRider is not here to automate everything. It exists to reduce the friction of using LLMs with UE5, especially for C++ development. It does not provide blueprint / uasset editing capabilities intentionally. Instead it focuses on helping your LLM agents to better understand the full codebase (C++ _and_ blueprints). 
 
 ### Core Capabilities
 
