@@ -24,6 +24,7 @@ Starts automatically on port `19876` when a solution opens.
 | `GET /blueprints?class=Name` | Find Blueprints derived from a C++ or Blueprint class |
 | `/blueprint-audit/*` | Access or refresh Blueprint metadata summaries |
 | `GET /uassets?search=term` | Fuzzy search for UAssets by name. Defaults to `/Game` assets. Optional: `&class=`, `&pathPrefix=`, `&limit=` |
+| `GET /uassets/show?package=/Game/Path` | Asset detail: metadata, disk size, tags, dep/ref counts. Multiple: `&package=...` |
 | `GET /files` | List all source files in the solution |
 
 ## Getting Started

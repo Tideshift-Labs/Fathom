@@ -122,6 +122,8 @@ public class AssetSearchHandler : IRequestHandler
                     sb.AppendLine();
 
                     var escapedPkg = Uri.EscapeDataString(pkg);
+                    sb.Append("[show](http://localhost:").Append(port)
+                        .Append("/uassets/show?package=").Append(escapedPkg).AppendLine(")");
                     sb.Append("[dependencies](http://localhost:").Append(port)
                         .Append("/asset-refs/dependencies?asset=").Append(escapedPkg).AppendLine(")");
                     sb.Append("[referencers](http://localhost:").Append(port)

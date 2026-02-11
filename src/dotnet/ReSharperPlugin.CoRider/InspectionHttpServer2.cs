@@ -209,11 +209,13 @@ namespace ReSharperPlugin.CoRider
                         new ClassesHandler(_classIndex, _config),
                         new InspectHandler(_solution, _fileIndex, _inspection),
                         new DescribeCodeHandler(_solution, _fileIndex, _codeStructure),
+                        new DebugPsiTreeHandler(_solution, _fileIndex),
                         new BlueprintsHandler(_solution, _reflection, _blueprintQuery, _config),
                         new BlueprintAuditHandler(_ueProject, _blueprintAudit),
                         new BlueprintInfoHandler(_blueprintAudit, _assetRefProxy, _ueProject, _config),
                         new AssetRefHandler(_ueProject, _assetRefProxy),
                         new AssetSearchHandler(_ueProject, _assetRefProxy, _config),
+                        new AssetShowHandler(_ueProject, _assetRefProxy, _config),
                         new UeProjectHandler(_solution, _ueProject, _reflection),
                     };
 
@@ -370,19 +372,21 @@ namespace ReSharperPlugin.CoRider
 
                 HttpHelpers.Respond(ctx, 404, "text/plain",
                     "Not found. Available endpoints:\n" +
-                    "  /              - List all endpoints\n" +
-                    "  /health        - Server status\n" +
-                    "  /files         - List source files\n" +
-                    "  /inspect?file= - Code inspection\n" +
-                    "  /describe_code?file= - Structural code description\n" +
+                    "  /                        - List all endpoints (with full parameter docs)\n" +
+                    "  /health                  - Server status\n" +
+                    "  /files                   - List all source files (JSON)\n" +
+                    "  /classes                 - List game C++ classes (markdown/JSON)\n" +
+                    "  /describe_code?file=     - Structural code description\n" +
+                    "  /inspect?file=           - Code inspection\n" +
                     "  /blueprints?class=       - [UE5] Find derived Blueprints\n" +
                     "  /bp?file=                - [UE5] Blueprint composite info\n" +
                     "  /blueprint-audit         - [UE5] Blueprint audit data\n" +
+                    "  /uassets?search=         - [UE5] Fuzzy search for UAssets\n" +
+                    "  /uassets/show?package=   - [UE5] Asset detail and metadata\n" +
                     "  /asset-refs/dependencies - [UE5] Asset dependencies\n" +
                     "  /asset-refs/referencers  - [UE5] Asset referencers\n" +
                     "  /asset-refs/status       - [UE5] UE editor connection status\n" +
-                    "  /uassets?search=         - [UE5] Fuzzy search for UAssets by name\n" +
-                    "  /ue-project              - [UE5] Project detection diagnostics");
+                    "  /ue-project              - Diagnostic: UE project detection");
             }
             catch (Exception ex)
             {

@@ -14,7 +14,7 @@ public static class DescribeCodeMarkdownFormatter
         foreach (var file in files)
         {
             var displayPath = file.ResolvedPath ?? file.RequestedPath;
-            sb.Append("## ").AppendLine(displayPath);
+            sb.Append("# ").AppendLine(displayPath);
 
             if (file.Error != null)
             {
@@ -23,37 +23,25 @@ public static class DescribeCodeMarkdownFormatter
                 continue;
             }
 
-            if (file.Language != null)
-                sb.Append("Language: ").AppendLine(file.Language);
-
-            // Includes
-            if (file.Includes != null && file.Includes.Count > 0)
-            {
-                sb.AppendLine();
-                sb.AppendLine("### Includes");
-                foreach (var inc in file.Includes)
-                    sb.Append("- ").AppendLine(inc);
-            }
-
             // Namespaces
             if (file.Namespaces != null)
             {
                 foreach (var ns in file.Namespaces)
-                    FormatNamespace(sb, ns, 3);
+                    FormatNamespace(sb, ns, 2);
             }
 
             // Top-level types (outside namespaces)
             if (file.Types != null)
             {
                 foreach (var type in file.Types)
-                    FormatType(sb, type, 3);
+                    FormatType(sb, type, 2);
             }
 
             // Free functions (outside namespaces)
             if (file.FreeFunctions != null && file.FreeFunctions.Count > 0)
             {
                 sb.AppendLine();
-                sb.AppendLine("### Free Functions");
+                sb.AppendLine("## Free Functions");
                 foreach (var func in file.FreeFunctions)
                     FormatMember(sb, func, "  ");
             }
@@ -215,10 +203,10 @@ public static class DescribeCodeMarkdownFormatter
         }
 
         // Kind label + line
-        sb.Append(" *[").Append(member.Kind ?? "member");
+        sb.Append(" [").Append(member.Kind ?? "member");
         if (member.Line != null)
-            sb.Append(", line ").Append(member.Line);
-        sb.Append("]*");
+            sb.Append(" | line ").Append(member.Line);
+        sb.Append(']');
 
         if (member.Annotations != null && member.Annotations.Count > 0)
         {
