@@ -1,5 +1,5 @@
 Param(
-    $RootSuffix = "CoRider",
+    $RootSuffix = "Fathom",
     $Version = "9999.0.0"
 )
 

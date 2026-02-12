@@ -348,7 +348,7 @@ Missing the `using JetBrains.ReSharper.Daemon;` directive for `SolutionAnalysisC
 ```
 Illegal scheduler for current action, must be: Shell Rd Dispatcher on :2,
 current thread: JetPool(S) #4:21,
-debug info: signal `MainProtocol.SolutionModel.solutions.[1].coRiderModel.serverStatus`
+debug info: signal `MainProtocol.SolutionModel.solutions.[1].fathomModel.serverStatus`
 ```
 
 This is a `LoggerException` that surfaces as `RuntimeExceptionWithAttachments` on the frontend.
@@ -368,7 +368,7 @@ _rdScheduler = protocolSolution.TryGetProto()?.Scheduler;
 // Wrap ALL RD model wire-up (Advise, Fire, property access) in the scheduler:
 _rdScheduler?.Queue(() =>
 {
-    var model = protocolSolution.GetCoRiderModel();
+    var model = protocolSolution.GetFathomModel();
 
     model.Port.Advise(lifetime, newPort => { /* ... */ });
 
@@ -406,7 +406,7 @@ Task.Run(() =>
 
 ```
 java.lang.IllegalStateException: |E| Wrong thread RdOptionalProperty:
-`RiderBackend 0.SolutionModel.solutions.[1].coRiderModel.port`
+`RiderBackend 0.SolutionModel.solutions.[1].fathomModel.port`
     at com.jetbrains.rdclient.protocol.RdDispatcher.assertThread
 ```
 
@@ -415,7 +415,7 @@ The fix is `project.solution.protocol.scheduler.queue { ... }`:
 ```kotlin
 override suspend fun execute(project: Project) {
     val protocol = project.solution.protocol ?: return
-    val model = project.solution.coRiderModel
+    val model = project.solution.fathomModel
 
     // Property writes must be on protocol thread
     protocol.scheduler.queue {

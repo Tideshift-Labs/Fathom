@@ -48,13 +48,13 @@ if (Test-Path $upluginPath) {
     Write-Warning "CoRider-UnrealEngine .uplugin not found at $upluginPath - skipping"
 }
 
-# Git commit and tag in CoRider repo
+# Git commit and tag in Fathom repo
 Push-Location $RepoRoot
 try {
     git add gradle.properties CHANGELOG.md
     git commit -m "Bump version to $Version"
     git tag "v$Version"
-    Write-Host "Created commit and tag v$Version in CoRider"
+    Write-Host "Created commit and tag v$Version in Fathom"
 } finally {
     Pop-Location
 }
@@ -75,7 +75,7 @@ if (Test-Path $upluginPath) {
 
 Write-Host ""
 Write-Host "To publish, push CoRider-UnrealEngine FIRST (its tag must exist on GitHub"
-Write-Host "before the CoRider workflow tries to check it out):"
+Write-Host "before the Fathom workflow tries to check it out):"
 if (Test-Path $upluginPath) {
     Write-Host "  git -C '$(Split-Path $upluginPath -Parent)' push --follow-tags"
 }

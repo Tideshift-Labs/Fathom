@@ -261,7 +261,7 @@ IScheduler scheduler = protocolSolution.TryGetProto()?.Scheduler;
 // All RD operations go through Queue():
 scheduler?.Queue(() =>
 {
-    var model = protocolSolution.GetCoRiderModel();
+    var model = protocolSolution.GetFathomModel();
     model.Port.Advise(lifetime, newPort => { /* ... */ });
     model.ServerStatus.Fire(new ServerStatus(true, port, "ok"));
 });

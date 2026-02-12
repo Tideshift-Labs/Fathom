@@ -5,11 +5,11 @@
     <!-- Keep in sync with ProductVersion in gradle.properties -->
     <SdkVersion>2025.3.2</SdkVersion>
 
-    <Title>CoRider</Title>
+    <Title>Fathom</Title>
     <Description>Helps AI coding assistants better understand Unreal Engine 5 C++ projects by providing MCP tools for solution-wide code analysis, Blueprint discovery, and asset summaries.</Description>
 
-    <Authors>kvirani</Authors>
-    <Copyright>Copyright $([System.DateTime]::Now.Year) kvirani</Copyright>
+    <Authors>Tideshift Labs</Authors>
+    <Copyright>Copyright $([System.DateTime]::Now.Year) Tideshift Labs</Copyright>
     <PackageTags>resharper rider plugin unreal-engine llm mcp</PackageTags>
 
     <PackageProjectUrl>https://github.com/kvirani/CoRider</PackageProjectUrl>

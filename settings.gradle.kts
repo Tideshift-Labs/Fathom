@@ -20,6 +20,6 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "0.9.0"
 }
 
-rootProject.name = "ReSharperPlugin.CoRider"
+rootProject.name = "ReSharperPlugin.Fathom"
 
 include(":protocol")

@@ -29,7 +29,7 @@ val RiderPluginId: String by rootProject
 
 rdgen {
     val csOutput = File(rootDir, "src/dotnet/${DotnetPluginId}")
-    val ktOutput = File(rootDir, "src/rider/main/kotlin/com/jetbrains/rider/plugins/${RiderPluginId.replace('.','/').lowercase()}")
+    val ktOutput = File(rootDir, "src/rider/main/kotlin/${RiderPluginId.replace('.','/')}")
 
     verbose = true
     packages = "model.rider"

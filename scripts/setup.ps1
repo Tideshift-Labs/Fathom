@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Sets up the development environment for CoRider.
+    Sets up the development environment for Fathom.
 
 .DESCRIPTION
     Downloads required build tools (vswhere.exe, nuget.exe) to the tools/ directory.

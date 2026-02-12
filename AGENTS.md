@@ -1,4 +1,4 @@
-# Agent Instructions: CoRider (Rider Plugin)
+# Agent Instructions: Fathom (Rider Plugin)
 
 ## Style
 

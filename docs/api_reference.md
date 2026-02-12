@@ -1,6 +1,6 @@
-# CoRider API Reference
+# Fathom API Reference
 
-CoRider exposes a local HTTP API on port `19876` when a solution is open in Rider.
+Fathom exposes a local HTTP API on port `19876` when a solution is open in Rider.
 
 Most endpoints support both Markdown (default) and JSON output. Append `&format=json` for JSON.
 
@@ -232,7 +232,7 @@ Raw PSI tree dump for a source file. Useful for debugging ReSharper analysis.
 
 ### POST `/mcp`
 
-MCP Streamable HTTP endpoint. Accepts JSON-RPC 2.0 requests and exposes all CoRider functionality as MCP tools.
+MCP Streamable HTTP endpoint. Accepts JSON-RPC 2.0 requests and exposes all Fathom functionality as MCP tools.
 
 **Content-Type:** `application/json`
 
@@ -266,7 +266,7 @@ curl -X POST http://localhost:19876/mcp -H "Content-Type: application/json" -d "
 ```json
 {
   "mcpServers": {
-    "corider": {
+    "fathom": {
       "url": "http://localhost:19876/mcp"
     }
   }

@@ -1,6 +1,6 @@
-$PluginId = "ReSharperPlugin.CoRider"
+$PluginId = "ReSharperPlugin.Fathom"
 $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$SolutionPath = "$RepoRoot\ReSharperPlugin.CoRider.sln"
+$SolutionPath = "$RepoRoot\ReSharperPlugin.Fathom.sln"
 $SourceBasePath = "$RepoRoot\src\dotnet"
 
 $VsWhereOutput = [xml] (& "$RepoRoot\tools\vswhere.exe" -format xml -products *)
