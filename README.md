@@ -20,7 +20,8 @@ Unlike other GenAI / LLM coding tools in game development, CoRider is not here t
 - Windows only
 - For Rider 2025.3+ only
 - For UE5 5.4+ only 
-- UE5 Plugin must be installed in Game (not Engine)
+- Unreal Engine only (Support for Unity is planned)
+- UE5 Plugin must be installed in the Game (not in Engine)
 
 ## Getting Started
 
