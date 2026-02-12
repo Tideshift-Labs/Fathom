@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout CoRider
+        uses: actions/checkout@v4
+
+      - name: Checkout CoRider-UnrealEngine
+        uses: actions/checkout@v4
+        with:
+          repository: kvirani/CoRider-UnrealEngine
+          ref: ${{ github.ref_name }}
+          path: ../CoRider-UnrealEngine
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build plugin
+        shell: pwsh
+        run: |
+          .\gradlew.bat buildPlugin -PPluginVersion=${{ steps.version.outputs.VERSION }} -PBuildConfiguration=Release
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        shell: pwsh
+        run: |
+          $content = Get-Content CHANGELOG.md -Raw
+          $pattern = "(?s)## \[${{ steps.version.outputs.VERSION }}\]\s*\r?\n(.+?)(?=\r?\n## |\z)"
+          if ($content -match $pattern) {
+            $notes = $Matches[1].Trim()
+          } else {
+            $notes = "Release ${{ steps.version.outputs.VERSION }}"
+          }
+          # Write to a file to avoid multiline env var issues
+          $notes | Out-File -FilePath release-notes.txt -Encoding utf8
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.txt
+          files: output/*.zip

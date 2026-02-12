@@ -44,6 +44,7 @@ Install the latest CoRider plugin from ~~JetBrains Marketplace (coming soon) or~
 - **[Learnings & Troubleshooting](docs/LEARNINGS.md)**: Hard-won lessons and ReSharper SDK quirks.
 - **[ReSharper SDK Notes](docs/Resharper-SDK-API-Notes.md)**: Specific API details for future contributors.
 - **[Unreal Companion Doc](docs/ue-companion-plugin.md)**: Details on the integration with Unreal Engine.
+- **[Release Process](docs/release.md)**: Versioning, bump script, and GitHub Actions release workflow.
 
 ## Building From Source
 
