@@ -1,5 +1,11 @@
 # CoRider (Rider Plugin)
 
+![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.4+-313131?style=flat&logo=unrealengine&logoColor=white)
+![Rider](https://img.shields.io/badge/Rider-2025.3+-087CFA?style=flat&logo=rider&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Win64-0078D6?style=flat&logo=windows&logoColor=white)
+![MCP](https://img.shields.io/badge/MCP-Tools-8A2BE2?style=flat)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+
 CoRider is an open-source (MIT Licensed) and completely free tool to enhance your LLM's performance for C++ development when working with UE5 C++ projects using [Jetbrains Rider](https://www.jetbrains.com/rider/).
 
 The plugin leverages Rider/ReSharper as well as UE5's internal APIs to expose more context and details using MCP tools and skills. Whether you use Claude, Gemini, Codex or any other LLM, CoRider feeds them with the right information at the right time, reducing hallucinations and crashes, and increasing your productivity.
