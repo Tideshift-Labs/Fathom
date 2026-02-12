@@ -2,13 +2,33 @@
   <id>com.jetbrains.rider.plugins.corider</id>
   <name>CoRider</name>
   <version>_PLACEHOLDER_</version>
-  <vendor url="https://project-url">Author</vendor>
+  <vendor url="https://github.com/kvirani">kvirani</vendor>
   <idea-version since-build="_PLACEHOLDER_" until-build="_PLACEHOLDER_" />
   <depends>com.intellij.modules.rider</depends>
 
   <description>
 <![CDATA[
-<p>Sample description</p>
+<p>
+CoRider helps AI coding assistants (Claude, Gemini, Codex, and others) better understand
+your Unreal Engine 5 C++ projects. It provides MCP tools that give LLMs access to
+solution-wide code analysis, Blueprint discovery, and asset summaries, reducing
+hallucinations and improving productivity.
+</p>
+
+<h3>Features</h3>
+<ul>
+  <li><b>Solution-Wide Code Analysis</b>: Let your LLM query inspections and diagnostics for any file in the solution, not just open ones.</li>
+  <li><b>Blueprint and Asset Discovery</b>: Find derived Blueprints and view asset summaries alongside your C++ code.</li>
+  <li><b>MCP Integration</b>: Exposes project context as MCP tools that any compatible AI assistant can use.</li>
+  <li><b>Markdown and JSON Output</b>: Results formatted for easy consumption by both humans and LLMs.</li>
+</ul>
+
+<h3>Requirements</h3>
+<ul>
+  <li>Windows only</li>
+  <li>Rider 2025.3+</li>
+  <li>Unreal Engine 5.4+</li>
+</ul>
 ]]>
   </description>
 
