@@ -26,6 +26,16 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Cache Gradle and JDK toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.gradle\caches
+            ~\.gradle\wrapper
+            ~\AppData\Local\gradle-jvm
+          key: gradle-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'build.gradle.kts', 'gradle.properties') }}
+          restore-keys: gradle-
+
       - name: Extract version from tag
         id: version
         shell: pwsh
