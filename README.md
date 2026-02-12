@@ -15,9 +15,16 @@ Unlike other GenAI / LLM coding tools in game development, CoRider is not here t
 - **Tool Friendly**: Native support for Markdown and JSON output formats.
 - **Headless Refresh**: Automatically triggers Unreal Engine commandlets to keep asset data fresh.
 
+## Limitations
+
+- Windows only
+- For Rider 2025.3+ only
+- For UE5 5.4+ only 
+- UE5 Plugin must be installed in Game (not Engine)
+
 ## Getting Started
 
-Install the latest CoRider plugin from JetBrains Marketplace (coming soon) or from the [releases page](https://github.com/kvirani/CoRider/releases).
+Install the latest CoRider plugin from ~~JetBrains Marketplace (coming soon) or~~ our manually by downloading it from the [GitHub releases page](https://github.com/kvirani/CoRider/releases).
 
 ### Prerequisites
 - **Rider**: 2025.3+
