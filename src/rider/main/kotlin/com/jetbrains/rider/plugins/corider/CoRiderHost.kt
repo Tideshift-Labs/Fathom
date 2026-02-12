@@ -32,6 +32,20 @@ class CoRiderHost : ProjectActivity {
         @Suppress("IncorrectParentDisposable")
         com.intellij.openapi.util.Disposer.register(project) { lifetimeDef.terminate() }
 
+        // Listen for MCP config provisioning status
+        protocol.scheduler.queue {
+            model.mcpConfigStatus.advise(lifetimeDef.lifetime) { message ->
+                val group = NotificationGroupManager.getInstance()
+                    .getNotificationGroup("CoRider.CompanionPlugin") ?: return@advise
+                val notification = group.createNotification(
+                    "CoRider MCP configured",
+                    message,
+                    NotificationType.INFORMATION
+                )
+                Notifications.Bus.notify(notification, project)
+            }
+        }
+
         // Listen for companion plugin status from backend (advise must run on protocol scheduler)
         protocol.scheduler.queue {
             model.companionPluginStatus.advise(lifetimeDef.lifetime) { info ->

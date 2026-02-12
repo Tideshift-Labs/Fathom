@@ -23,7 +23,8 @@ class CoRiderModel private constructor(
     private val _serverStatus: RdSignal<ServerStatus>,
     private val _companionPluginStatus: RdSignal<CompanionPluginInfo>,
     private val _installCompanionPlugin: RdSignal<Unit>,
-    private val _buildCompanionPlugin: RdSignal<Unit>
+    private val _buildCompanionPlugin: RdSignal<Unit>,
+    private val _mcpConfigStatus: RdSignal<String>
 ) : RdExtBase() {
     //companion
     
@@ -40,7 +41,7 @@ class CoRiderModel private constructor(
         
         
         
-        const val serializationHash = 4330523225333517444L
+        const val serializationHash = -2434328902332654397L
         
     }
     override val serializersOwner: ISerializersOwner get() = CoRiderModel
@@ -52,6 +53,7 @@ class CoRiderModel private constructor(
     val companionPluginStatus: ISource<CompanionPluginInfo> get() = _companionPluginStatus
     val installCompanionPlugin: ISignal<Unit> get() = _installCompanionPlugin
     val buildCompanionPlugin: ISignal<Unit> get() = _buildCompanionPlugin
+    val mcpConfigStatus: ISignal<String> get() = _mcpConfigStatus
     //methods
     //initializer
     init {
@@ -64,6 +66,7 @@ class CoRiderModel private constructor(
         bindableChildren.add("companionPluginStatus" to _companionPluginStatus)
         bindableChildren.add("installCompanionPlugin" to _installCompanionPlugin)
         bindableChildren.add("buildCompanionPlugin" to _buildCompanionPlugin)
+        bindableChildren.add("mcpConfigStatus" to _mcpConfigStatus)
     }
     
     //secondary constructor
@@ -73,7 +76,8 @@ class CoRiderModel private constructor(
         RdSignal<ServerStatus>(ServerStatus),
         RdSignal<CompanionPluginInfo>(CompanionPluginInfo),
         RdSignal<Unit>(FrameworkMarshallers.Void),
-        RdSignal<Unit>(FrameworkMarshallers.Void)
+        RdSignal<Unit>(FrameworkMarshallers.Void),
+        RdSignal<String>(FrameworkMarshallers.String)
     )
     
     //equals trait
@@ -87,6 +91,7 @@ class CoRiderModel private constructor(
             print("companionPluginStatus = "); _companionPluginStatus.print(printer); println()
             print("installCompanionPlugin = "); _installCompanionPlugin.print(printer); println()
             print("buildCompanionPlugin = "); _buildCompanionPlugin.print(printer); println()
+            print("mcpConfigStatus = "); _mcpConfigStatus.print(printer); println()
         }
         printer.print(")")
     }
@@ -97,7 +102,8 @@ class CoRiderModel private constructor(
             _serverStatus.deepClonePolymorphic(),
             _companionPluginStatus.deepClonePolymorphic(),
             _installCompanionPlugin.deepClonePolymorphic(),
-            _buildCompanionPlugin.deepClonePolymorphic()
+            _buildCompanionPlugin.deepClonePolymorphic(),
+            _mcpConfigStatus.deepClonePolymorphic()
         )
     }
     //contexts

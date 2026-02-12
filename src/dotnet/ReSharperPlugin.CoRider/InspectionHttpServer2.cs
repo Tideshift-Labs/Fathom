@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Application.Parts;
@@ -263,6 +266,9 @@ namespace ReSharperPlugin.CoRider
                         Log.Error(ex, "InspectionHttpServer2: failed to write local marker file");
                     }
 
+                    // Auto-provision MCP config files for AI agents
+                    WriteMcpConfigFiles(port, model);
+
                     // Fire success notification via RD (must be on protocol scheduler thread)
                     if (model != null && _rdScheduler != null)
                         _rdScheduler.Queue(() =>
@@ -332,6 +338,98 @@ namespace ReSharperPlugin.CoRider
                 _listener = null;
                 Log.Info("InspectionHttpServer2: stopped");
             }
+        }
+
+        private void WriteMcpConfigFiles(int port, CoRiderModel model)
+        {
+            var written = new List<string>();
+            var solutionDir = _solution.SolutionDirectory.FullPath;
+
+            var coriderEntry = new JsonObject
+            {
+                ["type"] = "http",
+                ["url"] = $"http://localhost:{port}/mcp"
+            };
+
+            // Always write {solutionDir}/.mcp.json
+            try
+            {
+                var path = Path.Combine(solutionDir, ".mcp.json");
+                MergeMcpEntry(path, "mcpServers", coriderEntry);
+                written.Add(".mcp.json");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("WriteMcpConfigFiles: failed to write .mcp.json: " + ex.Message);
+            }
+
+            // Write .vscode/mcp.json only if .vscode/ exists
+            var vscodeDir = Path.Combine(solutionDir, ".vscode");
+            if (Directory.Exists(vscodeDir))
+            {
+                try
+                {
+                    var path = Path.Combine(vscodeDir, "mcp.json");
+                    MergeMcpEntry(path, "servers", coriderEntry);
+                    written.Add(".vscode/mcp.json");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("WriteMcpConfigFiles: failed to write .vscode/mcp.json: " + ex.Message);
+                }
+            }
+
+            // Write .cursor/mcp.json only if .cursor/ exists
+            var cursorDir = Path.Combine(solutionDir, ".cursor");
+            if (Directory.Exists(cursorDir))
+            {
+                try
+                {
+                    var path = Path.Combine(cursorDir, "mcp.json");
+                    MergeMcpEntry(path, "mcpServers", coriderEntry);
+                    written.Add(".cursor/mcp.json");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("WriteMcpConfigFiles: failed to write .cursor/mcp.json: " + ex.Message);
+                }
+            }
+
+            if (written.Count > 0)
+            {
+                var message = "Added MCP entry to " + string.Join(", ", written);
+                Log.Info("WriteMcpConfigFiles: " + message);
+
+                if (model != null && _rdScheduler != null)
+                    _rdScheduler.Queue(() => model.McpConfigStatus.Fire(message));
+            }
+        }
+
+        private static void MergeMcpEntry(string filePath, string rootKey, JsonObject coriderEntry)
+        {
+            JsonObject root;
+
+            if (File.Exists(filePath))
+            {
+                var existing = File.ReadAllText(filePath);
+                root = JsonNode.Parse(existing)?.AsObject() ?? new JsonObject();
+            }
+            else
+            {
+                root = new JsonObject();
+            }
+
+            if (root[rootKey] is not JsonObject servers)
+            {
+                servers = new JsonObject();
+                root[rootKey] = servers;
+            }
+
+            // Deep-clone the entry so each file gets its own node instance
+            servers["corider"] = JsonNode.Parse(coriderEntry.ToJsonString());
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(filePath, root.ToJsonString(options));
         }
 
         private async Task AcceptLoopAsync()

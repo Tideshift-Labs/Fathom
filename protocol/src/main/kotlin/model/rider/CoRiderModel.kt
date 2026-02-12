@@ -33,5 +33,6 @@ object CoRiderModel : Ext(SolutionModel.Solution) {
         sink("companionPluginStatus", CompanionPluginInfo)
         source("installCompanionPlugin", void)
         source("buildCompanionPlugin", void)
+        signal("mcpConfigStatus", string)
     }
 }

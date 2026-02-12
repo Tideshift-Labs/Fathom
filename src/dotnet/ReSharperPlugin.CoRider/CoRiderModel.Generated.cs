@@ -47,6 +47,7 @@ namespace JetBrains.Rider.Model
     [NotNull] public void CompanionPluginStatus(CompanionPluginInfo value) => _CompanionPluginStatus.Fire(value);
     [NotNull] public ISource<Unit> InstallCompanionPlugin => _InstallCompanionPlugin;
     [NotNull] public ISource<Unit> BuildCompanionPlugin => _BuildCompanionPlugin;
+    [NotNull] public ISignal<string> McpConfigStatus => _McpConfigStatus;
     
     //private fields
     [NotNull] private readonly RdProperty<int> _Port;
@@ -54,6 +55,7 @@ namespace JetBrains.Rider.Model
     [NotNull] private readonly RdSignal<CompanionPluginInfo> _CompanionPluginStatus;
     [NotNull] private readonly RdSignal<Unit> _InstallCompanionPlugin;
     [NotNull] private readonly RdSignal<Unit> _BuildCompanionPlugin;
+    [NotNull] private readonly RdSignal<string> _McpConfigStatus;
     
     //primary constructor
     private CoRiderModel(
@@ -61,7 +63,8 @@ namespace JetBrains.Rider.Model
       [NotNull] RdSignal<JetBrains.Rider.Model.ServerStatus> serverStatus,
       [NotNull] RdSignal<CompanionPluginInfo> companionPluginStatus,
       [NotNull] RdSignal<Unit> installCompanionPlugin,
-      [NotNull] RdSignal<Unit> buildCompanionPlugin
+      [NotNull] RdSignal<Unit> buildCompanionPlugin,
+      [NotNull] RdSignal<string> mcpConfigStatus
     )
     {
       if (port == null) throw new ArgumentNullException("port");
@@ -69,18 +72,21 @@ namespace JetBrains.Rider.Model
       if (companionPluginStatus == null) throw new ArgumentNullException("companionPluginStatus");
       if (installCompanionPlugin == null) throw new ArgumentNullException("installCompanionPlugin");
       if (buildCompanionPlugin == null) throw new ArgumentNullException("buildCompanionPlugin");
+      if (mcpConfigStatus == null) throw new ArgumentNullException("mcpConfigStatus");
       
       _Port = port;
       _ServerStatus = serverStatus;
       _CompanionPluginStatus = companionPluginStatus;
       _InstallCompanionPlugin = installCompanionPlugin;
       _BuildCompanionPlugin = buildCompanionPlugin;
+      _McpConfigStatus = mcpConfigStatus;
       _Port.OptimizeNested = true;
       BindableChildren.Add(new KeyValuePair<string, object>("port", _Port));
       BindableChildren.Add(new KeyValuePair<string, object>("serverStatus", _ServerStatus));
       BindableChildren.Add(new KeyValuePair<string, object>("companionPluginStatus", _CompanionPluginStatus));
       BindableChildren.Add(new KeyValuePair<string, object>("installCompanionPlugin", _InstallCompanionPlugin));
       BindableChildren.Add(new KeyValuePair<string, object>("buildCompanionPlugin", _BuildCompanionPlugin));
+      BindableChildren.Add(new KeyValuePair<string, object>("mcpConfigStatus", _McpConfigStatus));
     }
     //secondary constructor
     internal CoRiderModel (
@@ -89,14 +95,15 @@ namespace JetBrains.Rider.Model
       new RdSignal<JetBrains.Rider.Model.ServerStatus>(JetBrains.Rider.Model.ServerStatus.Read, JetBrains.Rider.Model.ServerStatus.Write),
       new RdSignal<CompanionPluginInfo>(CompanionPluginInfo.Read, CompanionPluginInfo.Write),
       new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid),
-      new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid)
+      new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid),
+      new RdSignal<string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString)
     ) {}
     //deconstruct trait
     //statics
     
     
     
-    protected override long SerializationHash => 4330523225333517444L;
+    protected override long SerializationHash => -2434328902332654397L;
     
     protected override Action<ISerializers> Register => RegisterDeclaredTypesSerializers;
     public static void RegisterDeclaredTypesSerializers(ISerializers serializers)
@@ -122,6 +129,7 @@ namespace JetBrains.Rider.Model
         printer.Print("companionPluginStatus = "); _CompanionPluginStatus.PrintEx(printer); printer.Println();
         printer.Print("installCompanionPlugin = "); _InstallCompanionPlugin.PrintEx(printer); printer.Println();
         printer.Print("buildCompanionPlugin = "); _BuildCompanionPlugin.PrintEx(printer); printer.Println();
+        printer.Print("mcpConfigStatus = "); _McpConfigStatus.PrintEx(printer); printer.Println();
       }
       printer.Print(")");
     }
