@@ -36,6 +36,10 @@ jobs:
           key: gradle-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'build.gradle.kts', 'gradle.properties') }}
           restore-keys: gradle-
 
+      - name: Download build tools
+        shell: pwsh
+        run: .\scripts\setup.ps1
+
       - name: Extract version from tag
         id: version
         shell: pwsh
