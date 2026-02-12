@@ -46,7 +46,7 @@ jobs:
       - name: Build plugin
         shell: pwsh
         run: |
-          .\gradlew.bat buildPlugin -PPluginVersion=${{ steps.version.outputs.VERSION }} -PBuildConfiguration=Release
+          .\gradlew.bat buildPlugin "-PPluginVersion=${{ steps.version.outputs.VERSION }}" "-PBuildConfiguration=Release"
 
       - name: Extract release notes from CHANGELOG
         id: changelog
