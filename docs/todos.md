@@ -1,5 +1,2 @@
-- [ ] **Recursive C++ Discovery**: Improve `/blueprints` to walk C++ class hierarchies.
-- [ ] **UCLASS Reflection**: Add `/uclass` endpoint for parsing `UPROPERTY`/`UFUNCTION` macros.
-- [ ] **Notification Balloons**: Show UI feedback in Rider when the server starts or fails.
 - [ ] **C# Inspection Fix**: Investigate why `.cs` files sometimes report 0 issues.
 - [ ] **Describe Code** action should also include comments that are assigned to functions or properties
