@@ -562,7 +562,7 @@ Wrap everything in `try/catch` and write `ex.Message + ex.StackTrace` to the out
 
 Sandbox IDE logs are at:
 ```
-CoRider/build/idea-sandbox/RD-{version}/log/backend.{date}.{pid}.log
+Fathom/build/idea-sandbox/RD-{version}/log/backend.{date}.{pid}.log
 ```
 
 Search for your component/class name. Verbose-level logging appears with `|V|` prefix.

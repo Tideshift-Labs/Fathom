@@ -5,7 +5,7 @@
 
 ## Problem
 
-CoRider's current code navigation is file-centric. Every endpoint requires the caller to already know which file to look at:
+Fathom's current code navigation is file-centric. Every endpoint requires the caller to already know which file to look at:
 
 ```
 GET /describe_code?file=Source/MyActor.cpp
@@ -23,7 +23,7 @@ Expose Rider's solution-wide symbol lookup, find usages, go-to-declaration, and 
 
 ## ReSharper SDK APIs
 
-These are the public SDK APIs that power Rider's symbol navigation. None are currently used by CoRider.
+These are the public SDK APIs that power Rider's symbol navigation. None are currently used by Fathom.
 
 ### ISymbolScope (name-based lookup)
 
@@ -116,7 +116,7 @@ This is the same pattern already used by `CodeStructureService`, `FileIndexServi
 
 The APIs above (`ISymbolScope`, `IFinder`) are well-documented for C#. For C++, the situation is murkier because C++ PSI lives in the closed-source `JetBrains.ReSharper.Feature.Services.Cpp.dll`.
 
-However, C++ PSI nodes do produce `IDeclaredElement` instances. CoRider's `CppStructureWalker` already extracts them via reflection on the `DeclaredElement` property. The question is whether `ISymbolScope.GetElementsByShortName()` returns C++ elements, and whether `IFinder.FindReferences()` works for C++ `IDeclaredElement` targets.
+However, C++ PSI nodes do produce `IDeclaredElement` instances. Fathom's `CppStructureWalker` already extracts them via reflection on the `DeclaredElement` property. The question is whether `ISymbolScope.GetElementsByShortName()` returns C++ elements, and whether `IFinder.FindReferences()` works for C++ `IDeclaredElement` targets.
 
 **Recommended approach:** Try the public APIs first. If they return empty results for C++ (similar to how `RunLocalInspections` silently failed for C++ before the `InspectCodeDaemon` discovery), fall back to reflection-based access on C++-specific caches. The `UEAssetUsagesSearcher` component (already documented in `LEARNINGS.md`) provides `GetFindUsagesResults()` and `GetGoToInheritorsResults()` specifically for C++ symbols in Blueprint contexts.
 
@@ -234,7 +234,7 @@ However, C++ PSI nodes do produce `IDeclaredElement` instances. CoRider's `CppSt
 
 ### MCP tools
 
-Four new tools in `CoRiderMcpServer`:
+Four new tools in `FathomMcpServer`:
 
 ```
 search_symbols      -> GET /symbols?query=...&kind=...&limit=...
@@ -280,11 +280,11 @@ Key decisions:
 **Wiring:**
 - Add `SymbolSearchService` as a field on `InspectionHttpServer2`
 - Add `SymbolsHandler` to the `_handlers` array in `StartServer()`
-- Add MCP tool definitions to `CoRiderMcpServer.Tools`
+- Add MCP tool definitions to `FathomMcpServer.Tools`
 
 **Testing:**
 - `curl http://localhost:{port}/symbols?query=FMyActor` on a UE5 project
-- `curl http://localhost:{port}/symbols?query=InspectionService` on the CoRider solution itself (C#)
+- `curl http://localhost:{port}/symbols?query=InspectionService` on the Fathom solution itself (C#)
 - Verify results include file path, line number, element kind
 
 ### Phase 2: Go to declaration (/symbols/declaration)
@@ -392,7 +392,7 @@ Enhance `/symbols` to support partial matches:
 | File | Change |
 |---|---|
 | `InspectionHttpServer2.cs` | Add `SymbolSearchService` field, wire in constructor, add `SymbolsHandler` to `_handlers` array |
-| `Mcp/CoRiderMcpServer.cs` | Add 4 new `ToolDef` entries for `search_symbols`, `symbol_declaration`, `symbol_usages`, `symbol_inheritors` |
+| `Mcp/FathomMcpServer.cs` | Add 4 new `ToolDef` entries for `search_symbols`, `symbol_declaration`, `symbol_usages`, `symbol_inheritors` |
 
 ## Risks and Open Questions
 

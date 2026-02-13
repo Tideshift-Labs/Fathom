@@ -2,11 +2,11 @@
 
 ## Problem
 
-The MCP handler (`CoRiderMcpServer`) translates `tools/call` requests into loopback
+The MCP handler (`FathomMcpServer`) translates `tools/call` requests into loopback
 HTTP GET requests back to the same process:
 
 ```
-MCP client --> POST /mcp --> McpHandler --> CoRiderMcpServer.HandleToolsCall()
+MCP client --> POST /mcp --> McpHandler --> FathomMcpServer.HandleToolsCall()
   --> WebClient.DownloadString("http://localhost:{port}/classes?search=foo")
   --> HttpListener (same process) --> ClassesHandler --> ClassIndexService
   --> response string flows back through the entire chain
@@ -18,11 +18,11 @@ to reach services that live in the same C# process.
 
 ## Proposed Change
 
-Wire `CoRiderMcpServer` directly to the service layer, bypassing HTTP entirely.
+Wire `FathomMcpServer` directly to the service layer, bypassing HTTP entirely.
 Each MCP tool maps 1:1 to a service call that already returns typed objects.
 
 ```
-MCP client --> POST /mcp --> McpHandler --> CoRiderMcpServer.HandleToolsCall()
+MCP client --> POST /mcp --> McpHandler --> FathomMcpServer.HandleToolsCall()
   --> ClassIndexService.BuildClassIndex(search, baseClass)
   --> serialize result --> JSON-RPC response
 ```
@@ -42,12 +42,12 @@ MCP client --> POST /mcp --> McpHandler --> CoRiderMcpServer.HandleToolsCall()
 
 ## Implementation Plan
 
-### 1. Expand `CoRiderMcpServer` constructor to accept services
+### 1. Expand `FathomMcpServer` constructor to accept services
 
 Instead of just `int port`, inject the services it needs:
 
 ```csharp
-public CoRiderMcpServer(
+public FathomMcpServer(
     ISolution solution,
     FileIndexService fileIndex,
     ClassIndexService classIndex,
@@ -142,7 +142,7 @@ service directly (not loop back through our own HTTP server).
 
 - Delete `BuildInternalUrl()` method
 - Delete `InternalHttpGet()` method
-- Remove the `_port` field from `CoRiderMcpServer` (no longer needed)
+- Remove the `_port` field from `FathomMcpServer` (no longer needed)
 - Remove the `Endpoint` field from `ToolDef` (tool definitions still needed
   for `tools/list` but no longer need an endpoint path)
 
@@ -166,11 +166,11 @@ private class ToolDef
 
 | File | Change |
 |------|--------|
-| `Mcp/CoRiderMcpServer.cs` | Major rewrite: inject services, direct dispatch, remove HTTP proxy code |
-| `InspectionHttpServer2.cs` | Update `CoRiderMcpServer` instantiation (line ~209) |
+| `Mcp/FathomMcpServer.cs` | Major rewrite: inject services, direct dispatch, remove HTTP proxy code |
+| `InspectionHttpServer2.cs` | Update `FathomMcpServer` instantiation (line ~209) |
 
 No changes to handlers, services, or `McpHandler.cs` (it still receives
-JSON-RPC and delegates to `CoRiderMcpServer`).
+JSON-RPC and delegates to `FathomMcpServer`).
 
 ## Benefits
 

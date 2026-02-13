@@ -2,7 +2,7 @@
 
 ## Problem
 
-CoRider has no CI/CD. Releases to both GitHub Releases and JetBrains Marketplace are entirely manual, requiring the developer to:
+Fathom has no CI/CD. Releases to both GitHub Releases and JetBrains Marketplace are entirely manual, requiring the developer to:
 
 1. Remember to update `CHANGELOG.md`
 2. Manually set `PluginVersion` in `gradle.properties`
@@ -56,17 +56,17 @@ The `gradle.properties` hardcodes `org.gradle.java.home` to a local dev path. CI
 
 ### Sibling Repo Checkout
 
-`prepareSandbox` depends on `packageUePlugin`, which zips `${rootDir}/../CoRider-UnrealEngine`. Both workflows check out `Tideshift-Labs/Fathom-UnrealEngine` (public) as a sibling directory:
+`prepareSandbox` depends on `packageUePlugin`, which zips `${rootDir}/../Fathom-UnrealEngine`. Both workflows check out `Tideshift-Labs/Fathom-UnrealEngine` (public) as a sibling directory:
 
 ```yaml
 - uses: actions/checkout@v4
   with:
-    path: CoRider
+    path: Fathom
 
 - uses: actions/checkout@v4
   with:
     repository: Tideshift-Labs/Fathom-UnrealEngine
-    path: CoRider-UnrealEngine
+    path: Fathom-UnrealEngine
 ```
 
 ### Version Injection
@@ -129,5 +129,5 @@ Subsequent versions published via CI will go through faster automated verificati
 1. **CI**: Push any commit to a branch. Check the Actions tab for a passing build.
 2. **Release**: Push a `v0.1.0` tag. Verify:
    - Actions tab shows a green release workflow run
-   - Releases tab shows "CoRider 0.1.0" with the ZIP attached
+   - Releases tab shows "Fathom 0.1.0" with the ZIP attached
    - JetBrains Marketplace shows the new version (after initial registration)

@@ -11,7 +11,7 @@ The version is stored in two places:
 | File | Field | Example |
 |------|-------|---------|
 | `gradle.properties` | `PluginVersion` | `0.1.0` |
-| `../CoRider-UnrealEngine/FathomUELink.uplugin` | `VersionName` | `0.1.0` |
+| `../Fathom-UnrealEngine/FathomUELink.uplugin` | `VersionName` | `0.1.0` |
 
 These must stay in sync. The Rider plugin reads the bundled `.uplugin` `VersionName` at runtime to detect whether the user's installed UE companion plugin is outdated (see `CompanionPluginService.Detect()`). A mismatch causes the plugin to prompt the user to update.
 
@@ -28,7 +28,7 @@ This script:
 1. Validates the version matches `MAJOR.MINOR.PATCH`
 2. Updates `PluginVersion` in `gradle.properties`
 3. Updates `CHANGELOG.md`: renames `## [Unreleased]` to `## [0.2.0] - YYYY-MM-DD` and adds a fresh `## [Unreleased]` section above it
-4. Updates `VersionName` in `../CoRider-UnrealEngine/FathomUELink.uplugin`
+4. Updates `VersionName` in `../Fathom-UnrealEngine/FathomUELink.uplugin`
 5. Commits and tags `v0.2.0` in both repos
 
 Before running the script, move your changelog entries from `## [Unreleased]` into bullet points under that heading so they get stamped with the version.
@@ -38,7 +38,7 @@ Before running the script, move your changelog entries from `## [Unreleased]` in
 After bumping, push both repos with their tags. **Fathom-UnrealEngine must be pushed first** because the Fathom release workflow checks out Fathom-UnrealEngine by the same `v*` tag. If that tag does not exist on GitHub yet, the workflow will fail.
 
 ```powershell
-git -C ..\CoRider-UnrealEngine push --follow-tags               # 1. UE plugin first
+git -C ..\Fathom-UnrealEngine push --follow-tags               # 1. UE plugin first
 git push --follow-tags                                          # 2. Fathom second (triggers workflow)
 ```
 
@@ -53,12 +53,12 @@ Pushing the `v*` tag triggers the GitHub Actions release workflow (`.github/work
 
 ## Repository layout
 
-Both repos must be sibling directories. The Gradle build (`build.gradle.kts`) references `../CoRider-UnrealEngine` directly to bundle the UE plugin source into the Rider plugin zip.
+Both repos must be sibling directories. The Gradle build (`build.gradle.kts`) references `../Fathom-UnrealEngine` directly to bundle the UE plugin source into the Rider plugin zip.
 
 ```
-CoRider-All/
-  CoRider/                    # Rider plugin (this repo)
-  CoRider-UnrealEngine/       # UE companion plugin
+Fathom-All/
+  Fathom/                     # Rider plugin (this repo)
+  Fathom-UnrealEngine/        # UE companion plugin
 ```
 
 ## CHANGELOG format

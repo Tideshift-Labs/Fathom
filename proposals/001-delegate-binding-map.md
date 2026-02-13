@@ -87,7 +87,7 @@ The binding patterns are highly mechanical and grep-friendly:
 | Broadcasts | `.Broadcast(`, `.Execute(`, `.ExecuteIfBound(` |
 | Bindings | `.AddDynamic(`, `.AddUObject(`, `.BindUObject(`, `.BindRaw(`, `.Add(`, `.AddLambda(`, `.BindLambda(`, `.AddSP(` |
 
-Two implementation options in CoRider (Rider plugin):
+Two implementation options in Fathom (Rider plugin):
 
 1. **ReSharper PSI (rich, accurate)** - Use the C++ PSI tree to resolve symbols. Find all delegate type declarations, then use "find usages" style APIs on the property/field to locate bindings and broadcasts. This gives precise results with resolved types, but is more complex to implement and depends on ReSharper's C++ engine fully indexing the project.
 

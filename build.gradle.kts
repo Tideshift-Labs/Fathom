@@ -76,7 +76,7 @@ java {
 val packageUePlugin by tasks.registering(Zip::class) {
     archiveFileName.set("FathomUELink.zip")
     destinationDirectory.set(layout.buildDirectory.dir("ue-plugin"))
-    from("${rootDir}/../CoRider-UnrealEngine") {
+    from("${rootDir}/../Fathom-UnrealEngine") {
         exclude("Intermediate/**", "Binaries/**", ".git/**", "AGENTS.md", "README.md", "LICENSE")
     }
 }

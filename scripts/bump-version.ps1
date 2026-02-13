@@ -38,7 +38,7 @@ Set-Content $changelogPath $changelog -NoNewline
 Write-Host "Updated CHANGELOG.md with version $Version"
 
 # Update Fathom-UnrealEngine .uplugin VersionName (sibling repo)
-$upluginPath = Join-Path $RepoRoot "..\CoRider-UnrealEngine\FathomUELink.uplugin"
+$upluginPath = Join-Path $RepoRoot "..\Fathom-UnrealEngine\FathomUELink.uplugin"
 if (Test-Path $upluginPath) {
     $uplugin = Get-Content $upluginPath -Raw
     $uplugin = $uplugin -replace '"VersionName"\s*:\s*"[^"]*"', "`"VersionName`": `"$Version`""
@@ -59,7 +59,7 @@ try {
     Pop-Location
 }
 
-# Git commit in CoRider-UnrealEngine repo (sibling, separate repo)
+# Git commit in Fathom-UnrealEngine repo (sibling, separate repo)
 if (Test-Path $upluginPath) {
     $ueRoot = Split-Path $upluginPath -Parent
     Push-Location $ueRoot
