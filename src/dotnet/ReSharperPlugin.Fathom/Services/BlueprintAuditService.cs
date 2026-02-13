@@ -67,7 +67,7 @@ public class BlueprintAuditService
         }
 
         var uprojectDir = ueInfo.ProjectDirectory;
-        var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
+        var auditDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
 
         if (!Directory.Exists(auditDir))
         {
@@ -230,7 +230,7 @@ public class BlueprintAuditService
             }
 
             var uprojectDir = ueInfo.ProjectDirectory;
-            var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
+            var auditDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
 
             if (!Directory.Exists(auditDir))
             {
@@ -291,7 +291,7 @@ public class BlueprintAuditService
         if (!ueInfo.IsUnrealProject) return null;
 
         var uprojectDir = ueInfo.ProjectDirectory;
-        var auditDir = Path.Combine(uprojectDir, "Saved", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
+        var auditDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}", "Blueprints");
         if (!Directory.Exists(auditDir)) return null;
 
         // Normalize input: strip ".ObjectName" suffix if caller passed a full object path

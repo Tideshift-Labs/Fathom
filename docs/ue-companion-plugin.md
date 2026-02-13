@@ -41,12 +41,12 @@ Given a `UBlueprint*`, produces a Markdown file containing:
 ### Output location
 
 ```
-{ProjectDir}/Saved/Audit/Blueprints/
+{ProjectDir}/Saved/Fathom/Audit/Blueprints/
 ```
 
 Mirrors the `Content/` directory layout:
 ```
-/Game/UI/Widgets/WBP_Foo  ->  Saved/Audit/Blueprints/UI/Widgets/WBP_Foo.md
+/Game/UI/Widgets/WBP_Foo  ->  Saved/Fathom/Audit/Blueprints/UI/Widgets/WBP_Foo.md
 ```
 
 ## Architecture: how the two plugins couple
@@ -56,7 +56,7 @@ UE Companion Plugin                       Rider Plugin (InspectionHttpServer)
 ────────────────────                      ─────────────────────────────────────
 
  On-save subsystem ────writes──┐
-                                ├──► Saved/Audit/Blueprints/*.md ◄──reads── /blueprint-audit endpoint
+                                ├──► Saved/Fathom/Audit/Blueprints/*.md ◄──reads── /blueprint-audit endpoint
  Commandlet (headless) ──writes─┘              ▲
                                                │
                                           triggers when .uasset
@@ -67,7 +67,7 @@ UE Companion Plugin                       Rider Plugin (InspectionHttpServer)
 
 The contract between the two plugins is purely **filesystem conventions**:
 
-1. **Audit output directory**: `{ProjectDir}/Saved/Audit/Blueprints/`. Both sides agree on this path.
+1. **Audit output directory**: `{ProjectDir}/Saved/Fathom/Audit/Blueprints/`. Both sides agree on this path.
 2. **Commandlet name**: `BlueprintAudit`, the hardcoded convention the Rider plugin uses to invoke headless audits.
 3. **Engine and project paths**: Rider already knows these from its Unreal Engine integration settings (needed for building/debugging).
 
@@ -76,9 +76,9 @@ No shared config files, no runtime communication protocol, no compile-time depen
 ### Discovery: is the companion installed?
 
 The Rider plugin doesn't need an explicit check. It:
-1. Looks for `Saved/Audit/Blueprints/`. If `.md` files exist, reads them.
+1. Looks for `Saved/Fathom/Audit/Blueprints/`. If `.md` files exist, reads them.
 2. If it needs to refresh, shells out to the commandlet. If it fails (commandlet not registered), the companion isn't installed; gracefully degrade.
-3. Optionally: check for a `.uplugin` file in `Plugins/BlueprintAudit/` to proactively hint "companion not installed."
+3. Optionally: check for a `.uplugin` file in `Plugins/FathomUELink/` to proactively hint "companion not installed."
 
 ### What each side covers
 
@@ -109,7 +109,7 @@ E:\UE\Projects\Workspace\Source\Udemy_CUIEditor\
 
 ### To extract into a standalone plugin
 
-- Move into a proper plugin structure: `Plugins/BlueprintAudit/Source/BlueprintAudit/`
+- Move into a proper plugin structure: `Plugins/FathomUELink/Source/BlueprintAudit/`
 - Module type: **Editor-only** (`Type: Editor`, `LoadingPhase: Default`) so it doesn't ship in cooked/packaged builds.
 - Remove dependency on the game module (`Udemy_CUIEditor`); the auditor only uses engine/editor APIs.
 - Add a `.uplugin` descriptor.
@@ -118,7 +118,7 @@ E:\UE\Projects\Workspace\Source\Udemy_CUIEditor\
 
 When integrating with the Rider plugin (`InspectionHttpServer`):
 
-1. Add a `/blueprint-audit?class=WBP_Foo` endpoint that reads from `Saved/Audit/Blueprints/`. Pure file I/O, no engine coupling.
+1. Add a `/blueprint-audit?class=WBP_Foo` endpoint that reads from `Saved/Fathom/Audit/Blueprints/`. Pure file I/O, no engine coupling.
 2. Add a file watcher on `Content/**/*.uasset` that compares modification timestamps against corresponding audit files.
 3. When stale entries are detected, shell out to the commandlet in the background: `{EngineDir}/Binaries/Win64/UnrealEditor-Cmd.exe {Project}.uproject -run=BlueprintAudit -AssetPath={PackagePath}`
 4. Surface a staleness indicator in the response so LLM consumers know whether the data is fresh.

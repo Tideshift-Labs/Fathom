@@ -56,7 +56,7 @@ Fathom/
 
 This plugin works with the companion [Fathom-UnrealEngine](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) UE editor plugin.
 - **Audit schema version**: `BlueprintAuditService.AuditSchemaVersion` must match `FBlueprintAuditor::AuditSchemaVersion` in the UE repo.
-- **Audit output path**: `Saved/Audit/v<N>/Blueprints/...`. The `v<N>` version segment invalidates cached files automatically.
+- **Audit output path**: `Saved/Fathom/Audit/v<N>/Blueprints/...`. The `v<N>` version segment invalidates cached files automatically.
 - **Commandlet name**: The plugin invokes `UnrealEditor-Cmd.exe -run=BlueprintAudit`.
 
 ## Environment Notes
