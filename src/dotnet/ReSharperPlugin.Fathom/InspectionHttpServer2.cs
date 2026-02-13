@@ -252,13 +252,15 @@ namespace ReSharperPlugin.Fathom
                     // Write local solution marker for MCP discovery
                     try
                     {
-                        var localMarkerPath = _solution.SolutionDirectory.Combine(".fathom-server.json");
+                        var metaDir = GetFathomMetadataDir();
+                        Directory.CreateDirectory(metaDir);
+                        var localMarkerPath = Path.Combine(metaDir, ".fathom-server.json");
                         var json = $"{{\n  \"port\": {port},\n  \"mcpEndpoint\": \"http://localhost:{port}/mcp\",\n  \"mcpTransport\": \"streamable-http\",\n  \"solution\": \"{_solution.SolutionDirectory.FullPath.Replace("\\", "\\\\")}\",\n  \"started\": \"{DateTime.Now:O}\"\n}}";
-                        File.WriteAllText(localMarkerPath.FullPath, json);
+                        File.WriteAllText(localMarkerPath, json);
 
                         _lifetime.OnTermination(() =>
                         {
-                            try { File.Delete(localMarkerPath.FullPath); } catch { }
+                            try { File.Delete(localMarkerPath); } catch { }
                         });
                     }
                     catch (Exception ex)
@@ -395,6 +397,26 @@ namespace ReSharperPlugin.Fathom
                 }
             }
 
+            // Merge into opencode.json only if it already exists (OpenCode uses "mcp" root key + "type":"remote")
+            var openCodePath = Path.Combine(solutionDir, "opencode.json");
+            if (File.Exists(openCodePath))
+            {
+                try
+                {
+                    var openCodeEntry = new JsonObject
+                    {
+                        ["type"] = "remote",
+                        ["url"] = $"http://localhost:{port}/mcp"
+                    };
+                    MergeMcpEntry(openCodePath, "mcp", openCodeEntry);
+                    written.Add("opencode.json");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("WriteMcpConfigFiles: failed to write opencode.json: " + ex.Message);
+                }
+            }
+
             if (written.Count > 0)
             {
                 var message = "Added MCP entry to " + string.Join(", ", written);
@@ -403,6 +425,27 @@ namespace ReSharperPlugin.Fathom
                 if (model != null && _rdScheduler != null)
                     _rdScheduler.Queue(() => model.McpConfigStatus.Fire(message));
             }
+        }
+
+        /// <summary>
+        /// Returns the directory where Fathom should store transient metadata files
+        /// (.fathom-server.json, caches, etc.). For UE projects this resolves to
+        /// Saved/Fathom/ which is already VCS-ignored, keeping the project root clean.
+        /// For other project types, falls back to the solution directory.
+        /// </summary>
+        private string GetFathomMetadataDir()
+        {
+            var solutionDir = _solution.SolutionDirectory.FullPath;
+
+            // UE project: has a .uproject file and a Saved/ directory
+            if (Directory.GetFiles(solutionDir, "*.uproject").Length > 0)
+            {
+                var savedDir = Path.Combine(solutionDir, "Saved");
+                if (Directory.Exists(savedDir))
+                    return Path.Combine(savedDir, "Fathom");
+            }
+
+            return solutionDir;
         }
 
         private static void MergeMcpEntry(string filePath, string rootKey, JsonObject fathomEntry)

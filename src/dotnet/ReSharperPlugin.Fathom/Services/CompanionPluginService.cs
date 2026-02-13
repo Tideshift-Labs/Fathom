@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using JetBrains.ProjectModel;
 using JetBrains.Util;
@@ -14,6 +15,7 @@ namespace ReSharperPlugin.Fathom.Services;
 public class CompanionPluginService
 {
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<CompanionPluginService>();
+    private const string InstallHashFileName = ".fathom-install-hash";
 
     private readonly ISolution _solution;
     private readonly ServerConfiguration _config;
@@ -77,6 +79,20 @@ public class CompanionPluginService
                 };
             }
 
+            // Versions match, but check if the bundled ZIP contents have changed
+            // (useful during local dev when the version string stays the same).
+            var installedDir = Path.GetDirectoryName(installedUpluginPath);
+            if (installedDir != null && HasBundledContentChanged(installedDir))
+            {
+                return new CompanionPluginDetectionResult
+                {
+                    Status = "Outdated",
+                    InstalledVersion = installedVersion,
+                    BundledVersion = bundledVersion,
+                    Message = $"{pluginName} {installedVersion} has changed content (bundled ZIP differs). Click Install to update."
+                };
+            }
+
             return new CompanionPluginDetectionResult
             {
                 Status = "UpToDate",
@@ -125,6 +141,12 @@ public class CompanionPluginService
             // The ZIP root contains the plugin files directly (no wrapper folder),
             // so we extract into the target directory.
             ZipFile.ExtractToDirectory(zipPath, targetDir);
+
+            // Write the ZIP's MD5 hash so Detect() can spot content changes
+            // even when the version string hasn't been bumped (local dev workflow).
+            var zipHash = ComputeFileMd5(zipPath);
+            if (zipHash != null)
+                File.WriteAllText(Path.Combine(targetDir, InstallHashFileName), zipHash);
 
             Log.Info($"CompanionPluginService: installed companion plugin to {targetDir}");
             return (true, $"Installed to {targetDir}");
@@ -292,6 +314,46 @@ public class CompanionPluginService
 
         var dllDir = Path.GetDirectoryName(dllPath);
         return dllDir == null ? null : Path.Combine(dllDir, _config.CompanionPluginZipName);
+    }
+
+    private bool HasBundledContentChanged(string installedDir)
+    {
+        try
+        {
+            var hashFilePath = Path.Combine(installedDir, InstallHashFileName);
+            if (!File.Exists(hashFilePath))
+                return true; // No hash on record, needs reinstall to start tracking
+
+            var storedHash = File.ReadAllText(hashFilePath).Trim();
+            var zipPath = GetBundledZipPath();
+            if (zipPath == null || !File.Exists(zipPath))
+                return false;
+
+            var currentHash = ComputeFileMd5(zipPath);
+            return !string.Equals(storedHash, currentHash, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("CompanionPluginService: hash comparison failed: " + ex.Message);
+            return false;
+        }
+    }
+
+    private static string ComputeFileMd5(string filePath)
+    {
+        try
+        {
+            using (var md5 = MD5.Create())
+            using (var stream = File.OpenRead(filePath))
+            {
+                var hash = md5.ComputeHash(stream);
+                return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            }
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string ParseVersionFromUplugin(string upluginPath)
