@@ -53,7 +53,7 @@ Push-Location $RepoRoot
 try {
     git add gradle.properties CHANGELOG.md
     git commit -m "Bump version to $Version"
-    git tag "v$Version"
+    git tag -a "v$Version" -m "v$Version"
     Write-Host "Created commit and tag v$Version in Fathom"
 } finally {
     Pop-Location
@@ -66,7 +66,7 @@ if (Test-Path $upluginPath) {
     try {
         git add FathomUELink.uplugin
         git commit -m "Bump version to $Version"
-        git tag "v$Version"
+        git tag -a "v$Version" -m "v$Version"
         Write-Host "Created commit and tag v$Version in Fathom-UnrealEngine"
     } finally {
         Pop-Location
