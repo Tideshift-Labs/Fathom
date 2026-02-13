@@ -109,12 +109,12 @@ public class ServerConfiguration
         /// <summary>
         /// Name of the companion UE plugin (directory and .uplugin base name).
         /// </summary>
-        public string CompanionPluginName { get; set; } = "CoRiderUnrealEngine";
+        public string CompanionPluginName { get; set; } = "FathomUELink";
 
         /// <summary>
         /// Name of the bundled ZIP file shipped alongside the DLL.
         /// </summary>
-        public string CompanionPluginZipName { get; set; } = "CoRiderUnrealEngine.zip";
+        public string CompanionPluginZipName { get; set; } = "FathomUELink.zip";
 
         /// <summary>
         /// Delay (ms) after boot before checking companion plugin presence.

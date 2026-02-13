@@ -188,7 +188,7 @@ public class BlueprintInfoHandler : IRequestHandler
         if (!editorAvailable)
         {
             sb.Append("## ").AppendLine(title);
-            sb.AppendLine("UE editor not running. Start the editor with CoRider plugin to see asset references.");
+            sb.AppendLine("UE editor not running. Start the editor with FathomUELink plugin to see asset references.");
             sb.AppendLine();
             return;
         }

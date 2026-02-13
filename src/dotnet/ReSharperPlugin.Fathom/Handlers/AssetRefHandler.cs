@@ -65,8 +65,8 @@ public class AssetRefHandler : IRequestHandler
         if (!_proxy.IsAvailable())
         {
             HttpHelpers.RespondWithFormat(ctx, format, 503,
-                "UE editor is not running. Asset reference queries require a live editor connection.\n\nOpen the UE project in the Unreal Editor with the CoRider plugin enabled.",
-                new { error = "UE editor is not running. Asset reference queries require a live editor connection.", hint = "Open the UE project in the Unreal Editor with the CoRider plugin enabled." });
+                "UE editor is not running. Asset reference queries require a live editor connection.\n\nOpen the UE project in the Unreal Editor with the FathomUELink plugin enabled.",
+                new { error = "UE editor is not running. Asset reference queries require a live editor connection.", hint = "Open the UE project in the Unreal Editor with the FathomUELink plugin enabled." });
             return;
         }
 

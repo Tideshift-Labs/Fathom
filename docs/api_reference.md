@@ -55,7 +55,7 @@ Run ReSharper code inspection on file(s). Returns issues with severity, location
 
 ## Unreal Engine
 
-These endpoints provide Blueprint and asset intelligence. Some require a live UE editor with the CoRider-UnrealEngine plugin.
+These endpoints provide Blueprint and asset intelligence. Some require a live UE editor with the FathomUELink plugin.
 
 ### GET `/blueprints`
 

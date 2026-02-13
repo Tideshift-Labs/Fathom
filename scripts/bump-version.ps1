@@ -37,15 +37,15 @@ $changelog = $changelog -replace '## \[Unreleased\]', "## [Unreleased]`n`n## [$V
 Set-Content $changelogPath $changelog -NoNewline
 Write-Host "Updated CHANGELOG.md with version $Version"
 
-# Update CoRider-UnrealEngine .uplugin VersionName (sibling repo)
-$upluginPath = Join-Path $RepoRoot "..\CoRider-UnrealEngine\CoRiderUnrealEngine.uplugin"
+# Update Fathom-UnrealEngine .uplugin VersionName (sibling repo)
+$upluginPath = Join-Path $RepoRoot "..\CoRider-UnrealEngine\FathomUELink.uplugin"
 if (Test-Path $upluginPath) {
     $uplugin = Get-Content $upluginPath -Raw
     $uplugin = $uplugin -replace '"VersionName"\s*:\s*"[^"]*"', "`"VersionName`": `"$Version`""
     Set-Content $upluginPath $uplugin -NoNewline
-    Write-Host "Updated CoRiderUnrealEngine.uplugin VersionName to $Version"
+    Write-Host "Updated FathomUELink.uplugin VersionName to $Version"
 } else {
-    Write-Warning "CoRider-UnrealEngine .uplugin not found at $upluginPath - skipping"
+    Write-Warning "FathomUELink.uplugin not found at $upluginPath - skipping"
 }
 
 # Git commit and tag in Fathom repo
@@ -64,17 +64,17 @@ if (Test-Path $upluginPath) {
     $ueRoot = Split-Path $upluginPath -Parent
     Push-Location $ueRoot
     try {
-        git add CoRiderUnrealEngine.uplugin
+        git add FathomUELink.uplugin
         git commit -m "Bump version to $Version"
         git tag "v$Version"
-        Write-Host "Created commit and tag v$Version in CoRider-UnrealEngine"
+        Write-Host "Created commit and tag v$Version in Fathom-UnrealEngine"
     } finally {
         Pop-Location
     }
 }
 
 Write-Host ""
-Write-Host "To publish, push CoRider-UnrealEngine FIRST (its tag must exist on GitHub"
+Write-Host "To publish, push Fathom-UnrealEngine FIRST (its tag must exist on GitHub"
 Write-Host "before the Fathom workflow tries to check it out):"
 if (Test-Path $upluginPath) {
     Write-Host "  git -C '$(Split-Path $upluginPath -Parent)' push --follow-tags"

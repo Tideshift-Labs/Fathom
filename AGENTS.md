@@ -32,7 +32,7 @@ When the Rider plugin spawns `UnrealEditor-Cmd.exe -run=BlueprintAudit`, it look
 
 ## Cross-Repo Coordination
 
-- **Audit schema version** must match between `BlueprintAuditService.AuditSchemaVersion` (this repo) and `FBlueprintAuditor::AuditSchemaVersion` in the [CoRider-UnrealEngine](https://github.com/kvirani/CoRider-UnrealEngine) repo. Bump both together.
+- **Audit schema version** must match between `BlueprintAuditService.AuditSchemaVersion` (this repo) and `FBlueprintAuditor::AuditSchemaVersion` in the [Fathom-UnrealEngine](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) repo. Bump both together.
 - **Audit output path**: `Saved/Audit/v<N>/Blueprints/...`. Version segment must match on both sides.
 
 ## Build

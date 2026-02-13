@@ -27,7 +27,7 @@ Fathom is not here to automate everything. It exists to reduce the friction of u
 
 ## Getting Started
 
-Install the latest Fathom plugin from the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/com.tideshiftlabs.fathom) or manually by downloading it from the [GitHub releases page](https://github.com/kvirani/CoRider/releases).
+Install the latest Fathom plugin from the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/com.tideshiftlabs.fathom) or manually by downloading it from the [GitHub releases page](https://github.com/Tideshift-Labs/Fathom/releases).
 
 ### Requirements
 
@@ -37,7 +37,7 @@ Install the latest Fathom plugin from the [JetBrains Marketplace](https://plugin
 
 ### Companion UE Plugin
 
-Blueprint and asset features require the [CoRider Unreal Engine](https://github.com/kvirani/CoRider-UnrealEngine) companion plugin installed in your game project. See its README for installation instructions.
+Blueprint and asset features require the [Fathom UE Link](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) companion plugin installed in your game project. See its README for installation instructions.
 
 ## Limitations
 

@@ -78,7 +78,7 @@ public static class AuditMarkdownFormatter
             sb.AppendLine("**Commandlet Missing:** Yes");
             sb.AppendLine();
             sb.AppendLine("> **WARNING:** The BlueprintAudit commandlet is not installed.");
-            sb.AppendLine("> Install the CoRider-UnrealEngine plugin in your UE project.");
+            sb.AppendLine("> Install the FathomUELink plugin in your UE project.");
             sb.AppendLine();
         }
         sb.Append("**Boot Check Completed:** ").AppendLine(status.BootCheckCompleted ? "Yes" : "No");
@@ -113,8 +113,8 @@ internal static class BlueprintAuditConstants
 {
     public const string CommandletMissingMessage =
         "The BlueprintAudit commandlet is not installed.\n\n" +
-        "To fix this, install the CoRider-UnrealEngine plugin in your UE project:\n" +
-        "1. Clone https://github.com/kvirani/CoRider-UnrealEngine\n" +
+        "To fix this, install the FathomUELink plugin in your UE project:\n" +
+        "1. Clone https://github.com/Tideshift-Labs/Fathom-UnrealEngine\n" +
         "2. Copy or symlink it to your project's Plugins/ folder\n" +
         "3. Rebuild your UE project\n" +
         "4. Restart Rider and try again";

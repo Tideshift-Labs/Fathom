@@ -9,7 +9,7 @@ namespace ReSharperPlugin.Fathom.Services;
 
 /// <summary>
 /// Discovers and proxies HTTP requests to the UE editor's asset reference server.
-/// The UE server writes a marker file (Saved/.corider-ue-server.json) containing
+/// The UE server writes a marker file (Saved/.fathom-ue-server.json) containing
 /// the port and PID. This service reads that file to find the server, validates
 /// the PID is alive, and forwards requests.
 /// </summary>
@@ -211,7 +211,7 @@ public class AssetRefProxyService
                 var projectDir = Path.GetDirectoryName(info.UProjectPath);
                 if (!string.IsNullOrEmpty(projectDir))
                 {
-                    _markerPath = Path.Combine(projectDir, "Saved", ".corider-ue-server.json");
+                    _markerPath = Path.Combine(projectDir, "Saved", ".fathom-ue-server.json");
                     return _markerPath;
                 }
             }

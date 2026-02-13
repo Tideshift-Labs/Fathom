@@ -56,7 +56,7 @@ The `gradle.properties` hardcodes `org.gradle.java.home` to a local dev path. CI
 
 ### Sibling Repo Checkout
 
-`prepareSandbox` depends on `packageUePlugin`, which zips `${rootDir}/../CoRider-UnrealEngine`. Both workflows check out `kvirani/CoRider-UnrealEngine` (public) as a sibling directory:
+`prepareSandbox` depends on `packageUePlugin`, which zips `${rootDir}/../CoRider-UnrealEngine`. Both workflows check out `Tideshift-Labs/Fathom-UnrealEngine` (public) as a sibling directory:
 
 ```yaml
 - uses: actions/checkout@v4
@@ -65,7 +65,7 @@ The `gradle.properties` hardcodes `org.gradle.java.home` to a local dev path. CI
 
 - uses: actions/checkout@v4
   with:
-    repository: kvirani/CoRider-UnrealEngine
+    repository: Tideshift-Labs/Fathom-UnrealEngine
     path: CoRider-UnrealEngine
 ```
 
