@@ -10,16 +10,16 @@ Fathom is a free, open-source plugin that helps AI coding assistants better unde
 
 ## Why Fathom?
 
-LLMs working on UE5 C++ projects frequently hallucinate class names, miss Blueprint relationships, and produce code that doesn't match your project's actual structure. They can only see the files you feed them, and they have no way to query your project as a whole.
+Unreal Engine projects are more than just C++ code. They include various binary files that are linked to the C++ code. Without understanding what's happening "in engine", LLMs working on UE5 C++ projects frequently hallucinate class names, miss Blueprint relationships, and produce code that doesn't match your project's actual structure. They can only see the files you feed them, and they have no way to query your project as a whole.
 
 Fathom solves this by exposing your project's full picture through MCP tools that any compatible AI assistant can call on demand.
 
 ## What It Does
 
 - **Solution-Wide Code Analysis**: Your LLM can query diagnostics and inspections for any file in the solution, not just the ones currently open.
-- **Blueprint and Asset Discovery**: Find which Blueprints derive from a given C++ class, and view asset summaries alongside your code.
+- **Blueprint and Asset Discovery**: Find which Blueprints derive from a given C++ class, what they do and what their dependencies and referencers are.
 - **Automatic Data Freshness**: Asset data is kept up to date so your LLM always works with the current state of the project.
-- **Structured Output**: Results come back in Markdown or JSON, formatted for easy consumption by both humans and LLMs.
+- **MCP Tools**: Provides over 15 MCP tools to inspect various aspects as needed, using a UE5 plugin to query pertinent UE5 data.
 
 ## Philosophy
 
@@ -33,11 +33,140 @@ Install the latest Fathom plugin from the [JetBrains Marketplace](https://plugin
 
 - **Rider** 2025.3+
 - **Unreal Engine** 5.4+
-- **Windows** (current primary support)
+- **Windows** 10 or 11. Other operating systems not yet supported.
 
 ### Companion UE Plugin
 
-Blueprint and asset features require the [Fathom UE Link](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) companion plugin installed in your game project. See its README for installation instructions.
+Blueprint and asset features require the [Fathom UE Link](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) companion plugin installed in your game project. Fathom will automatically install this plugin into your uproject.
+
+## Connecting Your AI Assistant
+
+Fathom exposes an MCP endpoint at `http://localhost:19876/mcp` (streamable HTTP transport). The port defaults to `19876` and can be changed in Rider under **Settings > Tools > Fathom**.
+
+Some tools are auto-configured on startup. If your tool was not configured automatically, follow the manual instructions below.
+
+### Claude Code (CLI)
+
+**Auto-configured.** Fathom writes `.mcp.json` in the solution root on every startup.
+
+To verify, type `/mcp` in your Claude Code conversation. You should see `fathom` listed.
+
+If it was not picked up, create or edit `.mcp.json` in your solution root:
+
+```json
+{
+  "mcpServers": {
+    "fathom": {
+      "type": "http",
+      "url": "http://localhost:19876/mcp"
+    }
+  }
+}
+```
+
+### Cursor
+
+**Auto-configured** when a `.cursor/` directory exists in the solution root.
+
+To set up manually, create or edit `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "fathom": {
+      "type": "http",
+      "url": "http://localhost:19876/mcp"
+    }
+  }
+}
+```
+
+### VS Code / GitHub Copilot
+
+**Auto-configured** when a `.vscode/` directory exists in the solution root.
+
+To set up manually, create or edit `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "fathom": {
+      "type": "http",
+      "url": "http://localhost:19876/mcp"
+    }
+  }
+}
+```
+
+### Codex CLI
+
+Create or edit `.codex/config.toml` in your project root (or `~/.codex/config.toml` for global config):
+
+```toml
+[mcp_servers.fathom]
+url = "http://localhost:19876/mcp"
+```
+
+Verify with:
+
+```bash
+codex mcp list
+```
+
+### Gemini CLI
+
+Create or edit `.gemini/settings.json` in your project root (or `~/.gemini/settings.json` for global config):
+
+```json
+{
+  "mcpServers": {
+    "fathom": {
+      "httpUrl": "http://localhost:19876/mcp"
+    }
+  }
+}
+```
+
+### OpenCode
+
+**Auto-configured** when an `opencode.json` already exists in the solution root.
+
+To set up manually, create or edit `opencode.json` in your solution root:
+
+```json
+{
+  "mcp": {
+    "fathom": {
+      "type": "remote",
+      "url": "http://localhost:19876/mcp"
+    }
+  }
+}
+```
+
+Verify with:
+
+```bash
+opencode mcp list
+```
+
+### Windsurf
+
+Edit `%USERPROFILE%\.codeium\windsurf\mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "fathom": {
+      "serverUrl": "http://localhost:19876/mcp"
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Claude Desktop does not support remote HTTP servers via its config file. Instead, add Fathom through the UI: **Settings > Connectors**, then enter `http://localhost:19876/mcp` as the server URL.
 
 ## Limitations
 
@@ -64,7 +193,7 @@ Blueprint and asset features require the [Fathom UE Link](https://github.com/Tid
 Initialize the required build tools:
 
 ```powershell
-.\scripts\setup.ps1
+powershell -ep Bypass -File .\scripts\setup.ps1
 ```
 
 ### Building and Running
