@@ -36,7 +36,7 @@ public class BlueprintClassInfo
     public class BlueprintAuditEntry
     {
         /// <summary>
-        /// Name of the Blueprint (e.g., "WBP_MainMenu").
+        /// Name of the asset (e.g., "WBP_MainMenu", "DT_WeaponStats").
         /// </summary>
         public string Name { get; set; }
 
@@ -44,6 +44,11 @@ public class BlueprintClassInfo
         /// UE package path (e.g., "/Game/UI/Widgets/WBP_MainMenu").
         /// </summary>
         public string Path { get; set; }
+
+        /// <summary>
+        /// Asset type: "Blueprint", "DataTable", or "DataAsset".
+        /// </summary>
+        public string AssetType { get; set; }
 
         /// <summary>
         /// Full path to the audit .md file.
@@ -166,6 +171,26 @@ public class BlueprintClassInfo
         /// List of Blueprint audit entries (only populated when fresh).
         /// </summary>
         public List<BlueprintAuditEntry> Blueprints { get; set; }
+
+        /// <summary>
+        /// List of DataTable audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> DataTables { get; set; }
+
+        /// <summary>
+        /// List of DataAsset audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> DataAssets { get; set; }
+
+        /// <summary>
+        /// Number of DataTable audit entries.
+        /// </summary>
+        public int DataTableCount { get; set; }
+
+        /// <summary>
+        /// Number of DataAsset audit entries.
+        /// </summary>
+        public int DataAssetCount { get; set; }
 
         /// <summary>
         /// Examples of stale entries (when status is "stale", first 10).

@@ -9,26 +9,61 @@ public static class AuditMarkdownFormatter
     public static string FormatAuditResult(BlueprintAuditResult result)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# Blueprint Audit");
+        sb.AppendLine("# Asset Audit");
         sb.AppendLine();
         sb.AppendLine("**Status:** Fresh (all data up-to-date)");
-        sb.Append("**Total Blueprints:** ").AppendLine(result.TotalCount.ToString());
+        sb.Append("**Total Assets:** ").AppendLine(result.TotalCount.ToString());
+        if (result.Blueprints != null)
+            sb.Append("**Blueprints:** ").AppendLine(result.Blueprints.Count.ToString());
+        if (result.DataTableCount > 0)
+            sb.Append("**DataTables:** ").AppendLine(result.DataTableCount.ToString());
+        if (result.DataAssetCount > 0)
+            sb.Append("**DataAssets:** ").AppendLine(result.DataAssetCount.ToString());
         if (result.ErrorCount > 0)
             sb.Append("**Errors:** ").AppendLine(result.ErrorCount.ToString());
         sb.AppendLine();
 
-        sb.AppendLine("## Blueprints");
-        foreach (var e in result.Blueprints.OrderBy(b => b.Name))
+        if (result.Blueprints != null && result.Blueprints.Count > 0)
         {
-            sb.Append("- **").Append(e.Name ?? "(unknown)").Append("**");
-            if (!string.IsNullOrEmpty(e.Path))
-                sb.Append(" — ").Append(e.Path);
-            if (e.Error != null)
-                sb.Append(" *(error: ").Append(e.Error).Append(")*");
+            sb.AppendLine("## Blueprints");
+            foreach (var e in result.Blueprints.OrderBy(b => b.Name))
+            {
+                FormatEntryLine(sb, e);
+            }
+            sb.AppendLine();
+        }
+
+        if (result.DataTables != null && result.DataTables.Count > 0)
+        {
+            sb.AppendLine("## DataTables");
+            foreach (var e in result.DataTables.OrderBy(b => b.Name))
+            {
+                FormatEntryLine(sb, e);
+            }
+            sb.AppendLine();
+        }
+
+        if (result.DataAssets != null && result.DataAssets.Count > 0)
+        {
+            sb.AppendLine("## DataAssets");
+            foreach (var e in result.DataAssets.OrderBy(b => b.Name))
+            {
+                FormatEntryLine(sb, e);
+            }
             sb.AppendLine();
         }
 
         return sb.ToString();
+    }
+
+    private static void FormatEntryLine(StringBuilder sb, BlueprintAuditEntry e)
+    {
+        sb.Append("- **").Append(e.Name ?? "(unknown)").Append("**");
+        if (!string.IsNullOrEmpty(e.Path))
+            sb.Append(" - ").Append(e.Path);
+        if (e.Error != null)
+            sb.Append(" *(error: ").Append(e.Error).Append(")*");
+        sb.AppendLine();
     }
 
     public static string FormatStale(BlueprintAuditResult result)
