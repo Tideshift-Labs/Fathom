@@ -437,7 +437,7 @@ public class CompanionPluginService
             if (string.IsNullOrEmpty(ueInfo?.EnginePath))
                 return null;
 
-            return Path.Combine(ueInfo.EnginePath, "Plugins", "Marketplace", _config.CompanionPluginName);
+            return Path.Combine(ueInfo.EnginePath, "Plugins", "Marketplace", "Developer", _config.CompanionPluginName);
         }
         catch (Exception ex)
         {
