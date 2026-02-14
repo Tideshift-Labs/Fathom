@@ -47,6 +47,8 @@ namespace JetBrains.Rider.Model
     [NotNull] public void CompanionPluginStatus(CompanionPluginInfo value) => _CompanionPluginStatus.Fire(value);
     [NotNull] public ISource<string> InstallCompanionPlugin => _InstallCompanionPlugin;
     [NotNull] public ISource<Unit> BuildCompanionPlugin => _BuildCompanionPlugin;
+    [NotNull] public void CompanionBuildLog(string value) => _CompanionBuildLog.Fire(value);
+    [NotNull] public void CompanionBuildFinished(bool value) => _CompanionBuildFinished.Fire(value);
     [NotNull] public ISignal<string> McpConfigStatus => _McpConfigStatus;
     
     //private fields
@@ -55,6 +57,8 @@ namespace JetBrains.Rider.Model
     [NotNull] private readonly RdSignal<CompanionPluginInfo> _CompanionPluginStatus;
     [NotNull] private readonly RdSignal<string> _InstallCompanionPlugin;
     [NotNull] private readonly RdSignal<Unit> _BuildCompanionPlugin;
+    [NotNull] private readonly RdSignal<string> _CompanionBuildLog;
+    [NotNull] private readonly RdSignal<bool> _CompanionBuildFinished;
     [NotNull] private readonly RdSignal<string> _McpConfigStatus;
     
     //primary constructor
@@ -64,6 +68,8 @@ namespace JetBrains.Rider.Model
       [NotNull] RdSignal<CompanionPluginInfo> companionPluginStatus,
       [NotNull] RdSignal<string> installCompanionPlugin,
       [NotNull] RdSignal<Unit> buildCompanionPlugin,
+      [NotNull] RdSignal<string> companionBuildLog,
+      [NotNull] RdSignal<bool> companionBuildFinished,
       [NotNull] RdSignal<string> mcpConfigStatus
     )
     {
@@ -72,6 +78,8 @@ namespace JetBrains.Rider.Model
       if (companionPluginStatus == null) throw new ArgumentNullException("companionPluginStatus");
       if (installCompanionPlugin == null) throw new ArgumentNullException("installCompanionPlugin");
       if (buildCompanionPlugin == null) throw new ArgumentNullException("buildCompanionPlugin");
+      if (companionBuildLog == null) throw new ArgumentNullException("companionBuildLog");
+      if (companionBuildFinished == null) throw new ArgumentNullException("companionBuildFinished");
       if (mcpConfigStatus == null) throw new ArgumentNullException("mcpConfigStatus");
       
       _Port = port;
@@ -79,6 +87,8 @@ namespace JetBrains.Rider.Model
       _CompanionPluginStatus = companionPluginStatus;
       _InstallCompanionPlugin = installCompanionPlugin;
       _BuildCompanionPlugin = buildCompanionPlugin;
+      _CompanionBuildLog = companionBuildLog;
+      _CompanionBuildFinished = companionBuildFinished;
       _McpConfigStatus = mcpConfigStatus;
       _Port.OptimizeNested = true;
       BindableChildren.Add(new KeyValuePair<string, object>("port", _Port));
@@ -86,6 +96,8 @@ namespace JetBrains.Rider.Model
       BindableChildren.Add(new KeyValuePair<string, object>("companionPluginStatus", _CompanionPluginStatus));
       BindableChildren.Add(new KeyValuePair<string, object>("installCompanionPlugin", _InstallCompanionPlugin));
       BindableChildren.Add(new KeyValuePair<string, object>("buildCompanionPlugin", _BuildCompanionPlugin));
+      BindableChildren.Add(new KeyValuePair<string, object>("companionBuildLog", _CompanionBuildLog));
+      BindableChildren.Add(new KeyValuePair<string, object>("companionBuildFinished", _CompanionBuildFinished));
       BindableChildren.Add(new KeyValuePair<string, object>("mcpConfigStatus", _McpConfigStatus));
     }
     //secondary constructor
@@ -96,6 +108,8 @@ namespace JetBrains.Rider.Model
       new RdSignal<CompanionPluginInfo>(CompanionPluginInfo.Read, CompanionPluginInfo.Write),
       new RdSignal<string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString),
       new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid),
+      new RdSignal<string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString),
+      new RdSignal<bool>(JetBrains.Rd.Impl.Serializers.ReadBool, JetBrains.Rd.Impl.Serializers.WriteBool),
       new RdSignal<string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString)
     ) {}
     //deconstruct trait
@@ -103,7 +117,7 @@ namespace JetBrains.Rider.Model
     
     
     
-    protected override long SerializationHash => 1387835151668611458L;
+    protected override long SerializationHash => 39042950016669913L;
     
     protected override Action<ISerializers> Register => RegisterDeclaredTypesSerializers;
     public static void RegisterDeclaredTypesSerializers(ISerializers serializers)
@@ -129,6 +143,8 @@ namespace JetBrains.Rider.Model
         printer.Print("companionPluginStatus = "); _CompanionPluginStatus.PrintEx(printer); printer.Println();
         printer.Print("installCompanionPlugin = "); _InstallCompanionPlugin.PrintEx(printer); printer.Println();
         printer.Print("buildCompanionPlugin = "); _BuildCompanionPlugin.PrintEx(printer); printer.Println();
+        printer.Print("companionBuildLog = "); _CompanionBuildLog.PrintEx(printer); printer.Println();
+        printer.Print("companionBuildFinished = "); _CompanionBuildFinished.PrintEx(printer); printer.Println();
         printer.Print("mcpConfigStatus = "); _McpConfigStatus.PrintEx(printer); printer.Println();
       }
       printer.Print(")");

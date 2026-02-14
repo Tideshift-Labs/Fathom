@@ -1,16 +1,26 @@
 package com.tideshiftlabs.fathom
 
+import com.intellij.build.BuildViewManager
+import com.intellij.build.DefaultBuildDescriptor
+import com.intellij.build.events.impl.FinishBuildEventImpl
+import com.intellij.build.events.impl.FailureResultImpl
+import com.intellij.build.events.impl.OutputBuildEventImpl
+import com.intellij.build.events.impl.StartBuildEventImpl
+import com.intellij.build.events.impl.SuccessResultImpl
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
+import com.intellij.openapi.wm.ToolWindowManager
 import com.jetbrains.rd.ide.model.CompanionPluginStatus
 import com.jetbrains.rd.ide.model.fathomModel
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
 import com.jetbrains.rider.projectView.solution
+import java.util.concurrent.atomic.AtomicReference
 
 class FathomHost : ProjectActivity {
 
@@ -134,6 +144,52 @@ class FathomHost : ProjectActivity {
                             Notifications.Bus.notify(notification, project)
                         }
                     }
+                }
+            }
+        }
+
+        // Build output streaming to Build tool window
+        val activeBuildId = AtomicReference<Any?>(null)
+
+        protocol.scheduler.queue {
+            model.companionBuildLog.advise(lifetimeDef.lifetime) { line ->
+                ApplicationManager.getApplication().invokeLater {
+                    val buildViewManager = project.getService(BuildViewManager::class.java)
+                    var currentBuildId = activeBuildId.get()
+                    if (currentBuildId == null) {
+                        currentBuildId = Object()
+                        activeBuildId.set(currentBuildId)
+                        val descriptor = DefaultBuildDescriptor(
+                            currentBuildId,
+                            "Fathom UE Plugin Build",
+                            project.basePath ?: "",
+                            System.currentTimeMillis()
+                        )
+                        buildViewManager.onEvent(
+                            currentBuildId,
+                            StartBuildEventImpl(descriptor, "Building Fathom UE plugin...")
+                        )
+                        ToolWindowManager.getInstance(project).getToolWindow("Build")?.show()
+                    }
+                    buildViewManager.onEvent(
+                        currentBuildId,
+                        OutputBuildEventImpl(currentBuildId, line + "\n", true)
+                    )
+                }
+            }
+
+            model.companionBuildFinished.advise(lifetimeDef.lifetime) { success ->
+                ApplicationManager.getApplication().invokeLater {
+                    val currentBuildId = activeBuildId.getAndSet(null) ?: return@invokeLater
+                    val buildViewManager = project.getService(BuildViewManager::class.java)
+                    val result = if (success) SuccessResultImpl() else FailureResultImpl()
+                    val message = if (success) "Build successful" else "Build failed"
+                    buildViewManager.onEvent(
+                        currentBuildId,
+                        FinishBuildEventImpl(
+                            currentBuildId, null, System.currentTimeMillis(), message, result
+                        )
+                    )
                 }
             }
         }

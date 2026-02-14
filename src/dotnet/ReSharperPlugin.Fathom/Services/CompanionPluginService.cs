@@ -211,7 +211,7 @@ public class CompanionPluginService
         }
     }
 
-    public (bool success, string message) BuildEditorTarget(UeProjectInfo ueInfo)
+    public (bool success, string message) BuildEditorTarget(UeProjectInfo ueInfo, Action<string> onOutput = null)
     {
         try
         {
@@ -235,28 +235,7 @@ public class CompanionPluginService
             ApplyDotnetRollForward(startInfo);
 
             Log.Info($"CompanionPlugin: Building editor target: {startInfo.FileName} {startInfo.Arguments}");
-
-            using (var process = Process.Start(startInfo))
-            {
-                if (process == null)
-                    return (false, "Failed to start dotnet process for editor build.");
-
-                var output = process.StandardOutput.ReadToEnd();
-                var error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-
-                if (process.ExitCode == 0)
-                {
-                    Log.Info("CompanionPlugin: Editor target built successfully.");
-                    return (true, "Plugin compiled successfully.");
-                }
-
-                var msg = $"Build exited with code {process.ExitCode}.";
-                if (!string.IsNullOrWhiteSpace(error))
-                    msg += " Error: " + error.Substring(0, Math.Min(error.Length, _config.MaxErrorLength));
-                Log.Warn("CompanionPlugin: " + msg);
-                return (false, msg);
-            }
+            return RunProcessWithStreaming(startInfo, "CompanionPlugin.BuildEditorTarget", onOutput);
         }
         catch (Exception ex)
         {
@@ -270,7 +249,7 @@ public class CompanionPluginService
     /// Installed/launcher engine builds cannot compile engine plugins at runtime,
     /// so we must pre-build them via the Unreal Automation Tool.
     /// </summary>
-    public (bool success, string message) BuildEnginePlugin(UeProjectInfo ueInfo)
+    public (bool success, string message) BuildEnginePlugin(UeProjectInfo ueInfo, Action<string> onOutput = null)
     {
         try
         {
@@ -304,28 +283,12 @@ public class CompanionPluginService
             };
 
             Log.Info($"CompanionPlugin: Building engine plugin via RunUAT: {startInfo.FileName} {startInfo.Arguments}");
+            var buildResult = RunProcessWithStreaming(startInfo, "CompanionPlugin.BuildEnginePlugin", onOutput);
 
-            using (var process = Process.Start(startInfo))
+            if (!buildResult.success)
             {
-                if (process == null)
-                    return (false, "Failed to start RunUAT process.");
-
-                var output = process.StandardOutput.ReadToEnd();
-                var error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-
-                if (process.ExitCode != 0)
-                {
-                    var msg = $"RunUAT BuildPlugin exited with code {process.ExitCode}.";
-                    if (!string.IsNullOrWhiteSpace(error))
-                        msg += " Error: " + error.Substring(0, Math.Min(error.Length, _config.MaxErrorLength));
-                    Log.Warn("CompanionPlugin: " + msg);
-
-                    // Clean up temp dir on failure
-                    try { if (Directory.Exists(tempPackageDir)) Directory.Delete(tempPackageDir, true); } catch { }
-
-                    return (false, msg);
-                }
+                try { if (Directory.Exists(tempPackageDir)) Directory.Delete(tempPackageDir, true); } catch { }
+                return buildResult;
             }
 
             // Copy built Binaries/ from temp package to engine plugin dir
@@ -372,6 +335,43 @@ public class CompanionPluginService
         foreach (var dir in Directory.GetDirectories(sourceDir))
         {
             CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
+        }
+    }
+
+    /// <summary>
+    /// Runs a process, streaming stdout/stderr line by line via the onOutput callback.
+    /// Returns success/failure and a summary message.
+    /// </summary>
+    private static (bool success, string message) RunProcessWithStreaming(
+        ProcessStartInfo startInfo, string logPrefix, Action<string> onOutput)
+    {
+        using (var process = Process.Start(startInfo))
+        {
+            if (process == null)
+                return (false, "Failed to start process.");
+
+            // Stream output line by line via event handlers
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data != null) onOutput?.Invoke(e.Data);
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data != null) onOutput?.Invoke(e.Data);
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            process.WaitForExit();
+
+            if (process.ExitCode == 0)
+            {
+                Log.Info($"{logPrefix}: completed successfully.");
+                return (true, "Plugin compiled successfully.");
+            }
+
+            var msg = $"Build exited with code {process.ExitCode}.";
+            Log.Warn($"{logPrefix}: {msg}");
+            return (false, msg);
         }
     }
 

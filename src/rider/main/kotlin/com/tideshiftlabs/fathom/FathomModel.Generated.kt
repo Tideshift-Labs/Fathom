@@ -24,6 +24,8 @@ class FathomModel private constructor(
     private val _companionPluginStatus: RdSignal<CompanionPluginInfo>,
     private val _installCompanionPlugin: RdSignal<String>,
     private val _buildCompanionPlugin: RdSignal<Unit>,
+    private val _companionBuildLog: RdSignal<String>,
+    private val _companionBuildFinished: RdSignal<Boolean>,
     private val _mcpConfigStatus: RdSignal<String>
 ) : RdExtBase() {
     //companion
@@ -41,7 +43,7 @@ class FathomModel private constructor(
         
         
         
-        const val serializationHash = 1387835151668611458L
+        const val serializationHash = 39042950016669913L
         
     }
     override val serializersOwner: ISerializersOwner get() = FathomModel
@@ -53,6 +55,8 @@ class FathomModel private constructor(
     val companionPluginStatus: ISource<CompanionPluginInfo> get() = _companionPluginStatus
     val installCompanionPlugin: ISignal<String> get() = _installCompanionPlugin
     val buildCompanionPlugin: ISignal<Unit> get() = _buildCompanionPlugin
+    val companionBuildLog: ISource<String> get() = _companionBuildLog
+    val companionBuildFinished: ISource<Boolean> get() = _companionBuildFinished
     val mcpConfigStatus: ISignal<String> get() = _mcpConfigStatus
     //methods
     //initializer
@@ -66,6 +70,8 @@ class FathomModel private constructor(
         bindableChildren.add("companionPluginStatus" to _companionPluginStatus)
         bindableChildren.add("installCompanionPlugin" to _installCompanionPlugin)
         bindableChildren.add("buildCompanionPlugin" to _buildCompanionPlugin)
+        bindableChildren.add("companionBuildLog" to _companionBuildLog)
+        bindableChildren.add("companionBuildFinished" to _companionBuildFinished)
         bindableChildren.add("mcpConfigStatus" to _mcpConfigStatus)
     }
     
@@ -77,6 +83,8 @@ class FathomModel private constructor(
         RdSignal<CompanionPluginInfo>(CompanionPluginInfo),
         RdSignal<String>(FrameworkMarshallers.String),
         RdSignal<Unit>(FrameworkMarshallers.Void),
+        RdSignal<String>(FrameworkMarshallers.String),
+        RdSignal<Boolean>(FrameworkMarshallers.Bool),
         RdSignal<String>(FrameworkMarshallers.String)
     )
     
@@ -91,6 +99,8 @@ class FathomModel private constructor(
             print("companionPluginStatus = "); _companionPluginStatus.print(printer); println()
             print("installCompanionPlugin = "); _installCompanionPlugin.print(printer); println()
             print("buildCompanionPlugin = "); _buildCompanionPlugin.print(printer); println()
+            print("companionBuildLog = "); _companionBuildLog.print(printer); println()
+            print("companionBuildFinished = "); _companionBuildFinished.print(printer); println()
             print("mcpConfigStatus = "); _mcpConfigStatus.print(printer); println()
         }
         printer.print(")")
@@ -103,6 +113,8 @@ class FathomModel private constructor(
             _companionPluginStatus.deepClonePolymorphic(),
             _installCompanionPlugin.deepClonePolymorphic(),
             _buildCompanionPlugin.deepClonePolymorphic(),
+            _companionBuildLog.deepClonePolymorphic(),
+            _companionBuildFinished.deepClonePolymorphic(),
             _mcpConfigStatus.deepClonePolymorphic()
         )
     }

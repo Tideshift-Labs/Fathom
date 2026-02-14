@@ -34,6 +34,8 @@ object FathomModel : Ext(SolutionModel.Solution) {
         sink("companionPluginStatus", CompanionPluginInfo)
         source("installCompanionPlugin", string)
         source("buildCompanionPlugin", void)
+        sink("companionBuildLog", string)
+        sink("companionBuildFinished", bool)
         signal("mcpConfigStatus", string)
     }
 }

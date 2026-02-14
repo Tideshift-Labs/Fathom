@@ -158,10 +158,17 @@ namespace ReSharperPlugin.Fathom
                                     var det0 = _companionPlugin.Detect();
                                     var useRunUat = det0.InstallLocation == "Engine" || det0.InstallLocation == "Both";
 
+                                    // Stream build output lines to the frontend
+                                    Action<string> onOutput = line =>
+                                        _rdScheduler.Queue(() => model.CompanionBuildLog(line));
+
                                     var buildResult = useRunUat
-                                        ? _companionPlugin.BuildEnginePlugin(ueInfo)
-                                        : _companionPlugin.BuildEditorTarget(ueInfo);
+                                        ? _companionPlugin.BuildEnginePlugin(ueInfo, onOutput)
+                                        : _companionPlugin.BuildEditorTarget(ueInfo, onOutput);
                                     Log.Info($"CompanionPlugin build (RunUAT={useRunUat}): success={buildResult.success}, {buildResult.message}");
+
+                                    // Signal build completion
+                                    _rdScheduler.Queue(() => model.CompanionBuildFinished(buildResult.success));
 
                                     var det = _companionPlugin.Detect();
 
