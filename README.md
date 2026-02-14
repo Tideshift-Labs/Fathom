@@ -1,4 +1,6 @@
-# Fathom
+<p align="center">
+  <img src="docs/images/fathom-logo.png" alt="Fathom" width="400">
+</p>
 
 ![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.4+-313131?style=flat&logo=unrealengine&logoColor=white)
 ![Rider](https://img.shields.io/badge/Rider-2025.3+-087CFA?style=flat&logo=rider&logoColor=white)
