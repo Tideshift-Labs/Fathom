@@ -2,11 +2,18 @@
   <img src="docs/images/fathom-logo.png" alt="Fathom" width="400">
 </p>
 
-![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.4+-313131?style=flat&logo=unrealengine&logoColor=white)
-![Rider](https://img.shields.io/badge/Rider-2025.3+-087CFA?style=flat&logo=rider&logoColor=white)
+[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.4+-313131?style=flat&logo=unrealengine&logoColor=white)](https://www.unrealengine.com/)
+[![Rider](https://img.shields.io/badge/Rider-2025.3+-087CFA?style=flat&logo=rider&logoColor=white)](https://www.jetbrains.com/rider/)
 ![Platform](https://img.shields.io/badge/Platform-Win64-0078D6?style=flat&logo=windows&logoColor=white)
-![MCP](https://img.shields.io/badge/MCP-Tools-8A2BE2?style=flat)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+[![MCP](https://img.shields.io/badge/MCP-Tools-8A2BE2?style=flat)](https://modelcontextprotocol.io/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat)](LICENSE)
+[![Install on Rider](https://img.shields.io/badge/Rider-Install%20Plugin-black?style=flat&logo=rider&logoColor=white)](https://plugins.jetbrains.com/plugin/30185)
+
+<p align="center">
+  <a href="https://plugins.jetbrains.com/plugin/30185">
+    <img src="docs/images/get-from-marketplace.svg" alt="Get from Marketplace" width="245" height="48">
+  </a>
+</p>
 
 Fathom is a free, open-source plugin that helps AI coding assistants better understand your Unreal Engine 5 C++ projects. Whether you use Claude, Gemini, Codex, or any other LLM, Fathom gives them the right project context at the right time, reducing hallucinations and increasing your productivity.
 
