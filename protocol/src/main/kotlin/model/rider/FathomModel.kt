@@ -24,6 +24,7 @@ object FathomModel : Ext(SolutionModel.Solution) {
         field("status", CompanionPluginStatus)
         field("installedVersion", string)
         field("bundledVersion", string)
+        field("installLocation", string)
         field("message", string)
     }
 
@@ -31,7 +32,7 @@ object FathomModel : Ext(SolutionModel.Solution) {
         property("port", int)
         signal("serverStatus", ServerStatus)
         sink("companionPluginStatus", CompanionPluginInfo)
-        source("installCompanionPlugin", void)
+        source("installCompanionPlugin", string)
         source("buildCompanionPlugin", void)
         signal("mcpConfigStatus", string)
     }

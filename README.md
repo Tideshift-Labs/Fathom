@@ -37,7 +37,7 @@ Install the latest Fathom plugin from the [JetBrains Marketplace](https://plugin
 
 ### Companion UE Plugin
 
-Blueprint and asset features require the [Fathom UE Link](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) companion plugin installed in your game project. Fathom will automatically install this plugin into your uproject.
+Blueprint and asset features require the [Fathom UE Link](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) companion plugin. Fathom prompts you to install it and offers two locations: **Engine** (recommended, installs to `Engine/Plugins/Marketplace/`) or **Game** (installs to the project's `Plugins/` directory). Engine installation keeps your project clean and applies to all projects using that engine. The status bar widget shows the current installation status and location.
 
 ## Connecting Your AI Assistant
 
@@ -172,7 +172,7 @@ Claude Desktop does not support remote HTTP servers via its config file. Instead
 
 - Windows only
 - Unreal Engine only (Unity support is planned)
-- The UE companion plugin must be installed in the Game project, not the Engine
+- The UE companion plugin can be installed to the Engine (`Engine/Plugins/Marketplace/`) or the Game project (`Plugins/`)
 
 ## Documentation
 

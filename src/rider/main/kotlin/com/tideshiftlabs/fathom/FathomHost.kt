@@ -53,17 +53,63 @@ class FathomHost : ProjectActivity {
                     .getNotificationGroup("Fathom.CompanionPlugin") ?: return@advise
 
                 when (info.status) {
-                    CompanionPluginStatus.NotInstalled, CompanionPluginStatus.Outdated -> {
-                        val title = if (info.status == CompanionPluginStatus.NotInstalled)
-                            "Fathom UE plugin not installed"
-                        else
-                            "Fathom UE plugin outdated"
-
-                        val notification = group.createNotification(title, info.message, NotificationType.WARNING)
-                        notification.addAction(NotificationAction.createSimple("Install") {
+                    CompanionPluginStatus.NotInstalled -> {
+                        val notification = group.createNotification(
+                            "Fathom UE plugin not installed",
+                            info.message,
+                            NotificationType.WARNING
+                        )
+                        notification.addAction(NotificationAction.createSimple("Install to Engine") {
                             notification.expire()
-                            protocol.scheduler.queue { model.installCompanionPlugin.fire(Unit) }
+                            protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
                         })
+                        notification.addAction(NotificationAction.createSimple("Install to Game") {
+                            notification.expire()
+                            protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
+                        })
+                        Notifications.Bus.notify(notification, project)
+                    }
+                    CompanionPluginStatus.Outdated -> {
+                        val notification = group.createNotification(
+                            "Fathom UE plugin outdated",
+                            info.message,
+                            NotificationType.WARNING
+                        )
+                        // Offer update for wherever it's currently installed
+                        when (info.installLocation) {
+                            "Engine" -> {
+                                notification.addAction(NotificationAction.createSimple("Update") {
+                                    notification.expire()
+                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                                })
+                            }
+                            "Game" -> {
+                                notification.addAction(NotificationAction.createSimple("Update") {
+                                    notification.expire()
+                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
+                                })
+                                notification.addAction(NotificationAction.createSimple("Install to Engine") {
+                                    notification.expire()
+                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                                })
+                            }
+                            "Both" -> {
+                                notification.addAction(NotificationAction.createSimple("Update Engine") {
+                                    notification.expire()
+                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                                })
+                                notification.addAction(NotificationAction.createSimple("Update Game") {
+                                    notification.expire()
+                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
+                                })
+                            }
+                            else -> {
+                                notification.addAction(NotificationAction.createSimple("Install") {
+                                    notification.expire()
+                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                                })
+                            }
+                        }
                         Notifications.Bus.notify(notification, project)
                     }
                     CompanionPluginStatus.Installed -> {

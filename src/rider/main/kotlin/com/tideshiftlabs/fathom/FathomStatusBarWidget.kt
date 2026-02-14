@@ -81,7 +81,7 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
             CompanionPluginStatus.NotInstalled -> "Fathom: UE companion plugin not installed"
             CompanionPluginStatus.Outdated -> "Fathom: UE companion plugin outdated (${info.installedVersion} -> ${info.bundledVersion})"
             CompanionPluginStatus.Installed -> "Fathom: UE companion plugin installed (needs build)"
-            CompanionPluginStatus.UpToDate -> "Fathom: UE companion plugin up to date"
+            CompanionPluginStatus.UpToDate -> "Fathom: UE companion plugin up to date (${info.installLocation})"
         }
     }
 
@@ -100,9 +100,19 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
         // Status label (non-actionable)
         val statusText = when (info?.status) {
             CompanionPluginStatus.NotInstalled -> "UE Plugin: Not Installed"
-            CompanionPluginStatus.Outdated -> "UE Plugin: Outdated (${info.installedVersion})"
+            CompanionPluginStatus.Outdated -> when (info.installLocation) {
+                "Engine" -> "UE Plugin: Outdated (Engine)"
+                "Game" -> "UE Plugin: Outdated (Game)"
+                "Both" -> "UE Plugin: Outdated (Engine + Game)"
+                else -> "UE Plugin: Outdated (${info.installedVersion})"
+            }
             CompanionPluginStatus.Installed -> "UE Plugin: Installed (needs build)"
-            CompanionPluginStatus.UpToDate -> "UE Plugin: Up to Date"
+            CompanionPluginStatus.UpToDate -> when (info.installLocation) {
+                "Engine" -> "UE Plugin: Installed to Engine"
+                "Game" -> "UE Plugin: Installed to Game"
+                "Both" -> "UE Plugin: Installed to Engine + Game"
+                else -> "UE Plugin: Up to Date"
+            }
             null -> "UE Plugin: Unknown"
         }
         group.add(object : AnAction(statusText) {
@@ -115,18 +125,25 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
 
         group.addSeparator()
 
-        // Contextual action
+        // Contextual actions based on status and install location
         when (info?.status) {
-            CompanionPluginStatus.NotInstalled, CompanionPluginStatus.Outdated -> {
-                group.add(object : DumbAwareAction("Install Companion Plugin") {
-                    override fun actionPerformed(e: AnActionEvent) {
-                        val protocol = project.solution.protocol ?: return
-                        protocol.scheduler.queue {
-                            project.solution.fathomModel.installCompanionPlugin.fire(Unit)
-                        }
+            CompanionPluginStatus.NotInstalled -> {
+                group.add(createInstallAction("Install to Engine", "Engine"))
+                group.add(createInstallAction("Install to Game", "Game"))
+            }
+            CompanionPluginStatus.Outdated -> {
+                when (info.installLocation) {
+                    "Engine" -> group.add(createInstallAction("Update Engine Plugin", "Engine"))
+                    "Game" -> {
+                        group.add(createInstallAction("Update Game Plugin", "Game"))
+                        group.add(createInstallAction("Install to Engine", "Engine"))
                     }
-                    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-                })
+                    "Both" -> {
+                        group.add(createInstallAction("Update Engine Plugin", "Engine"))
+                        group.add(createInstallAction("Update Game Plugin", "Game"))
+                    }
+                    else -> group.add(createInstallAction("Install to Engine", "Engine"))
+                }
             }
             CompanionPluginStatus.Installed -> {
                 group.add(object : DumbAwareAction("Build Companion Plugin") {
@@ -139,7 +156,13 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
                     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
                 })
             }
-            CompanionPluginStatus.UpToDate, null -> { /* no contextual action */ }
+            CompanionPluginStatus.UpToDate -> {
+                // If only installed to Game, offer Engine installation
+                if (info.installLocation == "Game") {
+                    group.add(createInstallAction("Install to Engine", "Engine"))
+                }
+            }
+            null -> { /* no contextual action */ }
         }
 
         group.addSeparator()
@@ -210,5 +233,17 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
             JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
             false
         )
+    }
+
+    private fun createInstallAction(label: String, location: String): DumbAwareAction {
+        return object : DumbAwareAction(label) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val protocol = project.solution.protocol ?: return
+                protocol.scheduler.queue {
+                    project.solution.fathomModel.installCompanionPlugin.fire(location)
+                }
+            }
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+        }
     }
 }

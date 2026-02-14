@@ -108,12 +108,12 @@ namespace ReSharperPlugin.Fathom
                             }
 
                             // Handle companion plugin install requests from frontend
-                            model.InstallCompanionPlugin.Advise(lifetime, unit =>
+                            model.InstallCompanionPlugin.Advise(lifetime, location =>
                             {
                                 _ = Task.Run(() =>
                                 {
-                                    var installResult = _companionPlugin.Install();
-                                    Log.Info($"CompanionPlugin install: success={installResult.success}, {installResult.message}");
+                                    var installResult = _companionPlugin.Install(location);
+                                    Log.Info($"CompanionPlugin install ({location}): success={installResult.success}, {installResult.message}");
 
                                     if (!installResult.success)
                                     {
@@ -124,6 +124,7 @@ namespace ReSharperPlugin.Fathom
                                                     ? s : CompanionPluginStatus.NotInstalled,
                                                 detection.InstalledVersion,
                                                 detection.BundledVersion,
+                                                detection.InstallLocation ?? "None",
                                                 $"Installation failed. {installResult.message}")));
                                         return;
                                     }
@@ -135,14 +136,15 @@ namespace ReSharperPlugin.Fathom
 
                                     var det = _companionPlugin.Detect();
                                     var statusMessage = regenResult.success
-                                        ? "Installed and project files regenerated. Click Build Now to compile."
-                                        : $"Installed but project file regeneration failed: {regenResult.message}. Click Build Now to compile.";
+                                        ? $"Installed to {location} and project files regenerated. Click Build Now to compile."
+                                        : $"Installed to {location} but project file regeneration failed: {regenResult.message}. Click Build Now to compile.";
 
                                     _rdScheduler.Queue(() =>
                                         model.CompanionPluginStatus(new CompanionPluginInfo(
                                             CompanionPluginStatus.Installed,
                                             det.InstalledVersion,
                                             det.BundledVersion,
+                                            det.InstallLocation ?? location,
                                             statusMessage)));
                                 });
                             });
@@ -153,8 +155,13 @@ namespace ReSharperPlugin.Fathom
                                 _ = Task.Run(() =>
                                 {
                                     var ueInfo = _ueProject.GetUeProjectInfo();
-                                    var buildResult = _companionPlugin.BuildEditorTarget(ueInfo);
-                                    Log.Info($"CompanionPlugin build: success={buildResult.success}, {buildResult.message}");
+                                    var det0 = _companionPlugin.Detect();
+                                    var useRunUat = det0.InstallLocation == "Engine" || det0.InstallLocation == "Both";
+
+                                    var buildResult = useRunUat
+                                        ? _companionPlugin.BuildEnginePlugin(ueInfo)
+                                        : _companionPlugin.BuildEditorTarget(ueInfo);
+                                    Log.Info($"CompanionPlugin build (RunUAT={useRunUat}): success={buildResult.success}, {buildResult.message}");
 
                                     var det = _companionPlugin.Detect();
 
@@ -165,6 +172,7 @@ namespace ReSharperPlugin.Fathom
                                                 CompanionPluginStatus.UpToDate,
                                                 det.InstalledVersion,
                                                 det.BundledVersion,
+                                                det.InstallLocation ?? "None",
                                                 buildResult.message)));
                                     }
                                     else
@@ -174,6 +182,7 @@ namespace ReSharperPlugin.Fathom
                                                 CompanionPluginStatus.Installed,
                                                 det.InstalledVersion,
                                                 det.BundledVersion,
+                                                det.InstallLocation ?? "None",
                                                 $"Build failed: {buildResult.message}")));
                                     }
                                 });
@@ -296,7 +305,7 @@ namespace ReSharperPlugin.Fathom
                                 var detection = _companionPlugin.Detect();
                                 if (detection.Status != "UpToDate")
                                 {
-                                    Log.Info($"CompanionPlugin: {detection.Status} (installed={detection.InstalledVersion}, bundled={detection.BundledVersion})");
+                                    Log.Info($"CompanionPlugin: {detection.Status} location={detection.InstallLocation} (installed={detection.InstalledVersion}, bundled={detection.BundledVersion})");
                                     if (model != null)
                                         _rdScheduler.Queue(() =>
                                             model.CompanionPluginStatus(new CompanionPluginInfo(
@@ -304,6 +313,7 @@ namespace ReSharperPlugin.Fathom
                                                     ? s : CompanionPluginStatus.NotInstalled,
                                                 detection.InstalledVersion,
                                                 detection.BundledVersion,
+                                                detection.InstallLocation ?? "None",
                                                 detection.Message)));
                                 }
                             }

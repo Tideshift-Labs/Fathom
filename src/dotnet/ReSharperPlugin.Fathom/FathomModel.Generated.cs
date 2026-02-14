@@ -45,7 +45,7 @@ namespace JetBrains.Rider.Model
     [NotNull] public IViewableProperty<int> Port => _Port;
     [NotNull] public ISignal<JetBrains.Rider.Model.ServerStatus> ServerStatus => _ServerStatus;
     [NotNull] public void CompanionPluginStatus(CompanionPluginInfo value) => _CompanionPluginStatus.Fire(value);
-    [NotNull] public ISource<Unit> InstallCompanionPlugin => _InstallCompanionPlugin;
+    [NotNull] public ISource<string> InstallCompanionPlugin => _InstallCompanionPlugin;
     [NotNull] public ISource<Unit> BuildCompanionPlugin => _BuildCompanionPlugin;
     [NotNull] public ISignal<string> McpConfigStatus => _McpConfigStatus;
     
@@ -53,7 +53,7 @@ namespace JetBrains.Rider.Model
     [NotNull] private readonly RdProperty<int> _Port;
     [NotNull] private readonly RdSignal<JetBrains.Rider.Model.ServerStatus> _ServerStatus;
     [NotNull] private readonly RdSignal<CompanionPluginInfo> _CompanionPluginStatus;
-    [NotNull] private readonly RdSignal<Unit> _InstallCompanionPlugin;
+    [NotNull] private readonly RdSignal<string> _InstallCompanionPlugin;
     [NotNull] private readonly RdSignal<Unit> _BuildCompanionPlugin;
     [NotNull] private readonly RdSignal<string> _McpConfigStatus;
     
@@ -62,7 +62,7 @@ namespace JetBrains.Rider.Model
       [NotNull] RdProperty<int> port,
       [NotNull] RdSignal<JetBrains.Rider.Model.ServerStatus> serverStatus,
       [NotNull] RdSignal<CompanionPluginInfo> companionPluginStatus,
-      [NotNull] RdSignal<Unit> installCompanionPlugin,
+      [NotNull] RdSignal<string> installCompanionPlugin,
       [NotNull] RdSignal<Unit> buildCompanionPlugin,
       [NotNull] RdSignal<string> mcpConfigStatus
     )
@@ -94,7 +94,7 @@ namespace JetBrains.Rider.Model
       new RdProperty<int>(JetBrains.Rd.Impl.Serializers.ReadInt, JetBrains.Rd.Impl.Serializers.WriteInt),
       new RdSignal<JetBrains.Rider.Model.ServerStatus>(JetBrains.Rider.Model.ServerStatus.Read, JetBrains.Rider.Model.ServerStatus.Write),
       new RdSignal<CompanionPluginInfo>(CompanionPluginInfo.Read, CompanionPluginInfo.Write),
-      new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid),
+      new RdSignal<string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString),
       new RdSignal<Unit>(JetBrains.Rd.Impl.Serializers.ReadVoid, JetBrains.Rd.Impl.Serializers.WriteVoid),
       new RdSignal<string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString)
     ) {}
@@ -103,7 +103,7 @@ namespace JetBrains.Rider.Model
     
     
     
-    protected override long SerializationHash => 115501235925793422L;
+    protected override long SerializationHash => 1387835151668611458L;
     
     protected override Action<ISerializers> Register => RegisterDeclaredTypesSerializers;
     public static void RegisterDeclaredTypesSerializers(ISerializers serializers)
@@ -160,6 +160,7 @@ namespace JetBrains.Rider.Model
     public CompanionPluginStatus Status {get; private set;}
     [NotNull] public string InstalledVersion {get; private set;}
     [NotNull] public string BundledVersion {get; private set;}
+    [NotNull] public string InstallLocation {get; private set;}
     [NotNull] public string Message {get; private set;}
     
     //private fields
@@ -168,25 +169,29 @@ namespace JetBrains.Rider.Model
       CompanionPluginStatus status,
       [NotNull] string installedVersion,
       [NotNull] string bundledVersion,
+      [NotNull] string installLocation,
       [NotNull] string message
     )
     {
       if (installedVersion == null) throw new ArgumentNullException("installedVersion");
       if (bundledVersion == null) throw new ArgumentNullException("bundledVersion");
+      if (installLocation == null) throw new ArgumentNullException("installLocation");
       if (message == null) throw new ArgumentNullException("message");
       
       Status = status;
       InstalledVersion = installedVersion;
       BundledVersion = bundledVersion;
+      InstallLocation = installLocation;
       Message = message;
     }
     //secondary constructor
     //deconstruct trait
-    public void Deconstruct(out CompanionPluginStatus status, [NotNull] out string installedVersion, [NotNull] out string bundledVersion, [NotNull] out string message)
+    public void Deconstruct(out CompanionPluginStatus status, [NotNull] out string installedVersion, [NotNull] out string bundledVersion, [NotNull] out string installLocation, [NotNull] out string message)
     {
       status = Status;
       installedVersion = InstalledVersion;
       bundledVersion = BundledVersion;
+      installLocation = InstallLocation;
       message = Message;
     }
     //statics
@@ -196,8 +201,9 @@ namespace JetBrains.Rider.Model
       var status = (CompanionPluginStatus)reader.ReadInt();
       var installedVersion = reader.ReadString();
       var bundledVersion = reader.ReadString();
+      var installLocation = reader.ReadString();
       var message = reader.ReadString();
-      var _result = new CompanionPluginInfo(status, installedVersion, bundledVersion, message);
+      var _result = new CompanionPluginInfo(status, installedVersion, bundledVersion, installLocation, message);
       return _result;
     };
     
@@ -206,6 +212,7 @@ namespace JetBrains.Rider.Model
       writer.Write((int)value.Status);
       writer.Write(value.InstalledVersion);
       writer.Write(value.BundledVersion);
+      writer.Write(value.InstallLocation);
       writer.Write(value.Message);
     };
     
@@ -225,7 +232,7 @@ namespace JetBrains.Rider.Model
     {
       if (ReferenceEquals(null, other)) return false;
       if (ReferenceEquals(this, other)) return true;
-      return Status == other.Status && InstalledVersion == other.InstalledVersion && BundledVersion == other.BundledVersion && Message == other.Message;
+      return Status == other.Status && InstalledVersion == other.InstalledVersion && BundledVersion == other.BundledVersion && InstallLocation == other.InstallLocation && Message == other.Message;
     }
     //hash code trait
     public override int GetHashCode()
@@ -235,6 +242,7 @@ namespace JetBrains.Rider.Model
         hash = hash * 31 + (int) Status;
         hash = hash * 31 + InstalledVersion.GetHashCode();
         hash = hash * 31 + BundledVersion.GetHashCode();
+        hash = hash * 31 + InstallLocation.GetHashCode();
         hash = hash * 31 + Message.GetHashCode();
         return hash;
       }
@@ -247,6 +255,7 @@ namespace JetBrains.Rider.Model
         printer.Print("status = "); Status.PrintEx(printer); printer.Println();
         printer.Print("installedVersion = "); InstalledVersion.PrintEx(printer); printer.Println();
         printer.Print("bundledVersion = "); BundledVersion.PrintEx(printer); printer.Println();
+        printer.Print("installLocation = "); InstallLocation.PrintEx(printer); printer.Println();
         printer.Print("message = "); Message.PrintEx(printer); printer.Println();
       }
       printer.Print(")");

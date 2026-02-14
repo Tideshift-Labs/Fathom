@@ -32,73 +32,51 @@ public class CompanionPluginService
     {
         try
         {
-            var solutionDir = _solution.SolutionDirectory.FullPath;
-            var pluginsDir = Path.Combine(solutionDir, "Plugins");
-            var pluginName = _config.CompanionPluginName;
-            var upluginFileName = pluginName + ".uplugin";
-
-            string installedUpluginPath = null;
-
-            // Search for the .uplugin in Plugins/<PluginName>/
-            var expectedPath = Path.Combine(pluginsDir, pluginName, upluginFileName);
-            if (File.Exists(expectedPath))
-            {
-                installedUpluginPath = expectedPath;
-            }
-            else if (Directory.Exists(pluginsDir))
-            {
-                // Broader search: look recursively under Plugins/
-                var found = Directory.GetFiles(pluginsDir, upluginFileName, SearchOption.AllDirectories);
-                if (found.Length > 0)
-                    installedUpluginPath = found[0];
-            }
-
             var bundledVersion = GetBundledVersion();
+            var pluginName = _config.CompanionPluginName;
 
-            if (installedUpluginPath == null)
+            var engineStatus = DetectAtDir(GetEnginePluginDir());
+            var gameStatus = DetectAtDir(GetGamePluginDir());
+
+            // Determine install location
+            string installLocation;
+            if (engineStatus.Found && gameStatus.Found) installLocation = "Both";
+            else if (engineStatus.Found) installLocation = "Engine";
+            else if (gameStatus.Found) installLocation = "Game";
+            else installLocation = "None";
+
+            // Pick installed version from best source (prefer engine, fall back to game)
+            var installedVersion = engineStatus.Version ?? gameStatus.Version ?? "";
+
+            // Determine overall status
+            string status;
+            string message;
+            if (!engineStatus.Found && !gameStatus.Found)
             {
-                return new CompanionPluginDetectionResult
-                {
-                    Status = "NotInstalled",
-                    InstalledVersion = "",
-                    BundledVersion = bundledVersion,
-                    Message = $"{pluginName} is not installed. Click Install to add it to Plugins/."
-                };
+                status = "NotInstalled";
+                message = $"{pluginName} is not installed. Use the status bar menu to install it.";
             }
-
-            var installedVersion = ParseVersionFromUplugin(installedUpluginPath);
-
-            if (installedVersion != bundledVersion)
+            else if ((engineStatus.Found && engineStatus.Outdated) ||
+                     (gameStatus.Found && gameStatus.Outdated))
             {
-                return new CompanionPluginDetectionResult
-                {
-                    Status = "Outdated",
-                    InstalledVersion = installedVersion,
-                    BundledVersion = bundledVersion,
-                    Message = $"{pluginName} {installedVersion} is outdated (bundled: {bundledVersion}). Click Install to update."
-                };
+                status = "Outdated";
+                var locations = installLocation == "Both" ? "Engine and Game" : installLocation;
+                message = $"{pluginName} {installedVersion} is outdated (bundled: {bundledVersion}). " +
+                          $"Installed to: {locations}.";
             }
-
-            // Versions match, but check if the bundled ZIP contents have changed
-            // (useful during local dev when the version string stays the same).
-            var installedDir = Path.GetDirectoryName(installedUpluginPath);
-            if (installedDir != null && HasBundledContentChanged(installedDir))
+            else
             {
-                return new CompanionPluginDetectionResult
-                {
-                    Status = "Outdated",
-                    InstalledVersion = installedVersion,
-                    BundledVersion = bundledVersion,
-                    Message = $"{pluginName} {installedVersion} has changed content (bundled ZIP differs). Click Install to update."
-                };
+                status = "UpToDate";
+                message = $"{pluginName} {installedVersion} is up to date ({installLocation}).";
             }
 
             return new CompanionPluginDetectionResult
             {
-                Status = "UpToDate",
+                Status = status,
                 InstalledVersion = installedVersion,
                 BundledVersion = bundledVersion,
-                Message = $"{pluginName} {installedVersion} is up to date."
+                InstallLocation = installLocation,
+                Message = message
             };
         }
         catch (Exception ex)
@@ -109,12 +87,16 @@ public class CompanionPluginService
                 Status = "NotInstalled",
                 InstalledVersion = "",
                 BundledVersion = "",
+                InstallLocation = "None",
                 Message = "Detection failed: " + ex.Message
             };
         }
     }
 
-    public (bool success, string message) Install()
+    /// <summary>
+    /// Installs the companion plugin to the specified location ("Engine" or "Game").
+    /// </summary>
+    public (bool success, string message) Install(string location)
     {
         try
         {
@@ -122,13 +104,22 @@ public class CompanionPluginService
             if (zipPath == null || !File.Exists(zipPath))
                 return (false, "Bundled ZIP not found at expected location next to the DLL.");
 
-            var solutionDir = _solution.SolutionDirectory.FullPath;
-            var pluginsDir = Path.Combine(solutionDir, "Plugins");
-            var targetDir = Path.Combine(pluginsDir, _config.CompanionPluginName);
+            string targetDir;
+            if (string.Equals(location, "Engine", StringComparison.OrdinalIgnoreCase))
+            {
+                targetDir = GetEnginePluginDir();
+                if (targetDir == null)
+                    return (false, "Engine path not available. Install to Game instead, or ensure the project is fully loaded.");
+            }
+            else
+            {
+                targetDir = GetGamePluginDir();
+            }
 
-            // Ensure Plugins/ directory exists
-            if (!Directory.Exists(pluginsDir))
-                Directory.CreateDirectory(pluginsDir);
+            // Ensure parent directory exists
+            var parentDir = Path.GetDirectoryName(targetDir);
+            if (parentDir != null && !Directory.Exists(parentDir))
+                Directory.CreateDirectory(parentDir);
 
             // Remove existing installation if present
             if (Directory.Exists(targetDir))
@@ -148,8 +139,16 @@ public class CompanionPluginService
             if (zipHash != null)
                 File.WriteAllText(Path.Combine(targetDir, InstallHashFileName), zipHash);
 
-            Log.Info($"CompanionPluginService: installed companion plugin to {targetDir}");
-            return (true, $"Installed to {targetDir}");
+            Log.Info($"CompanionPluginService: installed companion plugin to {targetDir} (location={location})");
+            return (true, $"Installed to {location} ({targetDir})");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Log.Warn($"CompanionPluginService: permission denied installing to {location}: {ex.Message}");
+            return (false, $"Permission denied writing to {location} directory. " +
+                           (string.Equals(location, "Engine", StringComparison.OrdinalIgnoreCase)
+                               ? "Try running Rider as Administrator, or install to Game instead."
+                               : ex.Message));
         }
         catch (Exception ex)
         {
@@ -267,6 +266,116 @@ public class CompanionPluginService
     }
 
     /// <summary>
+    /// Builds the engine-level plugin using RunUAT BuildPlugin.
+    /// Installed/launcher engine builds cannot compile engine plugins at runtime,
+    /// so we must pre-build them via the Unreal Automation Tool.
+    /// </summary>
+    public (bool success, string message) BuildEnginePlugin(UeProjectInfo ueInfo)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(ueInfo.EnginePath))
+                return (false, "Engine path not available.");
+
+            var runUatPath = Path.Combine(ueInfo.EnginePath, "Build", "BatchFiles", "RunUAT.bat");
+            if (!File.Exists(runUatPath))
+                return (false, "RunUAT.bat not found at: " + runUatPath);
+
+            var enginePluginDir = GetEnginePluginDir();
+            if (enginePluginDir == null)
+                return (false, "Engine plugin directory not available.");
+
+            var upluginPath = Path.Combine(enginePluginDir, _config.CompanionPluginName + ".uplugin");
+            if (!File.Exists(upluginPath))
+                return (false, "Plugin .uplugin not found at: " + upluginPath);
+
+            // Build to a temp directory, then copy output over the source.
+            // BuildPlugin stages both source and binaries to -Package.
+            var tempPackageDir = Path.Combine(Path.GetTempPath(), "FathomUELink_Build_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = runUatPath,
+                Arguments = $"BuildPlugin -Plugin=\"{upluginPath}\" -Package=\"{tempPackageDir}\" -Rocket",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = ueInfo.EnginePath
+            };
+
+            Log.Info($"CompanionPlugin: Building engine plugin via RunUAT: {startInfo.FileName} {startInfo.Arguments}");
+
+            using (var process = Process.Start(startInfo))
+            {
+                if (process == null)
+                    return (false, "Failed to start RunUAT process.");
+
+                var output = process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    var msg = $"RunUAT BuildPlugin exited with code {process.ExitCode}.";
+                    if (!string.IsNullOrWhiteSpace(error))
+                        msg += " Error: " + error.Substring(0, Math.Min(error.Length, _config.MaxErrorLength));
+                    Log.Warn("CompanionPlugin: " + msg);
+
+                    // Clean up temp dir on failure
+                    try { if (Directory.Exists(tempPackageDir)) Directory.Delete(tempPackageDir, true); } catch { }
+
+                    return (false, msg);
+                }
+            }
+
+            // Copy built Binaries/ from temp package to engine plugin dir
+            var builtBinDir = Path.Combine(tempPackageDir, "Binaries");
+            if (Directory.Exists(builtBinDir))
+            {
+                var targetBinDir = Path.Combine(enginePluginDir, "Binaries");
+                CopyDirectory(builtBinDir, targetBinDir);
+                Log.Info($"CompanionPlugin: Copied built binaries to {targetBinDir}");
+            }
+
+            // Copy built Intermediate/ if present
+            var builtIntDir = Path.Combine(tempPackageDir, "Intermediate");
+            if (Directory.Exists(builtIntDir))
+            {
+                var targetIntDir = Path.Combine(enginePluginDir, "Intermediate");
+                CopyDirectory(builtIntDir, targetIntDir);
+            }
+
+            // Clean up temp dir
+            try { Directory.Delete(tempPackageDir, true); } catch { }
+
+            Log.Info("CompanionPlugin: Engine plugin built successfully via RunUAT.");
+            return (true, "Plugin compiled successfully.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "CompanionPlugin.BuildEnginePlugin failed");
+            return (false, "Build failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Recursively copies a directory tree, overwriting existing files.
+    /// </summary>
+    private static void CopyDirectory(string sourceDir, string targetDir)
+    {
+        Directory.CreateDirectory(targetDir);
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            var dest = Path.Combine(targetDir, Path.GetFileName(file));
+            File.Copy(file, dest, overwrite: true);
+        }
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+        {
+            CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
+        }
+    }
+
+    /// <summary>
     /// Ensures the dotnet child process can run apps targeting older major versions
     /// (e.g. UE 5.7 UBT targets net8.0 but Rider may only bundle net9.0).
     /// </summary>
@@ -314,6 +423,84 @@ public class CompanionPluginService
 
         var dllDir = Path.GetDirectoryName(dllPath);
         return dllDir == null ? null : Path.Combine(dllDir, _config.CompanionPluginZipName);
+    }
+
+    /// <summary>
+    /// Returns the plugin directory inside the engine's Plugins/Marketplace/ folder,
+    /// or null if the engine path is not available.
+    /// </summary>
+    private string GetEnginePluginDir()
+    {
+        try
+        {
+            var ueInfo = _ueProject.GetUeProjectInfo();
+            if (string.IsNullOrEmpty(ueInfo?.EnginePath))
+                return null;
+
+            return Path.Combine(ueInfo.EnginePath, "Plugins", "Marketplace", _config.CompanionPluginName);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("CompanionPluginService: failed to resolve engine plugin dir: " + ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the plugin directory inside the game project's Plugins/ folder.
+    /// </summary>
+    private string GetGamePluginDir()
+    {
+        var solutionDir = _solution.SolutionDirectory.FullPath;
+        return Path.Combine(solutionDir, "Plugins", _config.CompanionPluginName);
+    }
+
+    /// <summary>
+    /// Checks a single directory for an installed plugin and returns its status.
+    /// </summary>
+    private LocationDetection DetectAtDir(string pluginDir)
+    {
+        if (string.IsNullOrEmpty(pluginDir))
+            return new LocationDetection { Found = false };
+
+        var upluginFileName = _config.CompanionPluginName + ".uplugin";
+
+        // Check expected location first
+        var upluginPath = Path.Combine(pluginDir, upluginFileName);
+        if (!File.Exists(upluginPath))
+        {
+            // Broader search within the directory
+            if (Directory.Exists(pluginDir))
+            {
+                var found = Directory.GetFiles(pluginDir, upluginFileName, SearchOption.AllDirectories);
+                if (found.Length > 0)
+                    upluginPath = found[0];
+                else
+                    return new LocationDetection { Found = false };
+            }
+            else
+            {
+                return new LocationDetection { Found = false };
+            }
+        }
+
+        var version = ParseVersionFromUplugin(upluginPath);
+        var bundledVersion = GetBundledVersion();
+        var installedDir = Path.GetDirectoryName(upluginPath);
+
+        // Version mismatch
+        if (version != bundledVersion)
+        {
+            return new LocationDetection { Found = true, Version = version, Outdated = true };
+        }
+
+        // Version matches, but check if ZIP contents changed (local dev workflow)
+        if (installedDir != null && HasBundledContentChanged(installedDir))
+        {
+            return new LocationDetection { Found = true, Version = version, Outdated = true };
+        }
+
+        return new LocationDetection { Found = true, Version = version, Outdated = false };
     }
 
     private bool HasBundledContentChanged(string installedDir)
@@ -374,6 +561,13 @@ public class CompanionPluginService
         var match = Regex.Match(json, @"""VersionName""\s*:\s*""([^""]+)""");
         return match.Success ? match.Groups[1].Value : "unknown";
     }
+
+    private struct LocationDetection
+    {
+        public bool Found;
+        public string Version;
+        public bool Outdated;
+    }
 }
 
 public class CompanionPluginDetectionResult
@@ -381,5 +575,6 @@ public class CompanionPluginDetectionResult
     public string Status { get; set; }
     public string InstalledVersion { get; set; }
     public string BundledVersion { get; set; }
+    public string InstallLocation { get; set; }
     public string Message { get; set; }
 }

@@ -22,7 +22,7 @@ class FathomModel private constructor(
     private val _port: RdOptionalProperty<Int>,
     private val _serverStatus: RdSignal<ServerStatus>,
     private val _companionPluginStatus: RdSignal<CompanionPluginInfo>,
-    private val _installCompanionPlugin: RdSignal<Unit>,
+    private val _installCompanionPlugin: RdSignal<String>,
     private val _buildCompanionPlugin: RdSignal<Unit>,
     private val _mcpConfigStatus: RdSignal<String>
 ) : RdExtBase() {
@@ -41,7 +41,7 @@ class FathomModel private constructor(
         
         
         
-        const val serializationHash = 115501235925793422L
+        const val serializationHash = 1387835151668611458L
         
     }
     override val serializersOwner: ISerializersOwner get() = FathomModel
@@ -51,7 +51,7 @@ class FathomModel private constructor(
     val port: IOptProperty<Int> get() = _port
     val serverStatus: ISignal<ServerStatus> get() = _serverStatus
     val companionPluginStatus: ISource<CompanionPluginInfo> get() = _companionPluginStatus
-    val installCompanionPlugin: ISignal<Unit> get() = _installCompanionPlugin
+    val installCompanionPlugin: ISignal<String> get() = _installCompanionPlugin
     val buildCompanionPlugin: ISignal<Unit> get() = _buildCompanionPlugin
     val mcpConfigStatus: ISignal<String> get() = _mcpConfigStatus
     //methods
@@ -75,7 +75,7 @@ class FathomModel private constructor(
         RdOptionalProperty<Int>(FrameworkMarshallers.Int),
         RdSignal<ServerStatus>(ServerStatus),
         RdSignal<CompanionPluginInfo>(CompanionPluginInfo),
-        RdSignal<Unit>(FrameworkMarshallers.Void),
+        RdSignal<String>(FrameworkMarshallers.String),
         RdSignal<Unit>(FrameworkMarshallers.Void),
         RdSignal<String>(FrameworkMarshallers.String)
     )
@@ -121,6 +121,7 @@ data class CompanionPluginInfo (
     val status: CompanionPluginStatus,
     val installedVersion: String,
     val bundledVersion: String,
+    val installLocation: String,
     val message: String
 ) : IPrintable {
     //companion
@@ -134,14 +135,16 @@ data class CompanionPluginInfo (
             val status = buffer.readEnum<CompanionPluginStatus>()
             val installedVersion = buffer.readString()
             val bundledVersion = buffer.readString()
+            val installLocation = buffer.readString()
             val message = buffer.readString()
-            return CompanionPluginInfo(status, installedVersion, bundledVersion, message)
+            return CompanionPluginInfo(status, installedVersion, bundledVersion, installLocation, message)
         }
         
         override fun write(ctx: SerializationCtx, buffer: AbstractBuffer, value: CompanionPluginInfo)  {
             buffer.writeEnum(value.status)
             buffer.writeString(value.installedVersion)
             buffer.writeString(value.bundledVersion)
+            buffer.writeString(value.installLocation)
             buffer.writeString(value.message)
         }
         
@@ -161,6 +164,7 @@ data class CompanionPluginInfo (
         if (status != other.status) return false
         if (installedVersion != other.installedVersion) return false
         if (bundledVersion != other.bundledVersion) return false
+        if (installLocation != other.installLocation) return false
         if (message != other.message) return false
         
         return true
@@ -171,6 +175,7 @@ data class CompanionPluginInfo (
         __r = __r*31 + status.hashCode()
         __r = __r*31 + installedVersion.hashCode()
         __r = __r*31 + bundledVersion.hashCode()
+        __r = __r*31 + installLocation.hashCode()
         __r = __r*31 + message.hashCode()
         return __r
     }
@@ -181,6 +186,7 @@ data class CompanionPluginInfo (
             print("status = "); status.print(printer); println()
             print("installedVersion = "); installedVersion.print(printer); println()
             print("bundledVersion = "); bundledVersion.print(printer); println()
+            print("installLocation = "); installLocation.print(printer); println()
             print("message = "); message.print(printer); println()
         }
         printer.print(")")
