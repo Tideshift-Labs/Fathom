@@ -110,6 +110,7 @@ public class CompanionPluginService
                 targetDir = GetEnginePluginDir();
                 if (targetDir == null)
                     return (false, "Engine path not available. Install to Game instead, or ensure the project is fully loaded.");
+
             }
             else
             {

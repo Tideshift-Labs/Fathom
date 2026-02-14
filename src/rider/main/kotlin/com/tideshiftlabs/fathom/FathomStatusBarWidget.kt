@@ -39,6 +39,9 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
     @Volatile
     private var currentInfo: CompanionPluginInfo? = null
 
+    @Volatile
+    private var actionInProgress = false
+
     override fun ID(): String = ID
 
     override fun getPresentation(): StatusBarWidget.WidgetPresentation = this
@@ -54,6 +57,7 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
         protocol.scheduler.queue {
             model.companionPluginStatus.advise(lifetimeDef.lifetime) { info ->
                 currentInfo = info
+                actionInProgress = false
                 invokeLater {
                     this.statusBar?.updateWidget(ID)
                 }
@@ -126,40 +130,33 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
         group.addSeparator()
 
         // Contextual actions based on status and install location
+        val busy = actionInProgress
         when (info?.status) {
             CompanionPluginStatus.NotInstalled -> {
-                group.add(createInstallAction("Install to Engine", "Engine"))
-                group.add(createInstallAction("Install to Game", "Game"))
+                group.add(createInstallAction("Install to Engine", "Engine", busy))
+                group.add(createInstallAction("Install to Game", "Game", busy))
             }
             CompanionPluginStatus.Outdated -> {
                 when (info.installLocation) {
-                    "Engine" -> group.add(createInstallAction("Update Engine Plugin", "Engine"))
+                    "Engine" -> group.add(createInstallAction("Update Engine Plugin", "Engine", busy))
                     "Game" -> {
-                        group.add(createInstallAction("Update Game Plugin", "Game"))
-                        group.add(createInstallAction("Install to Engine", "Engine"))
+                        group.add(createInstallAction("Update Game Plugin", "Game", busy))
+                        group.add(createInstallAction("Install to Engine", "Engine", busy))
                     }
                     "Both" -> {
-                        group.add(createInstallAction("Update Engine Plugin", "Engine"))
-                        group.add(createInstallAction("Update Game Plugin", "Game"))
+                        group.add(createInstallAction("Update Engine Plugin", "Engine", busy))
+                        group.add(createInstallAction("Update Game Plugin", "Game", busy))
                     }
-                    else -> group.add(createInstallAction("Install to Engine", "Engine"))
+                    else -> group.add(createInstallAction("Install to Engine", "Engine", busy))
                 }
             }
             CompanionPluginStatus.Installed -> {
-                group.add(object : DumbAwareAction("Build Companion Plugin") {
-                    override fun actionPerformed(e: AnActionEvent) {
-                        val protocol = project.solution.protocol ?: return
-                        protocol.scheduler.queue {
-                            project.solution.fathomModel.buildCompanionPlugin.fire(Unit)
-                        }
-                    }
-                    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-                })
+                group.add(createBuildAction(busy))
             }
             CompanionPluginStatus.UpToDate -> {
                 // If only installed to Game, offer Engine installation
                 if (info.installLocation == "Game") {
-                    group.add(createInstallAction("Install to Engine", "Engine"))
+                    group.add(createInstallAction("Install to Engine", "Engine", busy))
                 }
             }
             null -> { /* no contextual action */ }
@@ -235,13 +232,35 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
         )
     }
 
-    private fun createInstallAction(label: String, location: String): DumbAwareAction {
-        return object : DumbAwareAction(label) {
+    private fun createInstallAction(label: String, location: String, disabled: Boolean): DumbAwareAction {
+        val text = if (disabled) "$label (in progress...)" else label
+        return object : DumbAwareAction(text) {
             override fun actionPerformed(e: AnActionEvent) {
+                actionInProgress = true
                 val protocol = project.solution.protocol ?: return
                 protocol.scheduler.queue {
                     project.solution.fathomModel.installCompanionPlugin.fire(location)
                 }
+            }
+            override fun update(e: AnActionEvent) {
+                e.presentation.isEnabled = !disabled
+            }
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+        }
+    }
+
+    private fun createBuildAction(disabled: Boolean): DumbAwareAction {
+        val text = if (disabled) "Build Companion Plugin (in progress...)" else "Build Companion Plugin"
+        return object : DumbAwareAction(text) {
+            override fun actionPerformed(e: AnActionEvent) {
+                actionInProgress = true
+                val protocol = project.solution.protocol ?: return
+                protocol.scheduler.queue {
+                    project.solution.fathomModel.buildCompanionPlugin.fire(Unit)
+                }
+            }
+            override fun update(e: AnActionEvent) {
+                e.presentation.isEnabled = !disabled
             }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
         }
