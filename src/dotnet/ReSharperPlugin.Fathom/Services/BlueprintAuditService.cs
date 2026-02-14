@@ -18,7 +18,7 @@ public class BlueprintAuditService
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
     /// Bump both together when the audit format changes.
     /// </summary>
-    private const int AuditSchemaVersion = 5;
+    private const int AuditSchemaVersion = 7;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 
@@ -69,11 +69,7 @@ public class BlueprintAuditService
         var uprojectDir = ueInfo.ProjectDirectory;
         var versionDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}");
 
-        var blueprintDir = Path.Combine(versionDir, "Blueprints");
-        var dataTableDir = Path.Combine(versionDir, "DataTables");
-        var dataAssetDir = Path.Combine(versionDir, "DataAssets");
-
-        if (!Directory.Exists(blueprintDir) && !Directory.Exists(dataTableDir) && !Directory.Exists(dataAssetDir))
+        if (!Directory.Exists(versionDir))
         {
             return new BlueprintAuditResult
             {
@@ -86,27 +82,28 @@ public class BlueprintAuditService
         var blueprints = new List<BlueprintAuditEntry>();
         var dataTables = new List<BlueprintAuditEntry>();
         var dataAssets = new List<BlueprintAuditEntry>();
+        var structures = new List<BlueprintAuditEntry>();
         var staleCount = 0;
         var errorCount = 0;
 
-        void ScanDir(string dir, string assetType, List<BlueprintAuditEntry> list)
+        foreach (var mdFile in Directory.GetFiles(versionDir, "*.md", SearchOption.AllDirectories))
         {
-            if (!Directory.Exists(dir)) return;
-            foreach (var mdFile in Directory.GetFiles(dir, "*.md", SearchOption.AllDirectories))
+            var entry = ReadAndCheckBlueprintAudit(mdFile, uprojectDir);
+            entry.AssetType = InferAssetType(entry.Data);
+
+            switch (entry.AssetType)
             {
-                var entry = ReadAndCheckBlueprintAudit(mdFile, uprojectDir);
-                entry.AssetType = assetType;
-                list.Add(entry);
-                if (entry.IsStale) staleCount++;
-                if (entry.Error != null) errorCount++;
+                case "DataTable": dataTables.Add(entry); break;
+                case "DataAsset": dataAssets.Add(entry); break;
+                case "Structure": structures.Add(entry); break;
+                default: blueprints.Add(entry); break;
             }
+
+            if (entry.IsStale) staleCount++;
+            if (entry.Error != null) errorCount++;
         }
 
-        ScanDir(blueprintDir, "Blueprint", blueprints);
-        ScanDir(dataTableDir, "DataTable", dataTables);
-        ScanDir(dataAssetDir, "DataAsset", dataAssets);
-
-        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count;
+        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count + structures.Count;
 
         if (totalCount == 0)
         {
@@ -123,7 +120,7 @@ public class BlueprintAuditService
             DateTime? lastRefresh;
             lock (_auditLock) { lastRefresh = _lastAuditRefresh; }
 
-            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets);
+            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets).Concat(structures);
             return new BlueprintAuditResult
             {
                 Status = "stale",
@@ -133,6 +130,7 @@ public class BlueprintAuditService
                 ErrorCount = errorCount,
                 DataTableCount = dataTables.Count,
                 DataAssetCount = dataAssets.Count,
+                StructureCount = structures.Count,
                 Action = "Call /blueprint-audit/refresh to update audit data",
                 LastRefresh = lastRefresh?.ToString("o"),
                 StaleExamples = allEntries.Where(b => b.IsStale).Take(_config.MaxStaleExamples).ToList()
@@ -150,10 +148,12 @@ public class BlueprintAuditService
             ErrorCount = errorCount,
             DataTableCount = dataTables.Count,
             DataAssetCount = dataAssets.Count,
+            StructureCount = structures.Count,
             LastRefresh = refresh?.ToString("o"),
             Blueprints = blueprints,
             DataTables = dataTables,
-            DataAssets = dataAssets
+            DataAssets = dataAssets,
+            Structures = structures
         };
     }
 
@@ -255,14 +255,7 @@ public class BlueprintAuditService
 
             var uprojectDir = ueInfo.ProjectDirectory;
             var versionDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}");
-            var auditDirs = new[]
-            {
-                Path.Combine(versionDir, "Blueprints"),
-                Path.Combine(versionDir, "DataTables"),
-                Path.Combine(versionDir, "DataAssets")
-            };
-
-            if (!auditDirs.Any(Directory.Exists))
+            if (!Directory.Exists(versionDir))
             {
                 _bootCheckResult = "Audit directory does not exist - triggering refresh";
                 _bootCheckCompleted = true;
@@ -274,15 +267,11 @@ public class BlueprintAuditService
             var staleCount = 0;
             var totalCount = 0;
 
-            foreach (var auditDir in auditDirs)
+            foreach (var mdFile in Directory.GetFiles(versionDir, "*.md", SearchOption.AllDirectories))
             {
-                if (!Directory.Exists(auditDir)) continue;
-                foreach (var mdFile in Directory.GetFiles(auditDir, "*.md", SearchOption.AllDirectories))
-                {
-                    totalCount++;
-                    var entry = ReadAndCheckBlueprintAudit(mdFile, uprojectDir);
-                    if (entry.IsStale) staleCount++;
-                }
+                totalCount++;
+                var entry = ReadAndCheckBlueprintAudit(mdFile, uprojectDir);
+                if (entry.IsStale) staleCount++;
             }
 
             if (totalCount == 0)
@@ -329,24 +318,15 @@ public class BlueprintAuditService
 
         var normalizedInput = StripObjectName(packagePath);
 
-        var dirsToSearch = new[]
-        {
-            (Path.Combine(versionDir, "Blueprints"), "Blueprint"),
-            (Path.Combine(versionDir, "DataTables"), "DataTable"),
-            (Path.Combine(versionDir, "DataAssets"), "DataAsset")
-        };
+        if (!Directory.Exists(versionDir)) return null;
 
-        foreach (var (dir, assetType) in dirsToSearch)
+        foreach (var mdFile in Directory.GetFiles(versionDir, "*.md", SearchOption.AllDirectories))
         {
-            if (!Directory.Exists(dir)) continue;
-            foreach (var mdFile in Directory.GetFiles(dir, "*.md", SearchOption.AllDirectories))
-            {
-                var entry = ReadAndCheckBlueprintAudit(mdFile, uprojectDir);
-                entry.AssetType = assetType;
-                var entryPackagePath = StripObjectName(entry.Path);
-                if (string.Equals(entryPackagePath, normalizedInput, StringComparison.OrdinalIgnoreCase))
-                    return entry;
-            }
+            var entry = ReadAndCheckBlueprintAudit(mdFile, uprojectDir);
+            entry.AssetType = InferAssetType(entry.Data);
+            var entryPackagePath = StripObjectName(entry.Path);
+            if (string.Equals(entryPackagePath, normalizedInput, StringComparison.OrdinalIgnoreCase))
+                return entry;
         }
 
         return null;
@@ -441,6 +421,20 @@ public class BlueprintAuditService
                lower.Contains("can't find commandlet") ||
                lower.Contains("unable to find commandlet") ||
                (lower.Contains("blueprintaudit") && lower.Contains("not recognized"));
+    }
+
+    /// <summary>
+    /// Infers the asset type from parsed audit header fields.
+    /// RowStruct present = DataTable, ClassPath present = DataAsset,
+    /// ParentClass present = Blueprint, otherwise Structure.
+    /// </summary>
+    private static string InferAssetType(Dictionary<string, object> data)
+    {
+        if (data == null) return "Blueprint";
+        if (data.ContainsKey("RowStruct")) return "DataTable";
+        if (data.ContainsKey("ClassPath")) return "DataAsset";
+        if (data.ContainsKey("ParentClass")) return "Blueprint";
+        return "Structure";
     }
 
     private static BlueprintAuditEntry ReadAndCheckBlueprintAudit(string auditFile, string uprojectDir)

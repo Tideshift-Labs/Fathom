@@ -193,6 +193,16 @@ public class BlueprintClassInfo
         public int DataAssetCount { get; set; }
 
         /// <summary>
+        /// List of Structure (UserDefinedStruct) audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> Structures { get; set; }
+
+        /// <summary>
+        /// Number of Structure audit entries.
+        /// </summary>
+        public int StructureCount { get; set; }
+
+        /// <summary>
         /// Examples of stale entries (when status is "stale", first 10).
         /// </summary>
         public List<BlueprintAuditEntry> StaleExamples { get; set; }
