@@ -37,7 +37,7 @@ Fathom is not here to automate everything. It exists to reduce the friction of u
 
 ## Getting Started
 
-Install the latest Fathom plugin from the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/com.tideshiftlabs.fathom) or manually by downloading it from the [GitHub releases page](https://github.com/Tideshift-Labs/Fathom/releases).
+Install the latest Fathom plugin from the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/30185) or manually by downloading it from the [GitHub releases page](https://github.com/Tideshift-Labs/Fathom/releases).
 
 ### Requirements
 
