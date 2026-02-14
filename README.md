@@ -2,12 +2,13 @@
   <img src="docs/images/fathom-logo.png" alt="Fathom" width="400">
 </p>
 
-[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.4+-313131?style=flat&logo=unrealengine&logoColor=white)](https://www.unrealengine.com/)
-[![Rider](https://img.shields.io/badge/Rider-2025.3+-087CFA?style=flat&logo=rider&logoColor=white)](https://www.jetbrains.com/rider/)
-![Platform](https://img.shields.io/badge/Platform-Win64-0078D6?style=flat&logo=windows&logoColor=white)
-[![MCP](https://img.shields.io/badge/MCP-Tools-8A2BE2?style=flat)](https://modelcontextprotocol.io/)
-[![License](https://img.shields.io/badge/License-MIT-green?style=flat)](LICENSE)
-[![Install on Rider](https://img.shields.io/badge/Rider-Install%20Plugin-black?style=flat&logo=rider&logoColor=white)](https://plugins.jetbrains.com/plugin/30185)
+<p align="center">
+  <a href="https://www.unrealengine.com/"><img src="https://img.shields.io/badge/Unreal%20Engine-5.4+-313131?style=flat&logo=unrealengine&logoColor=white" alt="Unreal Engine"></a>
+  <a href="https://www.jetbrains.com/rider/"><img src="https://img.shields.io/badge/Rider-2025.3+-087CFA?style=flat&logo=rider&logoColor=white" alt="Rider"></a>
+  <img src="https://img.shields.io/badge/Platform-Win64-0078D6?style=flat&logo=windows&logoColor=white" alt="Platform">
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Tools-8A2BE2?style=flat" alt="MCP"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="License"></a>
+</p>
 
 <p align="center">
   <a href="https://plugins.jetbrains.com/plugin/30185">
