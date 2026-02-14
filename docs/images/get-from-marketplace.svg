@@ -1,13 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="245" height="48" viewBox="0 0 245 48">
   <defs>
-    <linearGradient id="jb" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#FF7E17"/>
-      <stop offset="50%" style="stop-color:#E44B98"/>
-      <stop offset="100%" style="stop-color:#7B5CFC"/>
+    <linearGradient id="jb" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F97A12"/>
+      <stop offset=".5" stop-color="#E44B98"/>
+      <stop offset="1" stop-color="#7B5CFC"/>
     </linearGradient>
+    <filter id="shadow" x="-2%" y="-4%" width="104%" height="112%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity="0.25"/>
+    </filter>
   </defs>
-  <rect width="245" height="48" rx="8" fill="#1E1E1E"/>
-  <rect x="16" y="12" width="24" height="24" rx="4" fill="url(#jb)"/>
-  <text x="15.5" y="31.5" font-family="Arial,Helvetica,sans-serif" font-size="9" font-weight="bold" fill="#fff" letter-spacing="0.2">JB</text>
-  <text x="52" y="29" font-family="Arial,Helvetica,sans-serif" font-size="14" fill="#fff">Get from Marketplace</text>
+  <rect width="245" height="48" rx="24" fill="#000" filter="url(#shadow)"/>
+  <rect x="12" y="10" width="28" height="28" rx="5" fill="url(#jb)"/>
+  <text x="11.5" y="29" font-family="'JetBrains Sans','Arial',Helvetica,sans-serif" font-size="10" font-weight="bold" fill="#fff" letter-spacing="0.3">JB</text>
+  <text x="132" y="30" font-family="'JetBrains Sans','Arial',Helvetica,sans-serif" font-size="15" fill="#fff" text-anchor="middle">Get from Marketplace</text>
 </svg>
