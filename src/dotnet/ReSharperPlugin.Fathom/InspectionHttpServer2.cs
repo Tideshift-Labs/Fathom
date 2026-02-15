@@ -264,6 +264,7 @@ namespace ReSharperPlugin.Fathom
                         new AssetSearchHandler(_ueProject, _assetRefProxy, _config),
                         new AssetShowHandler(_ueProject, _assetRefProxy, _config),
                         new UeProjectHandler(_solution, _ueProject, _reflection),
+                        new DebugSymbolHandler(_solution),
                     };
 
                     _config.Port = port;
