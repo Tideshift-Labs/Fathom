@@ -31,3 +31,6 @@ _dotTrace*/
 
 # Fathom
 /.fathom-server.json
+
+# Local runIde project override (see build.gradle.kts)
+/.runide-project

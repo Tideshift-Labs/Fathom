@@ -180,6 +180,16 @@ tasks.runIde {
     // Match Rider's default heap size of 1.5Gb (default for runIde is 512Mb)
     maxHeapSize = "1500m"
     jvmArgs("-Didea.log.level=WARN")
+
+    // If .runide-project exists, pass its contents as an argument so the
+    // sandboxed Rider automatically opens that project on launch.
+    val projectFile = rootDir.resolve(".runide-project")
+    if (projectFile.isFile) {
+        val projectPath = projectFile.readText().trim()
+        if (projectPath.isNotEmpty()) {
+            args(projectPath)
+        }
+    }
 }
 
 tasks.buildSearchableOptions {
