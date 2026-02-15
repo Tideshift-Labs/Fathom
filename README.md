@@ -203,7 +203,7 @@ Claude Desktop does not support remote HTTP servers via its config file. Instead
 Initialize the required build tools:
 
 ```powershell
-powershell -ep Bypass -File .\scripts\setup.ps1
+pwsh -ep Bypass -File .\scripts\setup.ps1
 ```
 
 ### Building and Running
