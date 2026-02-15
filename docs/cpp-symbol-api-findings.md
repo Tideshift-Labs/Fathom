@@ -270,3 +270,114 @@ This avoids manual tree walking and uses the same symbol extraction that Rider's
 | `CppNamespaceSymbol` | `JetBrains.ReSharper.Psi.Cpp` | Root of per-file symbol tree, may be traversable |
 | `ICppSymbol` | `JetBrains.ReSharper.Psi.Cpp` | Base interface for C++ symbols |
 | `CppDeclaredElementOccurrence` | `JetBrains.ReSharper.Feature.Services.Cpp` | Created from ICppSymbol, contains navigation info |
+
+---
+
+## Concrete Next Steps (for continuing this work)
+
+### What exists right now
+
+The file `src/dotnet/ReSharperPlugin.Fathom/Handlers/DebugSymbolHandler.cs` contains temporary debug endpoints wired into `InspectionHttpServer2.cs`. These were used for the experiments above:
+
+| Endpoint | Purpose | Status |
+|---|---|---|
+| `GET /debug/symbol-scope?query=X` | Test `ISymbolScope` | Done, confirmed dead for C++ |
+| `GET /debug/find-refs?query=X` | Test `IFinder.FindReferences` | Done, confirmed dead for C++ |
+| `GET /debug/declarations?query=X` | Test `IDeclaredElement.GetDeclarations` | Done |
+| `GET /debug/symbol-diag?query=X` | Deep diagnostic: module survey, PSI walk, assembly scan | Done, found C++ types |
+| `GET /debug/cpp-cache?query=X` | Probe C++ caches via reflection | Done, found working APIs |
+
+These endpoints should be kept until the real `/symbols` endpoint is built, then removed.
+
+### Step 1: Probe Strategy A (CppGotoSymbolUtil.GetSymbolsInScopeByName)
+
+Add a new debug endpoint `/debug/cpp-goto?query=AActor` that:
+
+1. Resolves `CppGlobalSymbolCache` as a component (already confirmed working).
+2. Finds `INavigationScope` implementations via assembly scan. Look for `SolutionNavigationScope` or similar in `JetBrains.ReSharper.Feature.Services`. Check its constructors -- it likely takes an `ISolution`.
+3. Finds `GotoContext` and checks its constructors. May have a parameterless constructor or a simple factory.
+4. Invokes `CppGotoSymbolUtil.GetSymbolsInScopeByName(cache, scope, "AActor", context)` via reflection.
+5. For each returned `ICppSymbol`: extract short name, file path, line number. The `ICppSymbol` interface likely has properties for location info, or use `CppGotoSymbolUtil.CreateOccurrence()` to convert to a navigable occurrence.
+
+Also probe `CppSymbolNameCache` in the same endpoint -- find the type, try resolving it as a component, dump its API. If it has a name-based lookup method, this could be simpler than `GetSymbolsInScopeByName`.
+
+**Pattern to follow:** The `HandleCppCache` method in `DebugSymbolHandler.cs` shows the reflection pattern: `FindTypeByName()` to locate closed-source types, `TryResolveComponent()` to get instances, `DumpPublicApi()` to see methods, then targeted invocation.
+
+### Step 2: If Strategy A fails, implement Strategy C
+
+Strategy C is the safe fallback because both pieces are already confirmed working:
+
+1. `CppWordIndex.GetFilesContainingWord(query)` returns `ICollection<IPsiSourceFile>` (confirmed: "AActor" returns 10+ engine files).
+2. `CppGotoSymbolUtil.GetSymbolsFromPsiFile(file)` returns `IEnumerable<ICppSymbol>` (not yet tested but is a public static method on a known type).
+3. Filter: `CppGotoSymbolUtil.GetShortName(symbol) == query`.
+
+Build this as a method on a new `SymbolSearchService.cs` (see proposal `proposals/005-symbol-actions.md` for the service/handler pattern). The word index step narrows the file set, then `GetSymbolsFromPsiFile` extracts symbols without manual PSI tree walking.
+
+### Step 3: Build the real SymbolSearchService
+
+Once you know which strategy works, create:
+
+- `Services/SymbolSearchService.cs` -- wraps the working C++ lookup API. Accepts a symbol name, returns structured results (name, kind, file, line). Uses `ReadLockCookie.Execute()` for PSI access.
+- `Handlers/SymbolsHandler.cs` -- HTTP handler for `GET /symbols?query=X`. Follows the same patterns as `ClassesHandler.cs`.
+- `Models/SymbolModels.cs` -- DTOs for the response.
+
+Wire into `InspectionHttpServer2.cs` (add service as field, add handler to `_handlers` array) and `Mcp/FathomMcpServer.cs` (add `search_symbols` tool definition).
+
+See `proposals/005-symbol-actions.md` for the full API design including `/symbols/declaration`, `/symbols/usages`, `/symbols/inheritors`.
+
+### Step 4: Extract ICppSymbol info
+
+For each `ICppSymbol` returned by the lookup, you need to extract:
+- **Name**: `CppGotoSymbolUtil.GetShortName(symbol)`
+- **File path**: Unknown property on `ICppSymbol`. Options to try:
+  - `ICppSymbol` may have a `Location` or `File` property
+  - `CppGotoSymbolUtil.CreateOccurrence(psiServices, symbol, false)` returns a `CppDeclaredElementOccurrence` which likely has navigation coordinates
+  - The `CppFileSymbolTable` that contains the symbol has a `File` property (`CppFileLocation`)
+- **Line number**: Once you have a file and offset, use the standard `DocumentOffset.ToDocumentCoords()` pattern from `InspectionService.cs`
+- **Kind**: Check `ICppSymbol` subtype or properties. Types to look for: `CppClassSymbol`, `CppFunctionSymbol`, `CppNamespaceSymbol`, etc.
+
+### Step 5: Remove debug endpoints
+
+Once `/symbols` is working, remove `DebugSymbolHandler.cs` and its registration in `InspectionHttpServer2.cs`.
+
+---
+
+## Key Reflection Patterns (reference)
+
+All C++ symbol types are closed-source. Use these patterns from the existing codebase:
+
+**Find a type by name:**
+```csharp
+// DebugSymbolHandler.FindTypeByName() or scan AppDomain.CurrentDomain.GetAssemblies()
+var type = FindTypeByName("CppGlobalSymbolCache", "JetBrains.ReSharper.Psi.Cpp");
+```
+
+**Resolve a component:**
+```csharp
+// ReflectionService.ResolveComponent(type) handles multiple strategies
+var cache = reflectionService.ResolveComponent(cppGlobalCacheType);
+```
+
+**Invoke a static method:**
+```csharp
+var method = gotoUtilType.GetMethod("GetSymbolsInScopeByName", BindingFlags.Public | BindingFlags.Static);
+var result = method.Invoke(null, new object[] { cache, scope, "AActor", context });
+```
+
+**Iterate closed-source results:**
+```csharp
+if (result is IEnumerable enumerable)
+{
+    foreach (var symbol in enumerable)
+    {
+        // Use reflection to read properties on ICppSymbol
+        var nameProp = symbol.GetType().GetProperty("ShortName");
+        var name = nameProp?.GetValue(symbol) as string;
+    }
+}
+```
+
+**Existing examples in codebase:**
+- `Services/BlueprintQueryService.cs` -- reflection-based access to `UE4AssetsCache`
+- `Services/ReflectionService.cs` -- component resolution via reflection
+- `Services/CppStructureWalker.cs` -- reading C++ PSI properties via reflection
