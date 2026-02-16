@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-16
+
+## [0.3.0] - 2026-02-16
+
+### Added
+- C++ symbol navigation: `/symbols` search, `/symbols/declaration` go-to-definition, and `/symbols/inheritors` class hierarchy endpoints (HTTP + MCP tools)
+- Symbol search with kind, scope, and limit filters; declarations include source code snippets
+- RiderLink conflict detection: companion plugin install/build actions are blocked while RiderLink installation is in progress
+- `.runide-project` file support for auto-opening a project/sln in the sandboxed Rider during development
+
+### Changed
+- Custom build event implementations to avoid depending on internal platform classes
+- Cleaned up stale reference files, completed proposals, and outdated docs
+
 ## [0.2.0] - 2026-02-14
 
 ### Added
