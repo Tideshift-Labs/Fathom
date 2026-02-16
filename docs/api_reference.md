@@ -53,6 +53,95 @@ Run ReSharper code inspection on file(s). Returns issues with severity, location
 | `format` | No | `json` for JSON output |
 | `debug` | No | `true` for diagnostics |
 
+## Symbol Navigation
+
+Look up C++ symbols by name across the entire solution, without knowing file paths. Uses Rider's internal C++ symbol cache via reflection.
+
+Note: symbol names must use UE's C++ naming conventions with prefixes (`APlayerController`, not `PlayerController`). Prefixes: `A` = Actor, `U` = UObject, `F` = struct, `E` = enum, `I` = interface.
+
+### GET `/symbols`
+
+Search C++ symbols by name. Returns matching types, functions, variables with file locations.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `query` | Yes | Symbol name (e.g. `AActor`, `BeginPlay`) |
+| `kind` | No | Filter: `class`, `function`, `variable`, `enum`, `namespace`, `all` (default: `all`) |
+| `scope` | No | `all` (default, includes engine) or `user` (project files only) |
+| `limit` | No | Max results (default: 50) |
+| `format` | No | `json` for JSON output |
+
+**Response (JSON):**
+```json
+{
+  "query": "AActor",
+  "results": [
+    {"name": "AActor", "kind": "class", "file": "Engine/.../Actor.h", "line": 42, "symbolType": "CppClassSymbol"},
+    {"name": "AActor", "kind": "forward_declaration", "file": "...", "line": 25, "symbolType": "CppFwdClassSymbol"}
+  ],
+  "totalMatches": 50,
+  "truncated": true
+}
+```
+
+Results are sorted with definitions first, forward declarations last.
+
+### GET `/symbols/declaration`
+
+Go to definition: find where a symbol is defined with a source code snippet. The Ctrl+Click equivalent for LLMs.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `symbol` | Yes | Symbol name (e.g. `AActor`, `BeginPlay`) |
+| `containingType` | No | Disambiguate: containing class (e.g. `AMyPlayerController`) |
+| `kind` | No | Filter: `class`, `function`, `variable`, `enum` |
+| `context_lines` | No | Lines of source on each side of declaration (default: 4) |
+| `format` | No | `json` for JSON output |
+
+Forward declarations are excluded. Returns the definition with an inline code snippet so the caller gets the "Ctrl+Click experience" in one call.
+
+**Response (JSON):**
+```json
+{
+  "symbol": "BeginPlay",
+  "declarations": [
+    {
+      "name": "BeginPlay",
+      "kind": "function",
+      "file": "Source/MyGame/MyPlayerController.h",
+      "line": 23,
+      "containingType": "AMyPlayerController",
+      "snippet": "protected:\n\tvirtual void BeginPlay() override;"
+    }
+  ],
+  "forwardDeclarations": 0
+}
+```
+
+### GET `/symbols/inheritors`
+
+Find C++ classes that directly inherit from a given class. Returns direct children only (not transitive). Classes only, not structs.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `symbol` | Yes | Class name (e.g. `AActor`, `APawn`) |
+| `scope` | No | `all` (default, includes engine) or `user` (project files only) |
+| `limit` | No | Max results (default: 100) |
+| `format` | No | `json` for JSON output |
+
+**Response (JSON):**
+```json
+{
+  "symbol": "AActor",
+  "cppInheritors": [
+    {"name": "APawn", "kind": "class", "file": "Engine/.../Pawn.h", "line": 30, "symbolType": "CppClassSymbol"}
+  ],
+  "blueprintInheritors": [],
+  "totalCpp": 96,
+  "truncated": false
+}
+```
+
 ## Unreal Engine
 
 These endpoints provide Blueprint and asset intelligence. Some require a live UE editor with the FathomUELink plugin.
@@ -241,11 +330,11 @@ MCP Streamable HTTP endpoint. Accepts JSON-RPC 2.0 requests and exposes all Fath
 | Method | Description |
 |--------|-------------|
 | `initialize` | Handshake, returns server capabilities |
-| `tools/list` | Returns all 15 available tools with input schemas |
+| `tools/list` | Returns all 18 available tools with input schemas |
 | `tools/call` | Execute a tool by name with arguments |
 | `ping` | Liveness check |
 
-**Available tools:** `list_solution_files`, `list_cpp_classes`, `describe_code`, `inspect_code`, `find_derived_blueprints`, `get_blueprint_info`, `get_blueprint_audit`, `refresh_blueprint_audit`, `get_audit_status`, `search_assets`, `show_asset`, `get_asset_dependencies`, `get_asset_referencers`, `get_ue_project_info`, `get_editor_status`.
+**Available tools:** `list_solution_files`, `list_cpp_classes`, `describe_code`, `inspect_code`, `search_symbols`, `symbol_declaration`, `symbol_inheritors`, `find_derived_blueprints`, `get_blueprint_info`, `get_blueprint_audit`, `refresh_blueprint_audit`, `get_audit_status`, `search_assets`, `show_asset`, `get_asset_dependencies`, `get_asset_referencers`, `get_ue_project_info`, `get_editor_status`.
 
 **Example: initialize**
 ```bash

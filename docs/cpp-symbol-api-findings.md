@@ -331,7 +331,7 @@ This is a name-indexed cache of all C++ symbols. Simpler and potentially faster 
 |---|---|---|---|
 | **`GetSymbolsByShortName`** | `string shortName` | `CppList<ICppSymbol>` | **Direct name lookup!** Confirmed working for "AActor" |
 | `GetSymbolsByShortNameWithReadLockHeld` | `string shortName` | `CppList<ICppSymbol>` | Same but asserts read lock already held |
-| **`GetDerivedClasses`** | `string name` | `CppList<ICppSymbol>` | **Find inheritors by name!** |
+| **`GetDerivedClasses`** | `string name` | `CppList<CppClassSymbol>` | **Find inheritors by name!** Confirmed working (2026-02-16). See below. |
 | `GetSymbolName` | `ICppSymbol symbol` | `string` | Reverse lookup: symbol to name |
 | `FindCachedSymbol` | `ICppSymbol symbol` | `ICppSymbol` | Find canonical version of a symbol |
 | `GetSortedNamesWithSymbols` | none | `List<string>` | All indexed symbol names (for autocomplete) |
@@ -355,6 +355,41 @@ This is a name-indexed cache of all C++ symbols. Simpler and potentially faster 
 
 ---
 
+## Confirmed Working: GetDerivedClasses (2026-02-16)
+
+**Method:** `CppSymbolNameCache.GetDerivedClasses(string name)`
+**Return type:** `CppList<CppClassSymbol>` (NOT `ICppSymbol`, specifically `CppClassSymbol`)
+
+### What it returns
+
+| Aspect | Finding |
+|---|---|
+| **Scope** | **Classes only.** Return type is `CppList<CppClassSymbol>`. No structs, no forward declarations. |
+| **Depth** | **Direct children only.** `GetDerivedClasses("UObject")` returns 1005 results. `GetDerivedClasses("UGameUserSettings")` returns 1 result (`UFEGameUserSettings`), which is NOT in the UObject results. Grandchildren are excluded. |
+| **Volume** | `UObject`: 1005 direct children. `AActor`: fewer (not measured). |
+| **Performance** | `UObject` (1005 results): ~10.6 seconds. Most queries will be faster. |
+| **Symbol type** | All results are `CppClassSymbol`. No `CppFwdClassSymbol`, no struct symbols. |
+
+### What it does NOT return
+
+- **Structs**: If you query `FVector` or another `USTRUCT`, you get 0 results. The API is class-only.
+- **Forward declarations**: Only definition symbols, no `CppFwdClassSymbol`.
+- **Transitive descendants**: Only direct children. For full hierarchy, recurse `GetDerivedClasses` on each result.
+- **Interface implementations**: C++ doesn't have formal interfaces, but UE's `IInterface` pattern classes are not returned.
+
+### No other inheritance APIs
+
+The only inheritance method on `CppSymbolNameCache` is `GetDerivedClasses`. `CppGlobalSymbolCache` has `ScopeChildrenMapPool` (a property getter) but nothing else inheritance-related.
+
+### Implications for /symbols/inheritors
+
+- Default to direct children (matches how Rider's "Find Inheritors" works).
+- Could add `recursive=true` parameter but watch performance (recursive on UObject would be very expensive).
+- Struct inheritance is a gap. Would require PSI tree walking + base specifier reading as a separate path.
+- Combine with `BlueprintQueryService` for UE Blueprint inheritors of C++ classes.
+
+---
+
 ## Confirmed Working: Strategy C fallback (2026-02-15)
 
 `CppWordIndex.GetFilesContainingWord()` + `CppGotoSymbolUtil.GetSymbolsFromPsiFile()` works. Tested: scanned 503 symbols across 5 files, found 3 matches for "AActor". Slower and less complete than Strategy A/D, but useful as a last resort.
@@ -372,7 +407,7 @@ Rider provides these symbol navigation features to developers. The table below m
 | Go to Symbol | Ctrl+Shift+Alt+T | `GET /symbols?query=X` | `CppSymbolNameCache.GetSymbolsByShortName()` | **Confirmed working** |
 | Go to Declaration | Ctrl+B / Ctrl+Click | `GET /symbols/declaration?symbol=X&containingType=Y` | Filter `/symbols` results to `CppClassSymbol` (not `CppFwdClassSymbol`). Extract `ContainingFile.FullPath` + `LocateDocumentRange()`. Include code snippet. | **Confirmed working** (data extraction proven) |
 | Find Usages | Alt+F7 | `GET /symbols/usages?symbol=X` | `IFinder.FindReferences()` is dead for C++ (see Dead Ends). Need C++-specific alternative. `CppWordIndex.GetFilesContainingWord()` gives file-level text matches as rough fallback. | **Needs research** |
-| Go to Derived / Find Inheritors | | `GET /symbols/inheritors?symbol=X` | `CppSymbolNameCache.GetDerivedClasses(name)` | **Likely works** (API exists, untested) |
+| Go to Derived / Find Inheritors | | `GET /symbols/inheritors?symbol=X` | `CppSymbolNameCache.GetDerivedClasses(name)` | **Confirmed working** (direct children, classes only) |
 
 #### Declaration design notes (Ctrl+Click equivalent for LLMs)
 

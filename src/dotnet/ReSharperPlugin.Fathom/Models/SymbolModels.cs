@@ -35,3 +35,18 @@ public class DeclarationResponse
     public List<SymbolDeclaration> Declarations { get; set; }
     public int ForwardDeclarations { get; set; }
 }
+
+public class InheritorsResponse
+{
+    public string Symbol { get; set; }
+    public List<SymbolResult> CppInheritors { get; set; }
+    public List<BlueprintInheritor> BlueprintInheritors { get; set; }
+    public int TotalCpp { get; set; }
+    public bool Truncated { get; set; }
+}
+
+public class BlueprintInheritor
+{
+    public string Name { get; set; }
+    public string AssetPath { get; set; }
+}

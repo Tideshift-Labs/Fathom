@@ -2,11 +2,6 @@ package com.tideshiftlabs.fathom
 
 import com.intellij.build.BuildViewManager
 import com.intellij.build.DefaultBuildDescriptor
-import com.intellij.build.events.impl.FinishBuildEventImpl
-import com.intellij.build.events.impl.FailureResultImpl
-import com.intellij.build.events.impl.OutputBuildEventImpl
-import com.intellij.build.events.impl.StartBuildEventImpl
-import com.intellij.build.events.impl.SuccessResultImpl
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -167,13 +162,13 @@ class FathomHost : ProjectActivity {
                         )
                         buildViewManager.onEvent(
                             currentBuildId,
-                            StartBuildEventImpl(descriptor, "Building Fathom UE plugin...")
+                            FathomStartBuildEvent(descriptor, "Building Fathom UE plugin...")
                         )
                         ToolWindowManager.getInstance(project).getToolWindow("Build")?.show()
                     }
                     buildViewManager.onEvent(
                         currentBuildId,
-                        OutputBuildEventImpl(currentBuildId, line + "\n", true)
+                        FathomOutputBuildEvent(currentBuildId, line + "\n", true)
                     )
                 }
             }
@@ -182,11 +177,11 @@ class FathomHost : ProjectActivity {
                 ApplicationManager.getApplication().invokeLater {
                     val currentBuildId = activeBuildId.getAndSet(null) ?: return@invokeLater
                     val buildViewManager = project.getService(BuildViewManager::class.java)
-                    val result = if (success) SuccessResultImpl() else FailureResultImpl()
+                    val result = if (success) FathomSuccessResult else FathomFailureResult
                     val message = if (success) "Build successful" else "Build failed"
                     buildViewManager.onEvent(
                         currentBuildId,
-                        FinishBuildEventImpl(
+                        FathomFinishBuildEvent(
                             currentBuildId, null, System.currentTimeMillis(), message, result
                         )
                     )

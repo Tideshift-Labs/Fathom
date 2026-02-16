@@ -108,6 +108,13 @@ namespace ReSharperPlugin.Fathom.Mcp
                 new ToolParam("kind", "string", "Filter by kind: class, function, variable, enum"),
                 new ToolParam("context_lines", "integer", "Lines of source to include on each side of declaration (default 4)")),
 
+            new ToolDef("symbol_inheritors",
+                "Find classes that directly inherit from a C++ class. Returns direct children only (not transitive). Classes only, not structs.",
+                "/symbols/inheritors",
+                new ToolParam("symbol", "string", "Class name to find inheritors of (e.g. AActor, APawn)", required: true),
+                new ToolParam("scope", "string", "Scope: all (default, includes engine) or user (project files only)"),
+                new ToolParam("limit", "integer", "Maximum results (default 100)")),
+
             // Diagnostics
             new ToolDef("get_ue_project_info",
                 "UE project detection info and engine path.",

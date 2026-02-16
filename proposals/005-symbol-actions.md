@@ -65,7 +65,7 @@ What Rider gives developers for symbol navigation, mapped to proposed Fathom end
 |---|---|---|---|---|---|
 | 1 | Go to Symbol | Ctrl+Shift+Alt+T | `GET /symbols` | `CppSymbolNameCache.GetSymbolsByShortName()` | **Ready to build** |
 | 2 | Go to Declaration | Ctrl+B / Ctrl+Click | `GET /symbols/declaration` | Filter search results to definitions (`CppClassSymbol`), exclude forward decls (`CppFwdClassSymbol`). Return file + line + code snippet. | **Ready to build** |
-| 3 | Find Inheritors | | `GET /symbols/inheritors` | `CppSymbolNameCache.GetDerivedClasses(name)` + existing `BlueprintQueryService` for BP inheritors | **Likely ready** (API exists, untested) |
+| 3 | Find Inheritors | | `GET /symbols/inheritors` | `CppSymbolNameCache.GetDerivedClasses(name)` + existing `BlueprintQueryService` for BP inheritors | **Confirmed** (direct children, classes only) |
 | 4 | Find Usages | Alt+F7 | `GET /symbols/usages` | `IFinder` is dead for C++. Needs research into C++-specific reference APIs. `CppWordIndex` as rough fallback. | **Needs research** |
 
 ### Tier 2: Extended navigation (medium value)

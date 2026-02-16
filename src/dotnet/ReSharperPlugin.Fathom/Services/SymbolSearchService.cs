@@ -23,6 +23,7 @@ public class SymbolSearchService
     private int _initState;
     private object _symbolNameCache;
     private MethodInfo _getSymbolsByShortName;
+    private MethodInfo _getDerivedClasses;
 
     // Lazily cached per-symbol-type reflection handles
     private PropertyInfo _nameProp;
@@ -132,6 +133,13 @@ public class SymbolSearchService
 
             _symbolNameCache = symbolNameCache;
             _getSymbolsByShortName = method;
+
+            // Also cache GetDerivedClasses (optional, not fatal if missing)
+            _getDerivedClasses = symbolNameCache.GetType().GetMethod("GetDerivedClasses",
+                BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string) }, null);
+            if (_getDerivedClasses == null)
+                Log.Verbose("SymbolSearchService: GetDerivedClasses not found, /symbols/inheritors will be unavailable");
+
             Volatile.Write(ref _initState, 1);
             Log.Verbose("SymbolSearchService: initialized, C++ symbol lookup available");
             return true;
@@ -301,6 +309,79 @@ public class SymbolSearchService
             {
                 var inner = ex.InnerException ?? ex;
                 Log.Warn($"SymbolSearchService.GetDeclaration failed for '{symbol}': {inner.GetType().Name}: {inner.Message}");
+            }
+        });
+
+        return response;
+    }
+
+    public InheritorsResponse FindInheritors(string symbol, string scope, int limit)
+    {
+        var response = new InheritorsResponse
+        {
+            Symbol = symbol,
+            CppInheritors = new List<SymbolResult>(),
+            BlueprintInheritors = new List<BlueprintInheritor>(),
+            TotalCpp = 0,
+            Truncated = false
+        };
+
+        if (!EnsureInitialized() || string.IsNullOrWhiteSpace(symbol) || _getDerivedClasses == null)
+            return response;
+
+        var solutionDir = _solution.SolutionDirectory?.FullPath;
+
+        ReadLockCookie.Execute(() =>
+        {
+            try
+            {
+                var rawResult = _getDerivedClasses.Invoke(_symbolNameCache, new object[] { symbol });
+                var symbols = EnumerateCollection(rawResult);
+                if (symbols == null || symbols.Count == 0)
+                    return;
+
+                var seen = new HashSet<string>();
+
+                foreach (var sym in symbols)
+                {
+                    var info = ExtractSymbolInfo(sym);
+                    if (info.name == null) continue;
+
+                    // Scope filter
+                    if (scope != null && scope.Equals("user", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (solutionDir != null && info.file != null &&
+                            !info.file.StartsWith(solutionDir, StringComparison.OrdinalIgnoreCase))
+                            continue;
+                    }
+
+                    // Deduplicate by (name, file, line)
+                    var dedupeKey = $"{info.name}|{info.file}|{info.line}";
+                    if (!seen.Add(dedupeKey))
+                        continue;
+
+                    response.CppInheritors.Add(new SymbolResult
+                    {
+                        Name = info.name,
+                        Kind = MapKind(info.typeName, sym),
+                        File = info.file,
+                        Line = info.line,
+                        SymbolType = info.typeName
+                    });
+                }
+
+                response.TotalCpp = response.CppInheritors.Count;
+
+                if (response.CppInheritors.Count > limit)
+                {
+                    response.Truncated = true;
+                    response.CppInheritors = response.CppInheritors.Take(limit).ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                var inner = ex.InnerException ?? ex;
+                Log.Warn($"SymbolSearchService.FindInheritors failed for '{symbol}': {inner.GetType().Name}: {inner.Message}");
             }
         });
 

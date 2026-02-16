@@ -286,7 +286,6 @@ namespace ReSharperPlugin.Fathom
                         new AssetShowHandler(_ueProject, _assetRefProxy, _config),
                         new UeProjectHandler(_solution, _ueProject, _reflection),
                         new SymbolsHandler(_symbolSearch, _config),
-                        new DebugSymbolHandler(_solution),
                         new DebugBuildLifecycleHandler(_solution, _reflection),
                     };
 

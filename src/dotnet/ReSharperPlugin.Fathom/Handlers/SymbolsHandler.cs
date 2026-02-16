@@ -19,7 +19,7 @@ public class SymbolsHandler : IRequestHandler
     }
 
     public bool CanHandle(string path) =>
-        path == "/symbols" || path == "/symbols/declaration";
+        path == "/symbols" || path == "/symbols/declaration" || path == "/symbols/inheritors";
 
     public void Handle(HttpListenerContext ctx)
     {
@@ -30,6 +30,8 @@ public class SymbolsHandler : IRequestHandler
             HandleSearch(ctx, format);
         else if (path == "/symbols/declaration")
             HandleDeclaration(ctx, format);
+        else if (path == "/symbols/inheritors")
+            HandleInheritors(ctx, format);
     }
 
     private void HandleSearch(HttpListenerContext ctx, string format)
@@ -88,6 +90,35 @@ public class SymbolsHandler : IRequestHandler
         else
         {
             var markdown = SymbolsMarkdownFormatter.FormatDeclaration(response);
+            HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8", markdown);
+        }
+    }
+
+    private void HandleInheritors(HttpListenerContext ctx, string format)
+    {
+        var symbol = ctx.Request.QueryString["symbol"];
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            HttpHelpers.Respond(ctx, 400, "text/plain", "Missing required parameter: symbol");
+            return;
+        }
+
+        var scope = ctx.Request.QueryString["scope"];
+        var limitStr = ctx.Request.QueryString["limit"];
+        var limit = 100;
+        if (int.TryParse(limitStr, out var parsedLimit) && parsedLimit > 0)
+            limit = parsedLimit;
+
+        var response = _symbolSearch.FindInheritors(symbol, scope, limit);
+
+        if (format == "json")
+        {
+            HttpHelpers.Respond(ctx, 200, "application/json; charset=utf-8",
+                Json.Serialize(response));
+        }
+        else
+        {
+            var markdown = SymbolsMarkdownFormatter.FormatInheritors(response);
             HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8", markdown);
         }
     }

@@ -88,6 +88,60 @@ public static class SymbolsMarkdownFormatter
         return sb.ToString();
     }
 
+    public static string FormatInheritors(InheritorsResponse response)
+    {
+        var sb = new StringBuilder();
+
+        sb.Append("# Inheritors of `").Append(response.Symbol).AppendLine("`");
+        sb.AppendLine();
+
+        if (response.CppInheritors.Count == 0 && response.BlueprintInheritors.Count == 0)
+        {
+            sb.AppendLine("No inheritors found.");
+            return sb.ToString();
+        }
+
+        // C++ inheritors
+        if (response.CppInheritors.Count > 0)
+        {
+            sb.Append("## C++ inheritors (").Append(response.TotalCpp).AppendLine(")");
+            if (response.Truncated)
+                sb.Append("Showing first ").Append(response.CppInheritors.Count).AppendLine();
+            sb.AppendLine();
+
+            sb.AppendLine("| Name | Kind | File | Line |");
+            sb.AppendLine("|------|------|------|------|");
+
+            foreach (var r in response.CppInheritors)
+            {
+                var displayFile = TruncatePath(r.File, 60);
+                sb.Append("| `").Append(r.Name).Append("` | ").Append(r.Kind)
+                  .Append(" | ").Append(displayFile)
+                  .Append(" | ").Append(r.Line > 0 ? r.Line.ToString() : "?")
+                  .AppendLine(" |");
+            }
+            sb.AppendLine();
+        }
+
+        // Blueprint inheritors
+        if (response.BlueprintInheritors.Count > 0)
+        {
+            sb.Append("## Blueprint inheritors (").Append(response.BlueprintInheritors.Count).AppendLine(")");
+            sb.AppendLine();
+
+            sb.AppendLine("| Name | Asset Path |");
+            sb.AppendLine("|------|------------|");
+
+            foreach (var bp in response.BlueprintInheritors)
+            {
+                sb.Append("| `").Append(bp.Name).Append("` | ").Append(bp.AssetPath).AppendLine(" |");
+            }
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
     private static string TruncatePath(string path, int maxLength)
     {
         if (string.IsNullOrEmpty(path) || path.Length <= maxLength) return path ?? "";
