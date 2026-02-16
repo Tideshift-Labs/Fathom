@@ -49,6 +49,7 @@ namespace ReSharperPlugin.Fathom
         private readonly CodeStructureService _codeStructure;
         private readonly ClassIndexService _classIndex;
         private readonly CompanionPluginService _companionPlugin;
+        private readonly SymbolSearchService _symbolSearch;
         private readonly ServerConfiguration _config;
 
         public InspectionHttpServer2(Lifetime lifetime, ISolution solution)
@@ -69,6 +70,7 @@ namespace ReSharperPlugin.Fathom
             _codeStructure = new CodeStructureService(solution);
             _classIndex = new ClassIndexService(solution, _fileIndex, _codeStructure);
             _companionPlugin = new CompanionPluginService(solution, _config, _ueProject);
+            _symbolSearch = new SymbolSearchService(solution);
 
             // Check for env var override (takes absolute priority)
             var envPort = Environment.GetEnvironmentVariable("RIDER_INSPECTOR_PORT");
@@ -264,7 +266,9 @@ namespace ReSharperPlugin.Fathom
                         new AssetSearchHandler(_ueProject, _assetRefProxy, _config),
                         new AssetShowHandler(_ueProject, _assetRefProxy, _config),
                         new UeProjectHandler(_solution, _ueProject, _reflection),
+                        new SymbolsHandler(_symbolSearch, _config),
                         new DebugSymbolHandler(_solution),
+                        new DebugBuildLifecycleHandler(_solution, _reflection),
                     };
 
                     _config.Port = port;

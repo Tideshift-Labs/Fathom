@@ -91,6 +91,23 @@ namespace ReSharperPlugin.Fathom.Mcp
                 "/asset-refs/referencers",
                 new ToolParam("asset", "string", "Asset package path (e.g. /Game/UI/WBP_MainMenu)", required: true)),
 
+            // Symbol navigation
+            new ToolDef("search_symbols",
+                "Search C++ symbols by name across the solution. Returns matching types, functions, variables with file locations.",
+                "/symbols",
+                new ToolParam("query", "string", "Symbol name to search for (e.g. AActor, BeginPlay)", required: true),
+                new ToolParam("kind", "string", "Filter by kind: class, function, variable, enum, namespace, all"),
+                new ToolParam("scope", "string", "Scope: all (default, includes engine) or user (project files only)"),
+                new ToolParam("limit", "integer", "Maximum results (default 50)")),
+
+            new ToolDef("symbol_declaration",
+                "Go to definition: find where a C++ symbol is defined with source code snippet. Like Ctrl+Click in Rider.",
+                "/symbols/declaration",
+                new ToolParam("symbol", "string", "Symbol name (e.g. AActor, BeginPlay)", required: true),
+                new ToolParam("containingType", "string", "Disambiguate: containing class name (e.g. AMyPlayerController)"),
+                new ToolParam("kind", "string", "Filter by kind: class, function, variable, enum"),
+                new ToolParam("context_lines", "integer", "Lines of source to include on each side of declaration (default 4)")),
+
             // Diagnostics
             new ToolDef("get_ue_project_info",
                 "UE project detection info and engine path.",
