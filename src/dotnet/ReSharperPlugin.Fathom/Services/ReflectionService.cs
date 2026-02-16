@@ -2,13 +2,20 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using JetBrains.ProjectModel;
+using JetBrains.ReSharper.Feature.Services.Protocol;
 
 namespace ReSharperPlugin.Fathom.Services;
 
 public class ReflectionService
 {
     private readonly ISolution _solution;
+
+    private int _riderLinkInitState;             // 0 = not tried, 1 = resolved, -1 = failed
+    private object _rdRiderModel;                // RdRiderModel instance
+    private PropertyInfo _riderLinkInstallProp;  // RiderLinkInstallationInProgress
+    private PropertyInfo _riderLinkValueProp;    // .Value on IViewableProperty<bool>
 
     public ReflectionService(ISolution solution)
     {
@@ -228,5 +235,128 @@ public class ReflectionService
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Returns true when Rider's RiderLink plugin installation is currently in progress.
+    /// Must be called on the RD scheduler thread (reads an IViewableProperty).
+    /// Returns false on any reflection failure (safe fallback: allows the build).
+    /// </summary>
+    public bool IsRiderLinkInstallationInProgress()
+    {
+        try
+        {
+            if (Volatile.Read(ref _riderLinkInitState) == 0)
+                EnsureRiderLinkResolved();
+
+            if (Volatile.Read(ref _riderLinkInitState) != 1)
+                return false;
+
+            var viewable = _riderLinkInstallProp.GetValue(_rdRiderModel);
+            if (viewable == null) return false;
+
+            var value = _riderLinkValueProp.GetValue(viewable);
+            return value is true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void EnsureRiderLinkResolved()
+    {
+        if (Volatile.Read(ref _riderLinkInitState) != 0)
+            return;
+
+        if (Interlocked.CompareExchange(ref _riderLinkInitState, -1, 0) != 0)
+            return;
+
+        try
+        {
+            // Find RdRiderModel type in UnrealLink assemblies
+            Type rdRiderModelType = null;
+            Assembly ulAssembly = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var asmName = asm.GetName().Name ?? "";
+                if (!asmName.Contains("UnrealLink")) continue;
+                try
+                {
+                    foreach (var t in asm.GetExportedTypes())
+                    {
+                        if (t.FullName == "RiderPlugin.UnrealLink.Model.FrontendBackend.RdRiderModel")
+                        {
+                            rdRiderModelType = t;
+                            ulAssembly = asm;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+                if (rdRiderModelType != null) break;
+            }
+
+            if (rdRiderModelType == null) return; // UnrealLink not loaded; no conflict possible
+
+            // Find SolutionRdRiderModelEx extension class
+            Type extType = null;
+            try
+            {
+                foreach (var t in ulAssembly.GetExportedTypes())
+                {
+                    if (t.Name == "SolutionRdRiderModelEx")
+                    {
+                        extType = t;
+                        break;
+                    }
+                }
+            }
+            catch { }
+
+            if (extType == null) return;
+
+            // Find the static extension method that returns RdRiderModel and takes one parameter
+            MethodInfo getModelMethod = null;
+            foreach (var m in extType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (m.ReturnType != rdRiderModelType) continue;
+                var ps = m.GetParameters();
+                if (ps.Length == 1)
+                {
+                    getModelMethod = m;
+                    break;
+                }
+            }
+
+            if (getModelMethod == null) return;
+
+            // Get the protocol solution and invoke the extension method to obtain the model
+            var protocolSolution = _solution.GetProtocolSolution();
+            var model = getModelMethod.Invoke(null, new object[] { protocolSolution });
+            if (model == null) return;
+
+            // Cache the RiderLinkInstallationInProgress property
+            var installProp = rdRiderModelType.GetProperty("RiderLinkInstallationInProgress",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (installProp == null) return;
+
+            // Resolve the .Value property on the IViewableProperty<bool> instance
+            var viewableObj = installProp.GetValue(model);
+            if (viewableObj == null) return;
+
+            var valueProp = viewableObj.GetType().GetProperty("Value",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (valueProp == null) return;
+
+            _rdRiderModel = model;
+            _riderLinkInstallProp = installProp;
+            _riderLinkValueProp = valueProp;
+            Volatile.Write(ref _riderLinkInitState, 1);
+        }
+        catch
+        {
+            // Leave as -1 (failed); no RiderLink conflict detection available
+        }
     }
 }

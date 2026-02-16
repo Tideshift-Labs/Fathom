@@ -113,6 +113,15 @@ namespace ReSharperPlugin.Fathom
                             // Handle companion plugin install requests from frontend
                             model.InstallCompanionPlugin.Advise(lifetime, location =>
                             {
+                                if (_reflection.IsRiderLinkInstallationInProgress())
+                                {
+                                    Log.Info("CompanionPlugin: install request blocked, RiderLink installation is in progress");
+                                    model.CompanionPluginStatus(new CompanionPluginInfo(
+                                        CompanionPluginStatus.NotInstalled, "", "", "None",
+                                        "Cannot proceed right now. Rider is installing the RiderLink plugin, which also uses Unreal Build Tool. Please wait for the RiderLink installation to finish, then try again."));
+                                    return;
+                                }
+
                                 if (Interlocked.CompareExchange(ref _companionActionRunning, 1, 0) != 0)
                                 {
                                     Log.Info("CompanionPlugin: install request ignored, another action is already running");
@@ -167,6 +176,16 @@ namespace ReSharperPlugin.Fathom
                             // Handle companion plugin build requests from frontend
                             model.BuildCompanionPlugin.Advise(lifetime, unit =>
                             {
+                                if (_reflection.IsRiderLinkInstallationInProgress())
+                                {
+                                    Log.Info("CompanionPlugin: build request blocked, RiderLink installation is in progress");
+                                    model.CompanionBuildFinished(false);
+                                    model.CompanionPluginStatus(new CompanionPluginInfo(
+                                        CompanionPluginStatus.Installed, "", "", "None",
+                                        "Cannot proceed right now. Rider is installing the RiderLink plugin, which also uses Unreal Build Tool. Please wait for the RiderLink installation to finish, then try again."));
+                                    return;
+                                }
+
                                 if (Interlocked.CompareExchange(ref _companionActionRunning, 1, 0) != 0)
                                 {
                                     Log.Info("CompanionPlugin: build request ignored, another action is already running");
