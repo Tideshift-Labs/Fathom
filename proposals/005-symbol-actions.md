@@ -1,7 +1,8 @@
 # Proposal: Solution-Wide Symbol Actions
 
-**Status:** Draft
-**Date:** 2026-02-12
+**Status:** In Progress (API research complete, implementation next)
+**Created:** 2026-02-12
+**Updated:** 2026-02-15
 
 ## Problem
 
@@ -19,206 +20,205 @@ LLM agents need the same capability. When an agent encounters `FMyPlayerControll
 
 ## Goal
 
-Expose Rider's solution-wide symbol lookup, find usages, go-to-declaration, and find-inheritors as HTTP endpoints and MCP tools. No file path required. Just a symbol name.
+Expose Rider's solution-wide symbol navigation as HTTP endpoints and MCP tools. No file path required. Just a symbol name.
 
-## ReSharper SDK APIs
+## C++ API Status (from experimentation)
 
-These are the public SDK APIs that power Rider's symbol navigation. None are currently used by Fathom.
+The standard ReSharper SDK APIs (`ISymbolScope`, `IFinder`) are **dead ends for C++**. They only index CLR/.NET types. See `docs/cpp-symbol-api-findings.md` for full details.
 
-### ISymbolScope (name-based lookup)
+The working C++ symbol infrastructure is entirely separate, lives in closed-source assemblies, and requires reflection:
 
-Namespace: `JetBrains.ReSharper.Psi`
+| Component | Access | What it does |
+|---|---|---|
+| `CppGlobalSymbolCache` | `solution.GetComponent<>()` via reflection | Central C++ cache. Gateway to everything. |
+| `CppSymbolNameCache` | `.SymbolNameCache` property on above | **Name-indexed symbol lookup.** The key API. |
+| `CppGotoSymbolUtil` | Static class, no instantiation | Rider's Go to Symbol logic. `GetSymbolsInScopeByName()` works. |
+| `CppWordIndex` | `solution.GetComponent<>()` via reflection | Word-to-file mapping. Fallback for text search. |
 
-```csharp
-var psiServices = solution.GetPsiServices();
-var symbolScope = psiServices.Symbols.GetSymbolScope(psiModule, caseSensitive: true, null);
+### Confirmed working APIs
 
-// Find all elements named "FMyActor" (types, methods, fields, properties)
-IList<IDeclaredElement> elements = symbolScope.GetElementsByShortName("FMyActor");
+| API | Confirmed | Notes |
+|---|---|---|
+| `CppSymbolNameCache.GetSymbolsByShortName("AActor")` | Yes | Returns ~50 ICppSymbol instances. Direct name lookup. |
+| `CppSymbolNameCache.GetDerivedClasses("AActor")` | Untested | API exists on the resolved cache. For inheritors. |
+| `CppGotoSymbolUtil.GetSymbolsInScopeByName(cache, scope, name, ctx)` | Yes | Same results, more complex setup. |
+| `CppGotoSymbolUtil.GetSymbolsFromPsiFile(file)` | Yes | All symbols in a single file. |
+| `ICppSymbol.Name.ToString()` | Yes | Returns short name ("AActor") |
+| `ICppSymbol.ContainingFile.FullPath` | Yes | Returns absolute file path |
+| `ICppSymbol.LocateDocumentRange(solution)` | Yes | Returns DocumentRange with line number |
 
-// Get every short name in scope (powers autocomplete/fuzzy search)
-ICollection<string> allNames = symbolScope.GetAllShortNames();
+### Dead ends (do not revisit)
 
-// Look up a type by fully-qualified CLR name (C# only)
-ITypeElement type = symbolScope.GetTypeElementByCLRName("MyNamespace.MyClass");
-```
+| API | Why |
+|---|---|
+| `ISymbolScope.GetElementsByShortName()` | Returns 0 C++ results across all 4,816 modules |
+| `IFinder.FindReferences()` | Returns 0 references for C++ elements |
+| `IFinder.FindImplementingMembers()` | CLR-only |
 
-`ISymbolScope` is scoped to a single `IPsiModule`. To search the entire solution, iterate all modules via `solution.PsiModules()`. For C#, `GetPrimaryPsiModule(project)` gives you the module for a project. For C++, modules correspond to translation units or project-level groupings.
+## Rider Feature Mapping
 
-### IFinder (find usages / find references)
+What Rider gives developers for symbol navigation, mapped to proposed Fathom endpoints and the underlying APIs.
 
-Namespace: `JetBrains.ReSharper.Psi.Search`
+### Tier 1: Core navigation (high value, build first)
 
-```csharp
-var finder = psiServices.Finder;
-var searchDomainFactory = solution.GetComponent<SearchDomainFactory>();
-var searchDomain = searchDomainFactory.CreateSearchDomain(solution, false);
+| # | Rider Feature | Shortcut | Endpoint | API | Status |
+|---|---|---|---|---|---|
+| 1 | Go to Symbol | Ctrl+Shift+Alt+T | `GET /symbols` | `CppSymbolNameCache.GetSymbolsByShortName()` | **Ready to build** |
+| 2 | Go to Declaration | Ctrl+B / Ctrl+Click | `GET /symbols/declaration` | Filter search results to definitions (`CppClassSymbol`), exclude forward decls (`CppFwdClassSymbol`). Return file + line + code snippet. | **Ready to build** |
+| 3 | Find Inheritors | | `GET /symbols/inheritors` | `CppSymbolNameCache.GetDerivedClasses(name)` + existing `BlueprintQueryService` for BP inheritors | **Likely ready** (API exists, untested) |
+| 4 | Find Usages | Alt+F7 | `GET /symbols/usages` | `IFinder` is dead for C++. Needs research into C++-specific reference APIs. `CppWordIndex` as rough fallback. | **Needs research** |
 
-finder.FindReferences(targetElement, searchDomain,
-    new FindResultConsumer(result =>
-    {
-        if (result is FindResultReference refResult)
-        {
-            var node = refResult.Reference.GetTreeNode();
-            var file = node.GetSourceFile();
-            var range = refResult.Reference.GetDocumentRange();
-            // Extract file path + line number
-        }
-        return FindExecution.Continue;
-    }),
-    NullProgressIndicator.Create());
-```
+### Tier 2: Extended navigation (medium value)
 
-### IDeclaredElement.GetDeclarations() (go to definition)
+| # | Rider Feature | Shortcut | Endpoint | API | Status |
+|---|---|---|---|---|---|
+| 5 | Type Hierarchy | Ctrl+H | `GET /symbols/hierarchy` | Derived via `GetDerivedClasses()`. Bases via `CppClassSymbol` properties or `CppStructureWalker` base specifier reading. | **Partially feasible** |
+| 6 | Symbol Members | Ctrl+F12 | `GET /symbols/members` | Find class via name lookup, then `GetSymbolsFromPsiFile()` on its file, filter to children. | **Likely works** |
+| 7 | H/CPP Counterpart | Alt+F10 | `GET /symbols/counterpart` | Find all symbols for a name; they naturally span .h and .cpp files. | **Likely works** |
 
-```csharp
-IList<IDeclaration> declarations = element.GetDeclarations();
-foreach (var decl in declarations)
-{
-    IPsiSourceFile sourceFile = decl.GetSourceFile();
-    TreeTextRange nameRange = decl.GetNameRange();
-    // sourceFile.GetLocation() gives the absolute file path
-    // nameRange gives the exact character offset of the name
-}
-```
+### Tier 3: Advanced features (lower priority)
 
-### IFinder.FindImplementingMembers (find inheritors)
+| # | Rider Feature | Shortcut | Endpoint | API | Status |
+|---|---|---|---|---|---|
+| 8 | Quick Documentation | Ctrl+Q | `GET /symbols/doc` | Read comment block above declaration from source file. | **Easy once #2 works** |
+| 9 | Signature / Quick Info | | `GET /symbols/signature` | Read declaration line(s) from source at symbol location. | **Easy once #2 works** |
+| 10 | Find Implementations | Ctrl+Alt+B | `GET /symbols/implementations` | For virtual methods: find overrides across derived classes. Composable from #3 + #6. | **Composable** |
+| 11 | Call Hierarchy | Ctrl+Alt+H | `GET /symbols/callers` | Needs cross-reference index. C++ call graph likely in closed-source analysis. | **Unknown, probably hard** |
 
-```csharp
-finder.FindImplementingMembers(member, searchDomain,
-    new FindResultConsumer(result =>
-    {
-        if (result is FindResultOverridableMember overrideResult)
-        {
-            var impl = overrideResult.OverridableMember;
-            // impl.GetDeclarations() gives source locations
-        }
-        return FindExecution.Continue;
-    }),
-    searchInheritors: true,
-    NullProgressIndicator.Create());
-```
+### Already covered by existing Fathom endpoints
 
-### Threading requirement
-
-All PSI access must happen under a read lock:
-
-```csharp
-ReadLockCookie.Execute(() =>
-{
-    // Symbol scope, finder, declarations access here
-});
-```
-
-This is the same pattern already used by `CodeStructureService`, `FileIndexService`, and `InspectionService`.
-
-## C++ considerations
-
-The APIs above (`ISymbolScope`, `IFinder`) are well-documented for C#. For C++, the situation is murkier because C++ PSI lives in the closed-source `JetBrains.ReSharper.Feature.Services.Cpp.dll`.
-
-However, C++ PSI nodes do produce `IDeclaredElement` instances. Fathom's `CppStructureWalker` already extracts them via reflection on the `DeclaredElement` property. The question is whether `ISymbolScope.GetElementsByShortName()` returns C++ elements, and whether `IFinder.FindReferences()` works for C++ `IDeclaredElement` targets.
-
-**Recommended approach:** Try the public APIs first. If they return empty results for C++ (similar to how `RunLocalInspections` silently failed for C++ before the `InspectCodeDaemon` discovery), fall back to reflection-based access on C++-specific caches. The `UEAssetUsagesSearcher` component (already documented in `LEARNINGS.md`) provides `GetFindUsagesResults()` and `GetGoToInheritorsResults()` specifically for C++ symbols in Blueprint contexts.
-
-**Phased rollout makes this manageable:** Phase 1 tests with C# projects (guaranteed to work), Phase 2 extends to C++ with fallbacks.
+| Rider Feature | Fathom Equivalent | Notes |
+|---|---|---|
+| File Structure (Alt+7) | `GET /describe_code?file=X` | Shows classes, methods, fields, inheritance per file |
+| Go to Class (C++) | `GET /classes?search=X` | Searches C++ classes with base class info |
+| Blueprint Inheritors | `GET /blueprints?class=X` | Blueprint classes derived from C++ |
+| Find in Files | `GET /files` | File listing; LLM does its own text search |
 
 ## API Design
 
-### New endpoints
+### Endpoints
 
 | Endpoint | Purpose | Parameters |
 |---|---|---|
-| `GET /symbols` | Search symbols by name | `query` (required), `kind`, `limit` |
-| `GET /symbols/declaration` | Go to definition | `symbol` (required), `kind` |
-| `GET /symbols/usages` | Find all references | `symbol` (required), `kind`, `limit` |
-| `GET /symbols/inheritors` | Find derived types / overrides | `symbol` (required) |
+| `GET /symbols` | Search symbols by name | `query` (required), `kind`, `scope`, `limit` |
+| `GET /symbols/declaration` | Go to definition (Ctrl+Click equivalent) | `symbol` (required), `containingType`, `kind`, `context_lines` |
+| `GET /symbols/inheritors` | Find derived types | `symbol` (required) |
+| `GET /symbols/usages` | Find all references | `symbol` (required), `containingType`, `kind`, `scope`, `limit` |
+| `GET /symbols/members` | List members of a type | `symbol` (required), `kind` |
+| `GET /symbols/hierarchy` | Full inheritance chain (up and down) | `symbol` (required) |
 
 ### Parameters
 
-- **`query`** / **`symbol`**: The symbol name to search for. Short name (unqualified), e.g. `FMyActor`, `OnPossess`, `bIsActive`.
-- **`kind`**: Optional filter. One of: `class`, `struct`, `method`, `field`, `property`, `enum`, `all` (default: `all`).
-- **`limit`**: Maximum results to return (default: 50, max: 200).
+- **`query`** / **`symbol`**: The symbol name. Short name (unqualified), e.g. `AActor`, `BeginPlay`, `bIsActive`.
+- **`containingType`**: Optional. Disambiguates overloaded/common names. e.g. `symbol=BeginPlay&containingType=AMyPlayerController` returns only that class's override, not all 50 `BeginPlay` methods in the solution.
+- **`kind`**: Optional filter. One of: `class`, `struct`, `function`, `field`, `enum`, `namespace`, `all` (default: `all`).
+- **`scope`**: `user` (default, files under SolutionDirectory) or `all` (includes engine/third-party).
+- **`limit`**: Maximum results (default: 50, max: 200).
+- **`context_lines`**: For `/symbols/declaration`, how many lines of source to include around the declaration (default: 30). Set to 0 for location only.
 
-### Response model
+### Key design decision: `/symbols/declaration` includes code snippets
+
+When a developer Ctrl+Clicks a symbol in Rider, they see the definition immediately. The file opens and scrolls to the right line. For an LLM equivalent, returning just a file path and line number forces a second round trip (`/describe_code` or file read) to see what's actually there.
+
+`/symbols/declaration` should return an inline code snippet (the declaration + surrounding context), so the LLM gets the "Ctrl+Click experience" in one call.
+
+### Future: position-based resolve
+
+`containingType` covers ~95% of disambiguation cases but has gaps: overloaded methods with the same name on the same class, free functions, and cases where the LLM doesn't know the containing type. The true Ctrl+Click equivalent is position-based:
+
+```
+GET /symbols/resolve?file=Source/MyActor.cpp&line=42&column=15
+```
+
+This would walk the PSI tree at the given source location, resolve the reference via the C++ semantic model, and return where the target is defined. No name or disambiguation needed. Deferred for now since name-based covers the common cases and the APIs are confirmed. Add this once `/symbols/declaration` is proven in practice and we see how often LLMs hit the disambiguation gaps.
+
+### Key design decision: `containingType` for disambiguation
+
+A name-based search for `BeginPlay` could return dozens of methods across dozens of classes. Rider avoids this because Ctrl+Click resolves the specific reference under the cursor through the semantic model. LLMs don't have cursor context, but they usually know the containing type from the code they're reading.
+
+The `containingType` parameter lets the LLM say "I want `AMyActor::BeginPlay`, not all of them." The service filters results where the symbol's parent matches.
+
+### Response models
 
 ```json
-// GET /symbols?query=FMyActor
+// GET /symbols?query=AActor
 {
-  "query": "FMyActor",
+  "query": "AActor",
   "results": [
     {
-      "name": "FMyActor",
-      "qualifiedName": "MyGame::FMyActor",
+      "name": "AActor",
       "kind": "class",
-      "file": "Source/MyGame/MyActor.h",
-      "line": 15,
-      "access": "public",
-      "baseType": "AActor",
-      "module": "MyGame"
-    }
-  ],
-  "totalMatches": 1,
-  "truncated": false
-}
-```
-
-```json
-// GET /symbols/usages?symbol=FMyActor
-{
-  "symbol": "FMyActor",
-  "kind": "class",
-  "definedAt": {
-    "file": "Source/MyGame/MyActor.h",
-    "line": 15
-  },
-  "usages": [
-    {
-      "file": "Source/MyGame/GameMode.cpp",
+      "file": "Engine/Source/Runtime/Engine/Classes/GameFramework/Actor.h",
       "line": 42,
-      "context": "FMyActor* Actor = GetWorld()->SpawnActor<FMyActor>();"
+      "symbolType": "CppClassSymbol"
     },
     {
-      "file": "Source/MyGame/PlayerController.cpp",
-      "line": 87,
-      "context": "if (auto* MA = Cast<FMyActor>(HitActor))"
+      "name": "AActor",
+      "kind": "forward_declaration",
+      "file": "Engine/Source/Editor/Blutility/Public/EditorUtilityLibrary.h",
+      "line": 25,
+      "symbolType": "CppFwdClassSymbol"
     }
   ],
-  "totalUsages": 2
+  "totalMatches": 50,
+  "truncated": true
 }
 ```
 
 ```json
-// GET /symbols/declaration?symbol=OnPossess
+// GET /symbols/declaration?symbol=AActor
+// The "Ctrl+Click" equivalent: definition + code snippet in one response
 {
-  "symbol": "OnPossess",
+  "symbol": "AActor",
+  "kind": "class",
+  "file": "D:/UE/Engines/UE_5.7/Engine/Source/Runtime/Engine/Classes/GameFramework/Actor.h",
+  "line": 42,
+  "snippet": "UCLASS(BlueprintType, Blueprintable, meta=(ShortTooltip=\"An Actor is ...\"))\nclass ENGINE_API AActor : public UObject\n{\n\tGENERATED_BODY()\n\npublic:\n\t/** Constructor */\n\tAActor();\n\t...",
+  "forwardDeclarations": 48,
+  "note": "48 forward declarations across engine headers (not shown)"
+}
+```
+
+```json
+// GET /symbols/declaration?symbol=BeginPlay&containingType=AMyPlayerController
+// Disambiguated: only the specific override
+{
+  "symbol": "BeginPlay",
+  "containingType": "AMyPlayerController",
   "declarations": [
     {
       "file": "Source/MyGame/MyPlayerController.h",
       "line": 23,
       "kind": "method",
-      "signature": "virtual void OnPossess(APawn* InPawn) override",
-      "containingType": "AMyPlayerController"
+      "snippet": "protected:\n\tvirtual void BeginPlay() override;",
+      "context": "declaration"
     },
     {
       "file": "Source/MyGame/MyPlayerController.cpp",
       "line": 45,
       "kind": "method",
-      "signature": "void AMyPlayerController::OnPossess(APawn* InPawn)",
-      "containingType": "AMyPlayerController"
+      "snippet": "void AMyPlayerController::BeginPlay()\n{\n\tSuper::BeginPlay();\n\t// ...\n}",
+      "context": "definition"
     }
   ]
 }
 ```
 
 ```json
-// GET /symbols/inheritors?symbol=AMyActor
+// GET /symbols/inheritors?symbol=AActor
 {
-  "symbol": "AMyActor",
+  "symbol": "AActor",
   "kind": "class",
-  "inheritors": [
+  "cppInheritors": [
     {
-      "name": "AMyActorChild",
-      "file": "Source/MyGame/MyActorChild.h",
+      "name": "APawn",
+      "file": "Engine/Source/Runtime/Engine/Classes/GameFramework/Pawn.h",
+      "line": 30,
+      "kind": "class"
+    },
+    {
+      "name": "AMyActor",
+      "file": "Source/MyGame/MyActor.h",
       "line": 10,
       "kind": "class"
     }
@@ -232,149 +232,151 @@ However, C++ PSI nodes do produce `IDeclaredElement` instances. Fathom's `CppStr
 }
 ```
 
+```json
+// GET /symbols/members?symbol=AMyActor
+{
+  "symbol": "AMyActor",
+  "kind": "class",
+  "file": "Source/MyGame/MyActor.h",
+  "members": [
+    { "name": "BeginPlay", "kind": "method", "line": 23, "signature": "virtual void BeginPlay() override" },
+    { "name": "Tick", "kind": "method", "line": 25, "signature": "virtual void Tick(float DeltaTime) override" },
+    { "name": "Health", "kind": "field", "line": 30, "signature": "float Health" },
+    { "name": "bIsAlive", "kind": "field", "line": 33, "signature": "bool bIsAlive" }
+  ]
+}
+```
+
 ### MCP tools
 
-Four new tools in `FathomMcpServer`:
-
 ```
-search_symbols      -> GET /symbols?query=...&kind=...&limit=...
-symbol_declaration  -> GET /symbols/declaration?symbol=...&kind=...
-symbol_usages       -> GET /symbols/usages?symbol=...&kind=...&limit=...
-symbol_inheritors   -> GET /symbols/inheritors?symbol=...
+search_symbols          -> GET /symbols?query=...&kind=...&limit=...
+symbol_declaration      -> GET /symbols/declaration?symbol=...&containingType=...&context_lines=...
+symbol_inheritors       -> GET /symbols/inheritors?symbol=...
+symbol_usages           -> GET /symbols/usages?symbol=...&containingType=...&limit=...
+symbol_members          -> GET /symbols/members?symbol=...&kind=...
+symbol_hierarchy        -> GET /symbols/hierarchy?symbol=...
 ```
 
 ## Implementation Plan
 
-### Phase 1: SymbolSearchService + /symbols endpoint
+### Phase 1: SymbolSearchService + /symbols + /symbols/declaration
 
-**Goal:** Solution-wide symbol search by name, like Rider's "Go to Symbol".
+**Goal:** Symbol search by name and go-to-definition with code snippet. These two are the foundation.
 
 **New files:**
-- `Services/SymbolSearchService.cs` - Core service wrapping `ISymbolScope`
-- `Handlers/SymbolsHandler.cs` - HTTP handler for `/symbols` and sub-routes
+- `Services/SymbolSearchService.cs` - Core service using `CppSymbolNameCache`
+- `Handlers/SymbolsHandler.cs` - HTTP handler for all `/symbols` routes
 - `Models/SymbolModels.cs` - Response DTOs
 
-**SymbolSearchService implementation:**
+**SymbolSearchService implementation (C++ path):**
 
 ```
 SymbolSearchService(ISolution solution)
+  // Constructor: resolve CppGlobalSymbolCache via reflection,
+  // then access .SymbolNameCache property
 
 SearchByName(string query, string kindFilter, int limit)
   -> ReadLockCookie.Execute(() => {
-       Iterate solution.PsiModules()
-       For each module: GetSymbolScope() -> GetElementsByShortName(query)
-       If no exact matches: try prefix/substring match via GetAllShortNames()
+       CppSymbolNameCache.GetSymbolsByShortName(query)
+       For each ICppSymbol:
+         name = symbol.Name.ToString()
+         file = symbol.ContainingFile.FullPath
+         line = symbol.LocateDocumentRange(solution).StartOffset.ToDocumentCoords().Line + 1
+         kind = MapSymbolType(symbol.GetType().Name)  // CppClassSymbol -> "class", etc.
+       Sort: definitions (CppClassSymbol) first, forward decls last
        Filter by kind if specified
-       Map IDeclaredElement -> SymbolResult (name, kind, file, line, module)
        Deduplicate by (name, file, line)
        Return capped to limit
      })
+
+GetDeclaration(string symbolName, string containingType, int contextLines)
+  -> ReadLockCookie.Execute(() => {
+       results = SearchByName(symbolName)
+       Filter to definitions only (exclude CppFwdClassSymbol)
+       If containingType specified: filter by parent symbol name
+       For each definition:
+         Get file path and line from symbol
+         Read contextLines lines of source from the file around the declaration
+       Return location + code snippet
+     })
 ```
 
-Key decisions:
-- Iterate ALL `IPsiModule`s, not just the primary project module. This picks up engine headers, third-party code, and multi-project solutions.
-- Filter results to user code by default (files under `solution.SolutionDirectory`), with an `&scope=all` parameter to include engine/third-party.
-- Use `ReadLockCookie.Execute()` (same as existing services).
-- Return both exact and prefix matches, sorted: exact matches first.
+**Symbol type mapping:**
+
+| `GetType().Name` | Kind | Show by default |
+|---|---|---|
+| `CppClassSymbol` | `class` | Yes (definition) |
+| `CppFwdClassSymbol` | `forward_declaration` | Deprioritize |
+| `CppFunctionSymbol` | `function` | Yes |
+| `CppSimpleDeclaratorSymbol` | `variable` | Yes |
+| `CppNamespaceSymbol` | `namespace` | Yes |
+| `CppEnumSymbol` | `enum` | Yes |
+| Other | `symbol` | Yes |
 
 **Wiring:**
 - Add `SymbolSearchService` as a field on `InspectionHttpServer2`
-- Add `SymbolsHandler` to the `_handlers` array in `StartServer()`
+- Add `SymbolsHandler` to the `_handlers` array
 - Add MCP tool definitions to `FathomMcpServer.Tools`
 
-**Testing:**
-- `curl http://localhost:{port}/symbols?query=FMyActor` on a UE5 project
-- `curl http://localhost:{port}/symbols?query=InspectionService` on the Fathom solution itself (C#)
-- Verify results include file path, line number, element kind
+### Phase 2: /symbols/inheritors
 
-### Phase 2: Go to declaration (/symbols/declaration)
-
-**Goal:** Given a symbol name, return all declaration sites.
-
-**Add to SymbolSearchService:**
-
-```
-GetDeclarations(string symbolName, string kindFilter)
-  -> ReadLockCookie.Execute(() => {
-       Find element via SearchByName (reuse Phase 1)
-       For each matching element: element.GetDeclarations()
-       For each declaration: extract file, line, signature, containingType
-       Return list
-     })
-```
-
-For C++ out-of-line definitions (e.g. `void AMyActor::OnPossess(...)` in a .cpp file), the element should have declarations in both the .h and .cpp. The `GetDeclarations()` API should return both.
-
-**Disambiguation:** When `query=OnPossess` matches methods on multiple classes, return all of them grouped by containing type. The caller can refine with `kind=method` or by inspecting `containingType` in the response.
-
-### Phase 3: Find usages (/symbols/usages)
-
-**Goal:** Find all references to a symbol across the solution.
-
-**Add to SymbolSearchService:**
-
-```
-FindUsages(string symbolName, string kindFilter, int limit)
-  -> ReadLockCookie.Execute(() => {
-       Find element via SearchByName
-       SearchDomainFactory.CreateSearchDomain(solution, false)
-       psiServices.Finder.FindReferences(element, domain, consumer, progress)
-       For each FindResultReference: extract file, line, context snippet
-       Return capped to limit
-     })
-```
-
-**Context snippet:** For each usage, read a short window (the line containing the reference) from the source file document. This gives the LLM enough context to understand how the symbol is being used without requesting the full file.
-
-**Performance concern:** `FindReferences` on a widely-used symbol (e.g. `AActor`) in a large UE5 solution could return thousands of results and take seconds. The `limit` parameter is essential. Consider also:
-- A `scope=user` default that restricts the search domain to files under `SolutionDirectory`
-- A timeout (e.g. 10s) that returns partial results with a `truncated: true` flag
-
-### Phase 4: Find inheritors (/symbols/inheritors)
-
-**Goal:** Find types that derive from a given type, including Blueprint inheritors.
-
-**Add to SymbolSearchService:**
+**Goal:** Find derived types, combining C++ inheritors with Blueprint inheritors.
 
 ```
 FindInheritors(string symbolName)
   -> ReadLockCookie.Execute(() => {
-       Find type element via SearchByName (filter to types only)
+       // C++ inheritors
+       CppSymbolNameCache.GetDerivedClasses(symbolName)
+       For each result: extract name, file, line
 
-       // C++ / C# inheritors via IFinder
-       psiServices.Finder.FindImplementingMembers(...) or
-         iterate types checking GetSuperTypes()
+       // Blueprint inheritors (UE5 only, reuse existing service)
+       If BlueprintQueryService available:
+         _blueprintQuery.Query(symbolName, ...)
 
-       // Blueprint inheritors (UE5 only) via existing BlueprintQueryService
-       If UE project: _blueprintQuery.Query(symbolName, ...)
-
-       Combine and return
+       Return combined result
      })
 ```
 
-This phase bridges the existing Blueprint derivation queries with the new symbol infrastructure. For UE5 projects, the response includes both C++ inheritors and Blueprint inheritors in separate arrays.
+### Phase 3: /symbols/members
 
-### Phase 5: C++ validation and reflection fallbacks
+**Goal:** List all members of a class/struct by name (no file path needed).
 
-After Phases 1-4 work for C#, test each against C++ projects:
+```
+GetMembers(string symbolName, string kindFilter)
+  -> ReadLockCookie.Execute(() => {
+       Find the class definition via SearchByName (filter to CppClassSymbol)
+       Get the file: symbol.ContainingFile
+       Get all symbols in that file: CppGotoSymbolUtil.GetSymbolsFromPsiFile(file)
+       Filter to symbols whose Parent matches the target class
+       Return members with name, kind, line, signature
+     })
+```
 
-1. Does `GetElementsByShortName()` return C++ elements from C++ `IPsiModule`s?
-2. Does `IFinder.FindReferences()` find references within C++ files?
-3. Does `GetDeclarations()` return .h and .cpp declaration sites for C++ elements?
+### Phase 4: /symbols/usages (requires research)
 
-If any of these fail silently (the `RunLocalInspections` pattern), implement reflection-based fallbacks:
+**Goal:** Find all references to a symbol across the solution.
 
-- **Symbol search fallback:** Walk all C++ `IPsiSourceFile`s, parse PSI trees (reuse `CppStructureWalker` logic), collect `IDeclaredElement` instances, filter by name. Cache results across requests.
-- **Find usages fallback:** Use `UEAssetUsagesSearcher.GetFindUsagesResults()` via reflection (same pattern as `BlueprintQueryService` uses for `UE4AssetsCache`).
-- **Find inheritors fallback:** Use `UEAssetUsagesSearcher.GetGoToInheritorsResults()` via reflection.
+`IFinder.FindReferences()` does not work for C++. Research needed:
 
-### Phase 6: Fuzzy/substring search
+1. Search C++ assemblies for `CppFindUsages`, `CppReferenceSearcher`, or similar types
+2. Check if `UEAssetUsagesSearcher.GetFindUsagesResults()` works for C++ code references (not just Blueprint)
+3. `CppWordIndex.GetFilesContainingWord()` as rough fallback (text matches, not semantic)
+4. Look for `CppRenameRefactoring`-related types (rename must find all references internally)
 
-Enhance `/symbols` to support partial matches:
+### Phase 5: /symbols/hierarchy
 
-- If `GetElementsByShortName(query)` returns 0 results, fall back to `GetAllShortNames()` filtered by case-insensitive substring
-- Add `&match=exact|prefix|substring` parameter (default: try exact, then prefix, then substring)
-- For large solutions, `GetAllShortNames()` could return tens of thousands of names. Cache the name list and invalidate on PSI changes (or use a simple TTL).
+**Goal:** Full inheritance chain: base classes upward + derived classes downward.
+
+Combines:
+- Upward: read base specifiers from `CppClassSymbol`. `CppStructureWalker` already reads `BaseSpecifierList` from PSI. Recursively look up each base.
+- Downward: `CppSymbolNameCache.GetDerivedClasses()`, recursively.
+
+### Phase 6: Tier 3 features
+
+- `/symbols/doc` and `/symbols/signature` are simple once `/symbols/declaration` works (read source lines at the declaration offset)
+- `/symbols/implementations` composes inheritors + members
+- `/symbols/callers` deferred until C++ cross-reference APIs are found
 
 ## Files to Create / Modify
 
@@ -382,61 +384,57 @@ Enhance `/symbols` to support partial matches:
 
 | File | Purpose |
 |---|---|
-| `Services/SymbolSearchService.cs` | Core service: search, declarations, usages, inheritors |
-| `Handlers/SymbolsHandler.cs` | HTTP handler for `/symbols`, `/symbols/declaration`, `/symbols/usages`, `/symbols/inheritors` |
-| `Models/SymbolModels.cs` | `SymbolSearchResult`, `SymbolDeclaration`, `SymbolUsage`, `SymbolInheritor` DTOs |
-| `Formatting/SymbolsMarkdownFormatter.cs` | Markdown output for symbol results |
+| `Services/SymbolSearchService.cs` | Core service: reflection-based access to CppSymbolNameCache, search, declaration, inheritors, members |
+| `Handlers/SymbolsHandler.cs` | HTTP handler for all `/symbols/*` routes |
+| `Models/SymbolModels.cs` | `SymbolSearchResult`, `SymbolDeclaration`, `SymbolInheritor`, `SymbolMember` DTOs |
 
 ### Modified files
 
 | File | Change |
 |---|---|
 | `InspectionHttpServer2.cs` | Add `SymbolSearchService` field, wire in constructor, add `SymbolsHandler` to `_handlers` array |
-| `Mcp/FathomMcpServer.cs` | Add 4 new `ToolDef` entries for `search_symbols`, `symbol_declaration`, `symbol_usages`, `symbol_inheritors` |
+| `Mcp/FathomMcpServer.cs` | Add `ToolDef` entries for symbol tools |
 
-## Risks and Open Questions
+### Files to remove (after verification)
 
-### C++ symbol scope coverage
+| File | Why |
+|---|---|
+| `Handlers/DebugSymbolHandler.cs` | Temporary debug endpoints, replaced by real service |
 
-The biggest unknown. `ISymbolScope.GetElementsByShortName()` may not include C++ elements, or may only include elements from already-indexed translation units. This needs to be tested early (Phase 1) before investing in the full pipeline.
+## Risks
 
-**Mitigation:** Phase 5 has explicit fallback strategies using the same reflection approach that already works for Blueprint queries.
+### Find usages for C++
+
+The biggest unknown. `IFinder` is confirmed dead for C++. If no C++-specific reference API exists, `/symbols/usages` will be limited to text-based matching via `CppWordIndex` (which finds files containing a word, not semantic references). This is still useful but produces false positives.
 
 ### Performance on large UE5 solutions
 
-A UE5 solution can have 247K+ files. `GetAllShortNames()` across all modules could be expensive. `FindReferences()` on a common base class could take seconds.
+`GetSymbolsByShortName("AActor")` returns 50 results in ~5 seconds. Common names like `Get` or `Set` could return thousands. The `limit` parameter and `scope=user` default are essential.
 
-**Mitigation:** Default scope to user code (`SolutionDirectory`), enforce limits, add timeouts, return `truncated` flags.
+### Forward declaration noise
 
-### Ambiguous symbol names
-
-`OnPossess` could match methods on 5 different classes. `Init` could match dozens.
-
-**Mitigation:** Return all matches with their containing type and file. Let the LLM choose. The `kind` filter helps narrow results.
+For "AActor", 48 of 50 results are forward declarations. The service must sort definitions first and either hide or group forward declarations. The `symbolType` field lets callers filter client-side too.
 
 ### PSI readiness
 
-Symbol search depends on the PSI being fully indexed. For UE5 projects, initial indexing can take minutes after solution load.
-
-**Mitigation:** Check `IPsiSourceFile` availability and return a clear error ("Solution indexing in progress") if the PSI isn't ready. This is analogous to the Blueprint cache readiness check already in `BlueprintsHandler`.
+Symbol search depends on C++ indexing being complete. For UE5 projects, initial indexing takes minutes after solution load. Check cache readiness and return a clear "indexing in progress" error.
 
 ## Verification
 
-After each phase, verify with:
-
 ```bash
 # Phase 1: Symbol search
-curl "http://localhost:19876/symbols?query=FMyActor"
-curl "http://localhost:19876/symbols?query=FMyActor&kind=class&format=json"
+curl "http://localhost:{port}/symbols?query=AActor"
+curl "http://localhost:{port}/symbols?query=BeginPlay&kind=function"
 
-# Phase 2: Declaration
-curl "http://localhost:19876/symbols/declaration?symbol=OnPossess"
+# Phase 1: Declaration (Ctrl+Click equivalent)
+curl "http://localhost:{port}/symbols/declaration?symbol=AActor"
+curl "http://localhost:{port}/symbols/declaration?symbol=BeginPlay&containingType=AMyPlayerController"
 
-# Phase 3: Usages
-curl "http://localhost:19876/symbols/usages?symbol=FMyActor&limit=20"
+# Phase 2: Inheritors
+curl "http://localhost:{port}/symbols/inheritors?symbol=AActor"
 
-# Phase 4: Inheritors
-curl "http://localhost:19876/symbols/inheritors?symbol=AMyActor"
+# Phase 3: Members
+curl "http://localhost:{port}/symbols/members?symbol=AMyActor"
 ```
 
 Each endpoint should also be testable via MCP tool call through the `/mcp` endpoint.

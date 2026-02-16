@@ -846,3 +846,88 @@ If the requestor provides multiple file paths, only fail early if ALL files are 
 | `docs/reference_files/ue_specific/UnrealAssetOccurence.cs` | `...UE4.UEAsset.Search` | Occurrence wrapper: navigation (requires UnrealLink plugin), display text |
 | `docs/reference_files/ue_specific/IUnrealOccurence.cs` | `...UE4.UEAsset.Search` | Interface for occurrence results |
 | `docs/reference_files/ue_specific/IOccurrence.cs` | `...Feature.Services.Occurrences` | Base occurrence interface (from `Feature.Services.dll`, not Cpp-specific) |
+
+## C++ Symbol Search via CppSymbolNameCache (Production Endpoints)
+
+Lessons from building `/symbols` and `/symbols/declaration` endpoints using the C++ symbol cache.
+
+### CppList does not implement IEnumerable
+
+`CppSymbolNameCache.GetSymbolsByShortName()` returns `CppList<ICppSymbol>`, a custom JetBrains collection
+that does NOT implement `System.Collections.IEnumerable`. Casting with `is IEnumerable` silently fails
+and you get zero results with no error.
+
+To enumerate, use reflection with Count + indexer:
+
+```csharp
+var countProp = collection.GetType().GetProperty("Count");
+var indexer = collection.GetType().GetMethod("get_Item",
+    BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(int) }, null);
+int count = (int)countProp.GetValue(collection);
+for (int i = 0; i < count; i++)
+{
+    var item = indexer.Invoke(collection, new object[] { i });
+}
+```
+
+Also try duck-typed `GetEnumerator()` via reflection as a fallback.
+
+### Lazy init required for C++ caches
+
+The `CppGlobalSymbolCache` and `CppSymbolNameCache` components are not available at server startup
+(PSI indexing takes time). If you resolve them eagerly in a constructor, you get null and the service
+silently returns empty results forever.
+
+Use lazy initialization on first request with retry: resolve the caches, and if resolution fails,
+reset state so the next request tries again. Once resolved, lock in and never re-resolve.
+
+### CppSimpleDeclaratorSymbol covers both functions and variables
+
+In the C++ symbol cache, member function declarations AND variable declarations both use
+`CppSimpleDeclaratorSymbol`. The type name alone cannot distinguish them.
+
+`CppSimpleDeclaratorSymbol` exposes `Boolean IsFunction()` which reliably identifies functions.
+Call it via reflection:
+
+```csharp
+var method = symbol.GetType().GetMethod("IsFunction",
+    BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+bool isFunc = (bool)method.Invoke(symbol, null);
+```
+
+### Symbol type mapping (complete, verified)
+
+| C++ Symbol Type | Kind | Notes |
+|---|---|---|
+| `CppClassSymbol` | "class" | Class/struct definitions |
+| `CppFwdClassSymbol` | "forward_declaration" | Forward declarations (`class Foo;`) |
+| `CppFunctionSymbol` | "function" | Free functions (rarely seen in practice) |
+| `CppSimpleDeclaratorSymbol` + `IsFunction()=true` | "function" | Member functions, constructors |
+| `CppSimpleDeclaratorSymbol` + `IsFunction()=false` | "variable" | Member variables, globals |
+| `CppNamespaceSymbol` | "namespace" | Namespace declarations |
+| `CppEnumSymbol` | "enum" | Enum definitions |
+
+### CppSimpleDeclaratorSymbol has useful additional properties
+
+Discovered via the debug endpoint API dump:
+
+- `IsFunction()` - distinguishes functions from variables
+- `IsFunctionWithAutoParams()` - detects auto-parameter functions
+- `HasCLinkage()` - extern "C" linkage
+- `GetAccessibility()` - public/private/protected
+- `GetFunctionBody()` - function body reference
+- `PureVirtualSpecifiers` - pure virtual detection
+- `DeclarationSpecifiers` - declaration specifiers (virtual, static, etc.)
+- `RawType` - the declared type (CppQualType)
+
+### Name.ToString() returns qualified names
+
+`CppQualifiedName.ToString()` returns the fully qualified name (e.g., `AActor::AActor`,
+`UPrimitiveComponent::BeginPlay`). For short names, read the `ShortName` property on
+`CppQualifiedName`, or the `Name.Name` sub-property (`CppQualifiedNamePart`).
+
+### Scope filtering for UE5 projects
+
+Default scope should be "user" (project files only). Filter by checking if the file path starts
+with `solution.SolutionDirectory`. For a typical UE5 project, this reduces results from hundreds
+of engine matches to just user project files. Use `scope=all` to include engine/third-party symbols.
