@@ -6,7 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-02-16
+### Changed
+- MCP tool responses no longer include hyperlinks (navigation URLs are still returned via HTTP endpoints)
+- Updated plugin icon and status bar logos
+
+### Fixed
+- Removed custom `FathomStartBuildEvent` in favor of the platform `StartBuildEventImpl` (attempt to fix plugin verifier warning for `@NonExtendable` `StartBuildEvent`)
+- Removed deprecated `isStdOut()` override from `FathomOutputBuildEvent`
+- Fixed release workflow changelog extraction regex and switched Marketplace upload from NuGet push to REST API
 
 ## [0.3.0] - 2026-02-16
 
