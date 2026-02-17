@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/fathom-logo.png" alt="Fathom" width="400">
+  <img src="docs/images/fathom-social-card-v2.png" alt="Fathom" width="400">
 </p>
 
 <p align="center">
