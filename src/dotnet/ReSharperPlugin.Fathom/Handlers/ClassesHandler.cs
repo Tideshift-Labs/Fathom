@@ -34,7 +34,8 @@ public class ClassesHandler : IRequestHandler
         }
         else
         {
-            var markdown = ClassesMarkdownFormatter.Format(classes, _config.Port);
+            var isMcp = ctx.Request.QueryString["source"] == "mcp";
+            var markdown = ClassesMarkdownFormatter.Format(classes, _config.Port, includeLinks: !isMcp);
             HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8", markdown);
         }
     }

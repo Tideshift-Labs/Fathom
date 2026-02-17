@@ -6,7 +6,7 @@ namespace ReSharperPlugin.Fathom.Formatting;
 
 public static class ClassesMarkdownFormatter
 {
-    public static string Format(List<ClassEntry> classes, int port)
+    public static string Format(List<ClassEntry> classes, int port, bool includeLinks = true)
     {
         var sb = new StringBuilder();
 
@@ -26,14 +26,17 @@ public static class ClassesMarkdownFormatter
 
             sb.AppendLine();
 
-            var fileParams = BuildFileParams(cls.Header, cls.Source);
+            if (includeLinks)
+            {
+                var fileParams = BuildFileParams(cls.Header, cls.Source);
 
-            sb.Append("[describe](http://localhost:").Append(port)
-                .Append("/describe_code").Append(fileParams).AppendLine(")");
-            sb.Append("[inspect](http://localhost:").Append(port)
-                .Append("/inspect").Append(fileParams).AppendLine(")");
-            sb.Append("[blueprints](http://localhost:").Append(port)
-                .Append("/blueprints?class=").Append(cls.Name).AppendLine(")");
+                sb.Append("[describe](http://localhost:").Append(port)
+                    .Append("/describe_code").Append(fileParams).AppendLine(")");
+                sb.Append("[inspect](http://localhost:").Append(port)
+                    .Append("/inspect").Append(fileParams).AppendLine(")");
+                sb.Append("[blueprints](http://localhost:").Append(port)
+                    .Append("/blueprints?class=").Append(cls.Name).AppendLine(")");
+            }
 
             sb.AppendLine();
         }
