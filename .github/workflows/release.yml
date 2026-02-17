@@ -57,7 +57,7 @@ jobs:
         shell: pwsh
         run: |
           $content = Get-Content CHANGELOG.md -Raw
-          $pattern = "(?s)## \[${{ steps.version.outputs.VERSION }}\]\s*\r?\n(.+?)(?=\r?\n## |\z)"
+          $pattern = "(?s)## \[${{ steps.version.outputs.VERSION }}\][^\r\n]*\r?\n(.+?)(?=\r?\n## |\z)"
           if ($content -match $pattern) {
             $notes = $Matches[1].Trim()
           } else {
@@ -77,9 +77,13 @@ jobs:
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
         run: |
-          $nupkg = Get-ChildItem "output/*.nupkg" | Select-Object -First 1
-          if (-not $nupkg) {
-            Write-Error "No .nupkg found in output/"
+          $zip = Get-ChildItem "output/*.zip" | Select-Object -First 1
+          if (-not $zip) {
+            Write-Error "No .zip found in output/"
             exit 1
           }
-          dotnet nuget push $nupkg.FullName --api-key $env:PUBLISH_TOKEN --source "https://plugins.jetbrains.com"
+          curl.exe --fail-with-body -X POST `
+            -H "Authorization: Bearer $env:PUBLISH_TOKEN" `
+            -F "file=@$($zip.FullName)" `
+            -F "channel=Stable" `
+            "https://plugins.jetbrains.com/plugin/30185/uploadNewVersion"
