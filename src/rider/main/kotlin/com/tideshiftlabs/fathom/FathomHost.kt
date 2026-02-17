@@ -2,6 +2,7 @@ package com.tideshiftlabs.fathom
 
 import com.intellij.build.BuildViewManager
 import com.intellij.build.DefaultBuildDescriptor
+import com.intellij.build.events.impl.StartBuildEventImpl
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -162,7 +163,9 @@ class FathomHost : ProjectActivity {
                         )
                         buildViewManager.onEvent(
                             currentBuildId,
-                            FathomStartBuildEvent(descriptor, "Building Fathom UE plugin...")
+                            StartBuildEventImpl(
+                                null, "Building Fathom UE plugin...", null, null, descriptor, null
+                            )
                         )
                         ToolWindowManager.getInstance(project).getToolWindow("Build")?.show()
                     }

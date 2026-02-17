@@ -86,11 +86,15 @@ public class BlueprintsHandler : IRequestHandler
             result.CacheReady = cacheReady;
             result.CacheStatus = cacheStatus;
 
-            // Populate MoreInfoUrl on each Blueprint entry
-            foreach (var bp in result.Blueprints)
+            // Populate MoreInfoUrl on each Blueprint entry (omitted for MCP to save tokens)
+            var isMcp = ctx.Request.QueryString["source"] == "mcp";
+            if (!isMcp)
             {
-                if (!string.IsNullOrEmpty(bp.PackagePath))
-                    bp.MoreInfoUrl = $"http://localhost:{_config.Port}/bp?file={Uri.EscapeDataString(bp.PackagePath)}";
+                foreach (var bp in result.Blueprints)
+                {
+                    if (!string.IsNullOrEmpty(bp.PackagePath))
+                        bp.MoreInfoUrl = $"http://localhost:{_config.Port}/bp?file={Uri.EscapeDataString(bp.PackagePath)}";
+                }
             }
 
             if (format == "json")

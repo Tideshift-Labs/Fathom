@@ -101,6 +101,7 @@ public class AssetShowHandler : IRequestHandler
     private void HandleMarkdown(HttpListenerContext ctx, string[] packages)
     {
         var sb = new StringBuilder();
+        var isMcp = ctx.Request.QueryString["source"] == "mcp";
 
         foreach (var pkg in packages)
         {
@@ -123,13 +124,13 @@ public class AssetShowHandler : IRequestHandler
                 continue;
             }
 
-            FormatAssetMarkdown(sb, body, pkg, _config.Port);
+            FormatAssetMarkdown(sb, body, pkg, _config.Port, includeLinks: !isMcp);
         }
 
         HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8", sb.ToString());
     }
 
-    private static void FormatAssetMarkdown(StringBuilder sb, string jsonBody, string pkg, int port)
+    private static void FormatAssetMarkdown(StringBuilder sb, string jsonBody, string pkg, int port, bool includeLinks = true)
     {
         try
         {
@@ -174,22 +175,25 @@ public class AssetShowHandler : IRequestHandler
                 sb.Append("referencers: ").AppendLine(rc.GetInt32().ToString());
             sb.AppendLine();
 
-            // Navigation links
-            var escapedPkg = Uri.EscapeDataString(package);
-            sb.Append("[dependencies](http://localhost:").Append(port)
-                .Append("/asset-refs/dependencies?asset=").Append(escapedPkg).AppendLine(")");
-            sb.Append("[referencers](http://localhost:").Append(port)
-                .Append("/asset-refs/referencers?asset=").Append(escapedPkg).AppendLine(")");
-
-            if (assetClass != null && assetClass.Contains("Blueprint"))
+            // Navigation links (omitted for MCP to save tokens)
+            if (includeLinks)
             {
-                sb.Append("[blueprint-info](http://localhost:").Append(port)
-                    .Append("/bp?file=").Append(escapedPkg).AppendLine(")");
-            }
+                var escapedPkg = Uri.EscapeDataString(package);
+                sb.Append("[dependencies](http://localhost:").Append(port)
+                    .Append("/asset-refs/dependencies?asset=").Append(escapedPkg).AppendLine(")");
+                sb.Append("[referencers](http://localhost:").Append(port)
+                    .Append("/asset-refs/referencers?asset=").Append(escapedPkg).AppendLine(")");
 
-            sb.Append("[search-similar](http://localhost:").Append(port)
-                .Append("/uassets?search=").Append(Uri.EscapeDataString(name))
-                .Append("&class=").Append(Uri.EscapeDataString(assetClass)).AppendLine(")");
+                if (assetClass != null && assetClass.Contains("Blueprint"))
+                {
+                    sb.Append("[blueprint-info](http://localhost:").Append(port)
+                        .Append("/bp?file=").Append(escapedPkg).AppendLine(")");
+                }
+
+                sb.Append("[search-similar](http://localhost:").Append(port)
+                    .Append("/uassets?search=").Append(Uri.EscapeDataString(name))
+                    .Append("&class=").Append(Uri.EscapeDataString(assetClass)).AppendLine(")");
+            }
 
             sb.AppendLine();
         }

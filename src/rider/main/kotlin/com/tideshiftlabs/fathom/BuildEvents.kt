@@ -1,6 +1,5 @@
 package com.tideshiftlabs.fathom
 
-import com.intellij.build.BuildDescriptor
 import com.intellij.build.events.*
 import com.intellij.execution.process.ProcessOutputType
 import com.intellij.execution.process.ProcessOutputTypes
@@ -9,20 +8,9 @@ import com.intellij.execution.process.ProcessOutputTypes
  * Custom implementations of IntelliJ Build event interfaces.
  * These replace the *Impl classes from com.intellij.build.events.impl
  * which are marked @ApiStatus.Internal and flagged by plugin verification.
+ *
+ * StartBuildEvent is @NonExtendable so we must use StartBuildEventImpl for that one.
  */
-
-internal class FathomStartBuildEvent(
-    private val descriptor: BuildDescriptor,
-    private val msg: String
-) : StartBuildEvent {
-    override fun getId(): Any = descriptor.id
-    override fun getParentId(): Any? = null
-    override fun getEventTime(): Long = descriptor.startTime
-    override fun getMessage(): String = msg
-    override fun getHint(): String? = null
-    override fun getDescription(): String? = null
-    override fun getBuildDescriptor(): BuildDescriptor = descriptor
-}
 
 internal class FathomOutputBuildEvent(
     private val id: Any,
@@ -35,8 +23,6 @@ internal class FathomOutputBuildEvent(
     override fun getMessage(): String = msg
     override fun getHint(): String? = null
     override fun getDescription(): String? = null
-    @Deprecated("Use getOutputType() instead", replaceWith = ReplaceWith("getOutputType()"))
-    override fun isStdOut(): Boolean = stdOut
     override fun getOutputType(): ProcessOutputType =
         (if (stdOut) ProcessOutputTypes.STDOUT else ProcessOutputTypes.STDERR) as ProcessOutputType
 }

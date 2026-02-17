@@ -311,6 +311,9 @@ namespace ReSharperPlugin.Fathom.Mcp
                 }
             }
 
+            // Tag requests from MCP so handlers can omit verbose content (e.g. links)
+            sb.Append(firstParam ? '?' : '&').Append("source=mcp");
+
             return sb.ToString();
         }
 

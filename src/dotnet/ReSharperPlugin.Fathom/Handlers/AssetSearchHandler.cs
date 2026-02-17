@@ -98,7 +98,8 @@ public class AssetSearchHandler : IRequestHandler
 
         if (format == "md")
         {
-            var mdBody = FormatAsMarkdown(body, search ?? "(browse)", _config.Port);
+            var isMcp = ctx.Request.QueryString["source"] == "mcp";
+            var mdBody = FormatAsMarkdown(body, search ?? "(browse)", _config.Port, includeLinks: !isMcp);
             HttpHelpers.Respond(ctx, statusCode, "text/markdown; charset=utf-8", mdBody);
         }
         else
@@ -107,7 +108,7 @@ public class AssetSearchHandler : IRequestHandler
         }
     }
 
-    private static string FormatAsMarkdown(string jsonBody, string query, int port)
+    private static string FormatAsMarkdown(string jsonBody, string query, int port, bool includeLinks = true)
     {
         var sb = new StringBuilder();
 
@@ -138,19 +139,22 @@ public class AssetSearchHandler : IRequestHandler
                     sb.Append("package: ").AppendLine(pkg);
                     sb.AppendLine();
 
-                    var escapedPkg = Uri.EscapeDataString(pkg);
-                    sb.Append("[show](http://localhost:").Append(port)
-                        .Append("/uassets/show?package=").Append(escapedPkg).AppendLine(")");
-                    sb.Append("[dependencies](http://localhost:").Append(port)
-                        .Append("/asset-refs/dependencies?asset=").Append(escapedPkg).AppendLine(")");
-                    sb.Append("[referencers](http://localhost:").Append(port)
-                        .Append("/asset-refs/referencers?asset=").Append(escapedPkg).AppendLine(")");
-
-                    // Blueprint assets get a link to the detailed audit view
-                    if (cls != null && cls.Contains("Blueprint"))
+                    if (includeLinks)
                     {
-                        sb.Append("[blueprint-info](http://localhost:").Append(port)
-                            .Append("/bp?file=").Append(escapedPkg).AppendLine(")");
+                        var escapedPkg = Uri.EscapeDataString(pkg);
+                        sb.Append("[show](http://localhost:").Append(port)
+                            .Append("/uassets/show?package=").Append(escapedPkg).AppendLine(")");
+                        sb.Append("[dependencies](http://localhost:").Append(port)
+                            .Append("/asset-refs/dependencies?asset=").Append(escapedPkg).AppendLine(")");
+                        sb.Append("[referencers](http://localhost:").Append(port)
+                            .Append("/asset-refs/referencers?asset=").Append(escapedPkg).AppendLine(")");
+
+                        // Blueprint assets get a link to the detailed audit view
+                        if (cls != null && cls.Contains("Blueprint"))
+                        {
+                            sb.Append("[blueprint-info](http://localhost:").Append(port)
+                                .Append("/bp?file=").Append(escapedPkg).AppendLine(")");
+                        }
                     }
 
                     sb.AppendLine();
