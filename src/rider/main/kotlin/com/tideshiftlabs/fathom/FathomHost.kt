@@ -1,8 +1,11 @@
 package com.tideshiftlabs.fathom
 
-import com.intellij.build.BuildViewManager
-import com.intellij.build.DefaultBuildDescriptor
-import com.intellij.build.events.impl.StartBuildEventImpl
+import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.filters.TextConsoleBuilderFactory
+import com.intellij.execution.ui.ConsoleView
+import com.intellij.execution.ui.ConsoleViewContentType
+import com.intellij.execution.ui.RunContentDescriptor
+import com.intellij.execution.ui.RunContentManager
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -11,7 +14,6 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
-import com.intellij.openapi.wm.ToolWindowManager
 import com.jetbrains.rd.ide.model.CompanionPluginStatus
 import com.jetbrains.rd.ide.model.fathomModel
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
@@ -144,50 +146,36 @@ class FathomHost : ProjectActivity {
             }
         }
 
-        // Build output streaming to Build tool window
-        val activeBuildId = AtomicReference<Any?>(null)
+        // Build output streaming to Run console
+        val consoleRef = AtomicReference<ConsoleView?>(null)
 
         protocol.scheduler.queue {
             model.companionBuildLog.advise(lifetimeDef.lifetime) { line ->
                 ApplicationManager.getApplication().invokeLater {
-                    val buildViewManager = project.getService(BuildViewManager::class.java)
-                    var currentBuildId = activeBuildId.get()
-                    if (currentBuildId == null) {
-                        currentBuildId = Object()
-                        activeBuildId.set(currentBuildId)
-                        val descriptor = DefaultBuildDescriptor(
-                            currentBuildId,
-                            "Fathom UE Plugin Build",
-                            project.basePath ?: "",
-                            System.currentTimeMillis()
+                    var console = consoleRef.get()
+                    if (console == null) {
+                        console = TextConsoleBuilderFactory.getInstance()
+                            .createBuilder(project)
+                            .console
+                        consoleRef.set(console)
+                        val descriptor = RunContentDescriptor(
+                            console, null, console.component, "Fathom UE Build"
                         )
-                        buildViewManager.onEvent(
-                            currentBuildId,
-                            StartBuildEventImpl(
-                                null, "Building Fathom UE plugin...", null, null, descriptor, null
-                            )
-                        )
-                        ToolWindowManager.getInstance(project).getToolWindow("Build")?.show()
+                        RunContentManager.getInstance(project)
+                            .showRunContent(DefaultRunExecutor.getRunExecutorInstance(), descriptor)
                     }
-                    buildViewManager.onEvent(
-                        currentBuildId,
-                        FathomOutputBuildEvent(currentBuildId, line + "\n", true)
-                    )
+                    console.print(line + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
                 }
             }
 
             model.companionBuildFinished.advise(lifetimeDef.lifetime) { success ->
                 ApplicationManager.getApplication().invokeLater {
-                    val currentBuildId = activeBuildId.getAndSet(null) ?: return@invokeLater
-                    val buildViewManager = project.getService(BuildViewManager::class.java)
-                    val result = if (success) FathomSuccessResult else FathomFailureResult
-                    val message = if (success) "Build successful" else "Build failed"
-                    buildViewManager.onEvent(
-                        currentBuildId,
-                        FathomFinishBuildEvent(
-                            currentBuildId, null, System.currentTimeMillis(), message, result
-                        )
-                    )
+                    val console = consoleRef.getAndSet(null) ?: return@invokeLater
+                    if (success) {
+                        console.print("\nBuild successful\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    } else {
+                        console.print("\nBuild failed\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    }
                 }
             }
         }
