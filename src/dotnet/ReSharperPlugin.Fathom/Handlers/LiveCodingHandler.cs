@@ -1,8 +1,9 @@
 using System;
+using System.Diagnostics;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using ReSharperPlugin.Fathom.Formatting;
 using ReSharperPlugin.Fathom.Services;
 
@@ -13,11 +14,8 @@ public class LiveCodingHandler : IRequestHandler
     private readonly UeProjectService _ueProject;
     private readonly AssetRefProxyService _proxy;
 
-    // Separate HttpClient with long timeout for compile (blocks until LiveCodingConsole.exe finishes)
-    private readonly HttpClient _compileClient = new()
-    {
-        Timeout = TimeSpan.FromSeconds(120)
-    };
+    private const int CompileTimeoutSeconds = 120;
+    private const int PollIntervalMs = 1000;
 
     public LiveCodingHandler(UeProjectService ueProject, AssetRefProxyService proxy)
     {
@@ -64,10 +62,9 @@ public class LiveCodingHandler : IRequestHandler
             return;
         }
 
-        // Use long-timeout client for compile requests
-        var (body, statusCode) = ProxyGetLongTimeout("live-coding/compile");
-
-        if (body == null)
+        // 1. Trigger compile (returns immediately from UE side)
+        var (startBody, startStatus) = _proxy.ProxyGetWithStatus("live-coding/compile");
+        if (startBody == null)
         {
             HttpHelpers.RespondWithFormat(ctx, format, 502,
                 "Failed to connect to UE editor server.\n\nThe editor may have just closed. Try again shortly.",
@@ -75,14 +72,79 @@ public class LiveCodingHandler : IRequestHandler
             return;
         }
 
-        if (format == "md")
+        // Check if UE returned an error (NotStarted, AlreadyCompiling)
+        try
         {
-            var mdBody = FormatCompileAsMarkdown(body);
-            HttpHelpers.Respond(ctx, statusCode, "text/markdown; charset=utf-8", mdBody);
+            using var startDoc = JsonDocument.Parse(startBody);
+            var startResult = startDoc.RootElement.TryGetProperty("result", out var r) ? r.GetString() : null;
+            if (startResult != "CompileStarted")
+            {
+                // Pass through the error response from UE
+                if (format == "md")
+                    HttpHelpers.Respond(ctx, startStatus, "text/markdown; charset=utf-8",
+                        FormatCompileAsMarkdown(startBody));
+                else
+                    HttpHelpers.Respond(ctx, startStatus, "application/json; charset=utf-8", startBody);
+                return;
+            }
+        }
+        catch
+        {
+            HttpHelpers.Respond(ctx, startStatus, "application/json; charset=utf-8", startBody);
+            return;
+        }
+
+        // 2. Poll /live-coding/status until lastCompile appears or timeout
+        var sw = Stopwatch.StartNew();
+        string compileResultJson = null;
+
+        while (sw.Elapsed < TimeSpan.FromSeconds(CompileTimeoutSeconds))
+        {
+            Thread.Sleep(PollIntervalMs);
+
+            if (!_proxy.IsAvailable())
+            {
+                HttpHelpers.RespondWithFormat(ctx, format, 502,
+                    "UE editor disconnected during compile.",
+                    new { error = "UE editor disconnected during compile." });
+                return;
+            }
+
+            var (statusBody, statusCode) = _proxy.ProxyGetWithStatus("live-coding/status");
+            if (statusBody == null)
+                continue; // transient failure, retry
+
+            try
+            {
+                using var doc = JsonDocument.Parse(statusBody);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("lastCompile", out var lastCompile))
+                {
+                    compileResultJson = lastCompile.GetRawText();
+                    break;
+                }
+            }
+            catch
+            {
+                // malformed response, retry
+            }
+        }
+
+        // 3. Return result
+        if (compileResultJson != null)
+        {
+            if (format == "md")
+                HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8",
+                    FormatCompileAsMarkdown(compileResultJson));
+            else
+                HttpHelpers.Respond(ctx, 200, "application/json; charset=utf-8", compileResultJson);
         }
         else
         {
-            HttpHelpers.Respond(ctx, statusCode, "application/json; charset=utf-8", body);
+            HttpHelpers.RespondWithFormat(ctx, format, 504,
+                "Live Coding compile timed out after " + CompileTimeoutSeconds + "s.\n\nThe compile may still be running in the editor.",
+                new { error = "Live Coding compile timed out", hint = "The compile may still be running in the editor." });
         }
     }
 
@@ -124,30 +186,6 @@ public class LiveCodingHandler : IRequestHandler
         else
         {
             HttpHelpers.Respond(ctx, statusCode, "application/json; charset=utf-8", body);
-        }
-    }
-
-    private (string Body, int StatusCode) ProxyGetLongTimeout(string path)
-    {
-        if (!_proxy.IsAvailable())
-            return (null, 0);
-
-        var status = _proxy.GetStatus();
-        if (!status.Connected)
-            return (null, 0);
-
-        try
-        {
-            var url = $"http://localhost:{status.Port}/{path.TrimStart('/')}";
-#pragma warning disable VSTHRD002 // Safe: runs on thread pool thread, no SynchronizationContext
-            var response = _compileClient.GetAsync(url).GetAwaiter().GetResult();
-            var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-#pragma warning restore VSTHRD002
-            return (body, (int)response.StatusCode);
-        }
-        catch
-        {
-            return (null, 0);
         }
     }
 
@@ -230,6 +268,17 @@ public class LiveCodingHandler : IRequestHandler
             sb.AppendLine($"**Has Started:** {(hasStarted ? "Yes" : "No")}");
             sb.AppendLine($"**Enabled for Session:** {(isEnabled ? "Yes" : "No")}");
             sb.AppendLine($"**Currently Compiling:** {(isCompiling ? "Yes" : "No")}");
+
+            if (root.TryGetProperty("lastCompile", out var lastCompile))
+            {
+                sb.AppendLine();
+                sb.AppendLine("## Last Compile");
+                var lastResult = lastCompile.TryGetProperty("result", out var lr) ? lr.GetString() : "?";
+                var lastDuration = lastCompile.TryGetProperty("durationMs", out var ld) ? ld.GetInt32() : 0;
+                sb.AppendLine($"**Result:** {lastResult}");
+                if (lastDuration > 0)
+                    sb.AppendLine($"**Duration:** {lastDuration / 1000.0:F1}s");
+            }
         }
         catch
         {
