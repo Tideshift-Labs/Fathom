@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fathom - Unreal Engine Code Intelligence</title>
+    <style>
+        :root {
+            --bg-primary: #111117;
+            --bg-secondary: #1a1a24;
+            --bg-card: #1e1e2a;
+            --border: #2a2a3a;
+            --text-primary: #e8e8f0;
+            --text-secondary: #9999b0;
+            --text-muted: #666680;
+            --accent-pink: #f472b6;
+            --accent-orange: #fb923c;
+            --accent-yellow: #facc15;
+            --accent-green: #4ade80;
+            --accent-blue: #60a5fa;
+            --gradient: linear-gradient(135deg, #f472b6, #fb923c, #facc15, #4ade80, #60a5fa);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 60px 24px 40px;
+            position: relative;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 400px;
+            background: radial-gradient(ellipse, rgba(244, 114, 182, 0.08) 0%, rgba(251, 146, 60, 0.04) 40%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .logo {
+            width: 120px;
+            height: 120px;
+            border-radius: 24px;
+            margin-bottom: 24px;
+            filter: drop-shadow(0 0 40px rgba(244, 114, 182, 0.2));
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero .tagline {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 540px;
+            margin: 0 auto 16px;
+        }
+
+        .status-bar {
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 0.875rem;
+            margin-top: 8px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+        }
+
+        .status-dot.disconnected {
+            background: var(--text-muted);
+            box-shadow: none;
+        }
+
+        .status-label {
+            color: var(--text-muted);
+        }
+
+        .status-value {
+            color: var(--text-primary);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+        }
+
+        .ue-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+            max-width: 960px;
+            margin: 0 auto 40px;
+            padding: 14px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.875rem;
+        }
+
+        .ue-bar-title {
+            font-weight: 600;
+            color: var(--accent-orange);
+            letter-spacing: 0.02em;
+        }
+
+        .ue-bar .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ue-hidden {
+            display: none;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 24px 60px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section h2 .icon {
+            font-size: 1.1rem;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            border-color: #3a3a50;
+        }
+
+        .feature-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+
+        .feature-card p {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .feature-card .accent {
+            display: inline-block;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            margin-right: 6px;
+            position: relative;
+            top: -2px;
+        }
+
+        .endpoints-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        .endpoints-table th {
+            text-align: left;
+            padding: 10px 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .endpoints-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        .endpoints-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .endpoints-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .endpoint-method {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .method-get {
+            background: rgba(74, 222, 128, 0.1);
+            color: var(--accent-green);
+        }
+
+        .method-post {
+            background: rgba(96, 165, 250, 0.1);
+            color: var(--accent-blue);
+        }
+
+        .endpoint-path {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+        }
+
+        .endpoint-desc {
+            color: var(--text-secondary);
+        }
+
+        .endpoint-badge {
+            font-size: 0.6875rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+            background: rgba(251, 146, 60, 0.1);
+            color: var(--accent-orange);
+            font-weight: 500;
+            margin-left: 6px;
+            white-space: nowrap;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .mcp-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .mcp-section p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 12px;
+        }
+
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            overflow-x: auto;
+            line-height: 1.6;
+        }
+
+        .code-key { color: var(--accent-blue); }
+        .code-str { color: var(--accent-green); }
+
+        .footer {
+            text-align: center;
+            padding: 32px 24px;
+            color: var(--text-muted);
+            font-size: 0.8125rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 640px) {
+            .hero { padding: 40px 16px 24px; }
+            .hero h1 { font-size: 1.75rem; }
+            .status-bar { flex-direction: column; gap: 8px; }
+            .features { grid-template-columns: 1fr; }
+            .container { padding: 0 16px 40px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <img src="data:image/png;base64,{{LOGO_BASE64}}" alt="Fathom" class="logo" width="120" height="120">
+    <h1>Fathom</h1>
+    <p class="tagline">Code intelligence for Unreal Engine projects in JetBrains Rider. Structural analysis, Blueprint auditing, and MCP integration for AI-assisted development.</p>
+    <div class="status-bar">
+        <div class="status-item">
+            <div class="status-dot"></div>
+            <span class="status-label">Server</span>
+            <span class="status-value">Running</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Port</span>
+            <span class="status-value">{{PORT}}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Unreal Project</span>
+            <span class="status-value">{{IS_UE}}</span>
+        </div>
+    </div>
+</div>
+
+<div class="ue-bar {{UE_BAR_VISIBILITY}}">
+    <span class="ue-bar-title">Unreal Engine</span>
+    <div class="status-item">
+        <span class="status-label">Project</span>
+        <span class="status-value">{{UE_PROJECT_NAME}}</span>
+    </div>
+    <div class="status-item">
+        <span class="status-label">Engine</span>
+        <span class="status-value">{{UE_ENGINE_VERSION}}</span>
+    </div>
+    <div class="status-item">
+        <div class="status-dot {{UE_EDITOR_DOT_CLASS}}"></div>
+        <span class="status-label">Editor</span>
+        <span class="status-value">{{UE_EDITOR_STATUS}}</span>
+    </div>
+</div>
+
+<div class="container">
+
+    <div class="section">
+        <h2>What Fathom Does</h2>
+        <div class="features">
+            <div class="feature-card">
+                <h3>Code Structure Analysis</h3>
+                <p>Describe the structure of any source file in your solution: classes, methods, fields, inheritance, and more. Works with C++ and Blueprints.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Code Inspection</h3>
+                <p>Run ReSharper-powered code inspections on demand. Catch issues, warnings, and suggestions for any file via a simple HTTP call.</p>
+            </div>
+            <div class="feature-card">
+                <h3>C++ Class Discovery</h3>
+                <p>List and search game C++ classes with their header/source file pairs and base class info. Filter by name or base class hierarchy.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Blueprint Auditing</h3>
+                <p>Audit Blueprint classes: node counts, complexity, variable usage, and event graphs. Identify Blueprints that may need refactoring or C++ migration.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Asset Intelligence</h3>
+                <p>Search and browse UAssets, inspect metadata, and trace dependency and referencer graphs across your Unreal project.</p>
+            </div>
+            <div class="feature-card">
+                <h3>MCP Integration</h3>
+                <p>Expose all capabilities as MCP tools for AI coding assistants. Works with Claude Code, Cursor, VS Code Copilot, and other MCP-compatible clients.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>API Endpoints</h2>
+
+        <div class="card">
+            <table class="endpoints-table">
+                <thead>
+                    <tr>
+                        <th style="width: 70px;">Method</th>
+                        <th style="width: 260px;">Path</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/files</span></td>
+                        <td class="endpoint-desc">List all source files in the solution (JSON only)</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/classes</span></td>
+                        <td class="endpoint-desc">List game C++ classes with header/source pairs and base class</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/describe_code?file=<em>path</em></span></td>
+                        <td class="endpoint-desc">Structural description of source files</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/inspect?file=<em>path</em></span></td>
+                        <td class="endpoint-desc">Run code inspection on source files</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/blueprints?class=<em>name</em></span></td>
+                        <td class="endpoint-desc">List Blueprint classes deriving from a C++ class <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/bp?file=<em>/Game/Path</em></span></td>
+                        <td class="endpoint-desc">Blueprint composite info (audit + deps + refs) <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/blueprint-audit</span></td>
+                        <td class="endpoint-desc">Get Blueprint audit data <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/uassets?search=<em>term</em></span></td>
+                        <td class="endpoint-desc">Search or browse UAssets <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/uassets/show?package=<em>path</em></span></td>
+                        <td class="endpoint-desc">Asset detail: metadata, size, tags, deps <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/asset-refs/dependencies</span></td>
+                        <td class="endpoint-desc">Asset dependency graph <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/asset-refs/referencers</span></td>
+                        <td class="endpoint-desc">Asset referencer graph <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/symbols</span></td>
+                        <td class="endpoint-desc">Search code symbols across the solution</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/health</span></td>
+                        <td class="endpoint-desc">Server and solution status (JSON)</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-post">POST</span></td>
+                        <td><span class="endpoint-path">/mcp</span></td>
+                        <td class="endpoint-desc">MCP Streamable HTTP endpoint (JSON-RPC)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p style="color: var(--text-muted); font-size: 0.8125rem; margin-top: 10px;">
+            All GET endpoints default to markdown. Add <code style="color: var(--text-secondary); background: var(--bg-card); padding: 1px 5px; border-radius: 3px;">&amp;format=json</code> for JSON output.
+        </p>
+    </div>
+
+    <div class="section">
+        <h2>MCP Configuration</h2>
+        <div class="mcp-section">
+            <p>Connect AI coding assistants to Fathom via the Model Context Protocol. Add this to your MCP client configuration:</p>
+            <div class="code-block">
+{<br>
+&nbsp;&nbsp;<span class="code-key">"mcpServers"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">"fathom"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">"url"</span>: <span class="code-str">"http://localhost:{{PORT}}/mcp"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;}<br>
+}
+            </div>
+            <p style="margin-top: 12px;">Fathom auto-generates <code style="color: var(--text-secondary); background: var(--bg-primary); padding: 1px 5px; border-radius: 3px;">.mcp.json</code> in your solution root for compatible clients.</p>
+        </div>
+    </div>
+
+</div>
+
+<div class="footer">
+    Fathom by <a href="https://tideshiftlabs.com" target="_blank" rel="noopener">Tideshift Labs</a>
+</div>
+
+</body>
+</html>

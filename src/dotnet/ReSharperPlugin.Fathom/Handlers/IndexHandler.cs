@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
+using System.Reflection;
 using JetBrains.ProjectModel;
 using ReSharperPlugin.Fathom.Formatting;
 using ReSharperPlugin.Fathom.Serialization;
@@ -12,12 +15,18 @@ public class IndexHandler : IRequestHandler
     private readonly ISolution _solution;
     private readonly ServerConfiguration _config;
     private readonly UeProjectService _ueProject;
+    private readonly AssetRefProxyService _assetRefProxy;
 
-    public IndexHandler(ISolution solution, ServerConfiguration config, UeProjectService ueProject)
+    private static readonly Lazy<string> HtmlTemplate = new Lazy<string>(LoadHtmlTemplate);
+    private static readonly Lazy<string> LogoBase64 = new Lazy<string>(LoadLogoBase64);
+
+    public IndexHandler(ISolution solution, ServerConfiguration config, UeProjectService ueProject,
+        AssetRefProxyService assetRefProxy)
     {
         _solution = solution;
         _config = config;
         _ueProject = ueProject;
+        _assetRefProxy = assetRefProxy;
     }
 
     public bool CanHandle(string path) => path == "" || path == "/" || path == "/health";
@@ -76,49 +85,51 @@ public class IndexHandler : IRequestHandler
             return;
         }
 
-        // Default: markdown
-        var md = new System.Text.StringBuilder();
-        md.AppendLine("# Fathom API");
-        md.AppendLine();
-        md.AppendLine($"Unreal Engine project: {(isUe ? "yes" : "no")}");
-        md.AppendLine();
-        md.AppendLine("All endpoints default to markdown output. Add `&format=json` for JSON.");
-        md.AppendLine();
+        // Default: branded HTML home page
+        var ueInfo = _ueProject.GetUeProjectInfo();
+        var editorConnected = _assetRefProxy.IsAvailable();
 
-        md.AppendLine("## Source Code");
-        md.AppendLine();
-        md.AppendLine("- `GET /files` - List all source files in the solution (JSON only). For C++ class discovery, prefer `/classes`.");
-        md.AppendLine("- `GET /classes` - List game C++ classes with header/source pairs and base class. Optional: `&search=term`, `&base=ACharacter`.");
-        md.AppendLine("- `GET /describe_code?file=path` - Structural description of source file(s). Multiple: `&file=a&file=b`. `&debug=true` for diagnostics.");
-        md.AppendLine("- `GET /inspect?file=path` - Run code inspection on file(s). Multiple: `&file=a&file=b`. `&debug=true` for diagnostics.");
-        md.AppendLine();
+        var projectName = "";
+        if (!string.IsNullOrEmpty(ueInfo.UProjectPath))
+            projectName = Path.GetFileNameWithoutExtension(ueInfo.UProjectPath);
 
-        md.AppendLine("## Unreal Engine 5");
-        md.AppendLine();
-        md.AppendLine("- `GET /blueprints?class=ClassName` - List Blueprint classes deriving from a C++ class. `&debug=true` for diagnostics.");
-        md.AppendLine("- `GET /bp?file=/Game/Path` - Blueprint composite info (audit + dependencies + referencers). Multiple: `&file=a&file=b`. Requires live UE editor for dependency data.");
-        md.AppendLine("- `GET /blueprint-audit` - Blueprint audit data. Returns 409 if stale, 503 if not ready.");
-        md.AppendLine("- `GET /blueprint-audit/refresh` - Trigger background refresh of Blueprint audit data.");
-        md.AppendLine("- `GET /blueprint-audit/status` - Check status of Blueprint audit refresh.");
-        md.AppendLine("- `GET /uassets?search=term` - Search or browse UAssets. `search` uses plain substrings (space-separated, all must match; no wildcards). Provide `search` and/or filters (`class`, `pathPrefix`). Optional: `&class=WidgetBlueprint`, `&pathPrefix=/Game`, `&limit=50`. Requires live UE editor.");
-        md.AppendLine("- `GET /uassets/show?package=/Game/Path` - Asset detail: registry metadata, disk size, tags, dependency/referencer counts. Multiple: `&package=...`. Requires live UE editor.");
-        md.AppendLine("- `GET /asset-refs/dependencies?asset=/Game/Path` - Asset dependencies. Requires live UE editor.");
-        md.AppendLine("- `GET /asset-refs/referencers?asset=/Game/Path` - Asset referencers. Requires live UE editor.");
-        md.AppendLine();
+        var html = HtmlTemplate.Value
+            .Replace("{{LOGO_BASE64}}", LogoBase64.Value)
+            .Replace("{{PORT}}", _config.Port.ToString())
+            .Replace("{{IS_UE}}", isUe ? "Yes" : "No")
+            .Replace("{{UE_BAR_VISIBILITY}}", isUe ? "" : "ue-hidden")
+            .Replace("{{UE_PROJECT_NAME}}", string.IsNullOrEmpty(projectName) ? "Unknown" : projectName)
+            .Replace("{{UE_ENGINE_VERSION}}", string.IsNullOrEmpty(ueInfo.EngineVersion) ? "Unknown" : ueInfo.EngineVersion)
+            .Replace("{{UE_EDITOR_STATUS}}", editorConnected ? "Connected" : "Not Running")
+            .Replace("{{UE_EDITOR_DOT_CLASS}}", editorConnected ? "" : "disconnected");
 
-        md.AppendLine("## Diagnostics");
-        md.AppendLine();
-        md.AppendLine("- `GET /health` - Server and solution status (JSON).");
-        md.AppendLine("- `GET /ue-project` - UE project detection info and engine path.");
-        md.AppendLine("- `GET /asset-refs/status` - UE editor connection status.");
-        md.AppendLine("- `GET /debug-psi-tree?file=path` - Raw PSI tree dump for a source file.");
-        md.AppendLine();
+        HttpHelpers.Respond(ctx, 200, "text/html; charset=utf-8", html);
+    }
 
-        md.AppendLine("## MCP");
-        md.AppendLine();
-        md.AppendLine("- `POST /mcp` - MCP Streamable HTTP endpoint (JSON-RPC). Supports `initialize`, `tools/list`, `tools/call`. 15 tools available.");
-        md.AppendLine("- Configure AI clients with `{\"url\": \"http://localhost:19876/mcp\"}` (Streamable HTTP transport).");
+    private static string LoadHtmlTemplate()
+    {
+        var asm = Assembly.GetExecutingAssembly();
+        using (var stream = asm.GetManifestResourceStream("ReSharperPlugin.Fathom.Resources.index.html"))
+        {
+            if (stream == null)
+                return "<html><body><h1>Fathom</h1><p>Home page template not found.</p></body></html>";
+            using (var reader = new StreamReader(stream))
+                return reader.ReadToEnd();
+        }
+    }
 
-        HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8", md.ToString());
+    private static string LoadLogoBase64()
+    {
+        var asm = Assembly.GetExecutingAssembly();
+        using (var stream = asm.GetManifestResourceStream("ReSharperPlugin.Fathom.Resources.fathom-logo-200.png"))
+        {
+            if (stream == null)
+                return "";
+            using (var ms = new MemoryStream())
+            {
+                stream.CopyTo(ms);
+                return Convert.ToBase64String(ms.ToArray());
+            }
+        }
     }
 }

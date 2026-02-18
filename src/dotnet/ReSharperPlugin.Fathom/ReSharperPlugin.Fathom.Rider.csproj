@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\index.html" LogicalName="ReSharperPlugin.Fathom.Resources.index.html" />
+    <EmbeddedResource Include="Resources\fathom-logo-200.png" LogicalName="ReSharperPlugin.Fathom.Resources.fathom-logo-200.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>

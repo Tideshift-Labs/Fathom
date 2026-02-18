@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\index.html" LogicalName="ReSharperPlugin.Fathom.Resources.index.html" />
+    <EmbeddedResource Include="Resources\fathom-logo-200.png" LogicalName="ReSharperPlugin.Fathom.Resources.fathom-logo-200.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="..\..\..\dependencies.json" PackagePath="" Pack="true" Visible="false" />
     <Content Include="bin\$(AssemblyName)\$(Configuration)\$(AssemblyName).dll" PackagePath="dotFiles" Pack="true" Visible="false" />
     <Content Include="bin\$(AssemblyName)\$(Configuration)\$(AssemblyName).pdb" PackagePath="dotFiles" Pack="true" Visible="false" />
