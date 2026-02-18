@@ -13,7 +13,7 @@ Two new MCP tools (`live_coding_compile` and `live_coding_status`) that route th
 ```
 MCP client (Claude Code, CLI, etc.)
   |
-  | JSON-RPC tool call
+  | JSON-RPC tool call (timeout: 130s)
   v
 FathomMcpServer (Rider plugin, port 19876)
   |
@@ -21,11 +21,11 @@ FathomMcpServer (Rider plugin, port 19876)
   v
 LiveCodingHandler (Rider plugin)
   |
-  | HTTP GET via AssetRefProxyService
+  | HTTP GET via AssetRefProxyService (timeout: 130s)
   v
 FFathomHttpServer (UE editor plugin, ports 19900-19910)
   |
-  | ILiveCodingModule API (in-process)
+  | ILiveCodingModule::Compile(WaitForCompletion) on game thread
   v
 LiveCodingConsole.exe (IPC, launched by UE)
 ```
@@ -34,29 +34,27 @@ LiveCodingConsole.exe (IPC, launched by UE)
 
 1. **MCP client** calls `live_coding_compile` tool (timeout: 130s)
 2. **FathomMcpServer** maps the tool to `GET /live-coding/compile` on the Rider HTTP server
-3. **LiveCodingHandler** (Rider) validates the UE project and editor connection, then proxies `GET /live-coding/compile` to the UE editor server
-4. **FFathomHttpServer** (UE) validates Live Coding state, dispatches `ILiveCodingModule::Compile(WaitForCompletion)` to a background thread, and returns `{"result":"CompileStarted"}` immediately
-5. **LiveCodingHandler** (Rider) receives the immediate response, then enters a polling loop: every 1 second, it calls `GET /live-coding/status` on UE and checks for a `lastCompile` object in the response
-6. When the compile finishes (or after 120s timeout), Rider returns the final result to the MCP client
+3. **LiveCodingHandler** (Rider) validates the UE project and editor connection, then proxies `GET /live-coding/compile` to the UE editor server using a dedicated `HttpClient` with 130s timeout
+4. **FFathomHttpServer** (UE) validates Live Coding state, sets up log capture, and calls `Compile(WaitForCompletion)` synchronously on the game thread
+5. The editor freezes during compile (same behavior as pressing Ctrl+Alt+F11)
+6. When compile finishes, UE returns the result with build logs in the HTTP response
+7. Rider forwards the response to the MCP client
 
-### Why async dispatch is required
+### Why synchronous compile on the game thread
 
-UE's `FHttpServerModule` extends `FTSTickerObjectBase`. All HTTP request handlers execute on the game thread via `Tick()`. If `Compile(WaitForCompletion)` ran synchronously in the handler, it would block the entire editor (UI, tick, other HTTP requests) for the duration of the compile (typically 2-30+ seconds). The async pattern avoids this:
+`ILiveCodingModule::Compile()` internally performs operations that require the game thread (e.g. texture compilation setup). Calling it from a background thread triggers `IsInGameThread()` assertions and crashes. UE's `FHttpServerModule` extends `FTSTickerObjectBase`, so all HTTP handlers already run on the game thread via `Tick()`.
 
-- The `/live-coding/compile` handler dispatches to `Async(EAsyncExecution::ThreadPool, ...)` and returns immediately
-- The background thread calls `Compile(WaitForCompletion)`, which communicates with `LiveCodingConsole.exe` via IPC
-- Shared state (`GCompileStateLock`) tracks the in-flight compile and stores the result
-- The `/live-coding/status` handler reads the shared state (quick lock, no blocking) and returns it
+This matches normal Live Coding behavior: when a developer presses Ctrl+Alt+F11 in the editor, the compile runs synchronously on the game thread and the editor freezes until it finishes. Our HTTP handler does the same thing.
 
 ### Timeout cascade
 
 ```
-MCP tool timeout:     130s (FathomMcpServer ToolDef.TimeoutMs)
-Rider poll loop:      120s (LiveCodingHandler.CompileTimeoutSeconds)
-Individual UE calls:  ~10s each (default HttpWebRequest timeout)
+MCP tool timeout:          130s (FathomMcpServer ToolDef.TimeoutMs)
+Rider compile HttpClient:  130s (LiveCodingHandler._compileClient)
+UE compile:                blocks for compile duration (typically 2-30s)
 ```
 
-The MCP timeout exceeds the Rider poll timeout, which in turn exceeds any individual UE HTTP call. This ensures clean error propagation: Rider returns a 504 timeout before MCP times out, and individual transient HTTP failures within the poll loop are retried silently.
+Both the MCP and Rider timeouts are set to 130s, which exceeds any realistic compile duration. If a compile takes longer than 130s, the HTTP request will time out and the client receives an error, but the compile continues in the editor.
 
 ## UE-Side Implementation
 
@@ -64,29 +62,14 @@ The MCP timeout exceeds the Rider poll timeout, which in turn exceeds any indivi
 
 | File | Role |
 |------|------|
-| `FathomHttpServerLiveCoding.cpp` | Handler implementations + compile state |
+| `FathomHttpServerLiveCoding.cpp` | Handler implementations + log capture |
 | `FathomHttpServer.cpp` | Route registration in `TryBind()` |
 | `FathomHttpServer.h` | Handler declarations |
 | `FathomUELink.Build.cs` | `LiveCoding` module dependency (Win64 only) |
 
-### Compile state (file-scoped globals)
-
-All protected by `GCompileStateLock` (`FCriticalSection`):
-
-| Variable | Type | Purpose |
-|----------|------|---------|
-| `GCompileInFlight` | `bool` | True while a compile is running on the background thread |
-| `GActiveLogCapture` | `TUniquePtr<FLiveCodingLogCapture>` | Captures `LogLiveCoding` lines during compile |
-| `GCompileStartTime` | `double` | `FPlatformTime::Seconds()` at compile start |
-| `GHasLastCompileResult` | `bool` | True after any compile has completed |
-| `GLastCompileResult` | `FString` | Result enum as string (Success, Failure, NoChanges, Cancelled) |
-| `GLastCompileResultText` | `FString` | Human-readable description |
-| `GLastCompileLogs` | `TArray<FString>` | Captured log lines from the compile |
-| `GLastCompileDurationMs` | `int32` | Compile wall-clock duration |
-
 ### Log capture
 
-`FLiveCodingLogCapture` is an `FOutputDevice` subclass registered with `GLog` during a compile. It captures lines where `Category == "LogLiveCoding"` into a thread-safe buffer (`FCriticalSection` + `TArray<FString>`). The background thread unregisters it and collects the lines after `Compile()` returns.
+`FLiveCodingLogCapture` is an `FOutputDevice` subclass registered with `GLog` before the compile call and unregistered after. It captures lines where `Category == "LogLiveCoding"` into a thread-safe buffer (`FCriticalSection` + `TArray<FString>`). The log capture is stack-allocated in the handler and lives for exactly the duration of the compile call.
 
 ### Platform guard
 
@@ -98,7 +81,7 @@ All Live Coding code is wrapped in `#if PLATFORM_WINDOWS ... #endif`. On non-Win
 
 | File | Role |
 |------|------|
-| `Handlers/LiveCodingHandler.cs` | HTTP handler (compile polling + status proxy) |
+| `Handlers/LiveCodingHandler.cs` | HTTP handler (compile proxy + status proxy) |
 | `InspectionHttpServer2.cs` | Handler registration |
 | `Mcp/FathomMcpServer.cs` | MCP tool definitions + per-tool timeout |
 
@@ -106,10 +89,10 @@ All Live Coding code is wrapped in `#if PLATFORM_WINDOWS ... #endif`. On non-Win
 
 Implements `IRequestHandler`. Routes:
 
-- **`/live-coding/compile`**: Triggers compile via proxy, then polls status until `lastCompile` appears
-- **`/live-coding/status`**: Simple proxy pass-through to UE
+- **`/live-coding/compile`**: Single blocking proxy call to UE using a dedicated `HttpClient` with 130s timeout. The UE side compiles synchronously and returns the result.
+- **`/live-coding/status`**: Simple proxy pass-through to UE.
 
-The handler uses `AssetRefProxyService` for UE server discovery (reads `Saved/Fathom/.fathom-ue-server.json` marker file) and HTTP proxying.
+The handler uses `AssetRefProxyService` for UE server discovery (reads `Saved/Fathom/.fathom-ue-server.json` marker file) and HTTP proxying. The `ProxyGetWithStatus` overload accepts a custom `HttpClient` for long-running requests.
 
 ### MCP tool definitions
 
@@ -120,19 +103,25 @@ The handler uses `AssetRefProxyService` for UE server discovery (reads `Saved/Fa
 
 ### Per-tool timeout support
 
-`ToolDef` gained a `TimeoutMs` field. `FathomMcpServer.InternalHttpGet` uses `HttpWebRequest` with per-request timeout (replacing the previous `WebClient` which only supported a global timeout). The compile tool uses 130s; all other tools use the default 10s.
+`ToolDef` has a `TimeoutMs` field. `FathomMcpServer.InternalHttpGet` uses `HttpWebRequest` with per-request timeout. The compile tool uses 130s; all other tools use the default 10s.
 
 ## Endpoint Contracts
 
 ### `GET /live-coding/compile` (UE)
 
-Returns immediately after dispatching the compile.
+Blocks for the duration of the compile, then returns the result.
 
-**Success (compile dispatched):**
+**Success:**
 ```json
 {
-  "result": "CompileStarted",
-  "resultText": "Live Coding compile initiated. Poll /live-coding/status for results."
+  "result": "Success",
+  "resultText": "Live coding succeeded",
+  "durationMs": 2340,
+  "logs": [
+    "Starting Live Coding compile.",
+    "Running link.exe @...",
+    "Live coding succeeded"
+  ]
 }
 ```
 
@@ -159,42 +148,20 @@ Returns immediately after dispatching the compile.
 {
   "hasStarted": true,
   "isEnabledForSession": true,
-  "isCompiling": false,
-  "compileInFlight": false,
-  "lastCompile": {
-    "result": "Success",
-    "resultText": "Live coding succeeded",
-    "logs": [
-      "Starting Live Coding compile.",
-      "Running link.exe @...",
-      "Live coding succeeded"
-    ],
-    "durationMs": 2340
-  }
+  "isCompiling": false
 }
 ```
-
-The `lastCompile` object is only present after a compile has completed. The `compileInFlight` bool indicates whether a background compile is currently running. `isCompiling` comes from `ILiveCodingModule::IsCompiling()` and may differ slightly in timing.
 
 ### Rider compile endpoint (proxied)
 
-The Rider `/live-coding/compile` endpoint blocks until the compile finishes (via polling). It returns the final `lastCompile` object directly:
-
-**JSON format:**
-```json
-{
-  "result": "Success",
-  "resultText": "Live coding succeeded",
-  "logs": ["..."],
-  "durationMs": 2340
-}
-```
+The Rider `/live-coding/compile` endpoint proxies the request to UE and blocks until the compile finishes. The response is the same JSON as the UE endpoint.
 
 **Markdown format (`?format=md`):**
 ```
 # Live Coding Compile
 
 **Result:** Success
+**Details:** Live coding succeeded
 **Duration:** 2.3s
 
 ## Build Log
@@ -212,8 +179,8 @@ Live coding succeeded
 | UE editor not running | Rider returns 503 with hint to start editor |
 | Live Coding not started | UE returns `NotStarted`, Rider passes through |
 | Compile already in progress | UE returns `AlreadyCompiling`, Rider passes through |
-| Editor disconnects mid-compile | Rider poll detects proxy failure, returns 502 |
-| Compile exceeds 120s | Rider returns 504 timeout (compile may still finish in editor) |
+| Editor disconnects mid-compile | Rider proxy call fails, returns 502 |
+| Compile exceeds 130s | HTTP timeout on Rider side, compile continues in editor |
 | No code changes | UE returns `NoChanges` result |
 | Non-Windows platform | UE returns 501 "only available on Windows" |
 | Non-UE project | Rider returns 404 before attempting proxy |
@@ -223,11 +190,11 @@ Live coding succeeded
 ```bash
 # UE endpoints (direct, ports 19900-19910)
 curl http://localhost:19900/live-coding/status
-curl http://localhost:19900/live-coding/compile
+curl http://localhost:19900/live-coding/compile    # blocks during compile
 
 # Rider proxy endpoints (port 19876)
 curl http://localhost:19876/live-coding/status
-curl http://localhost:19876/live-coding/compile          # blocks until done
+curl http://localhost:19876/live-coding/compile          # blocks during compile
 curl "http://localhost:19876/live-coding/compile?format=md"
 
 # MCP tools (via JSON-RPC or MCP client)

@@ -117,6 +117,14 @@ public class AssetRefProxyService
     /// </summary>
     public (string Body, int StatusCode) ProxyGetWithStatus(string path)
     {
+        return ProxyGetWithStatus(path, _httpClient);
+    }
+
+    /// <summary>
+    /// Proxy a GET request using a caller-supplied HttpClient (e.g. one with a longer timeout).
+    /// </summary>
+    public (string Body, int StatusCode) ProxyGetWithStatus(string path, HttpClient client)
+    {
         if (!TryReadMarker(out var port, out _))
         {
             return (null, 0);
@@ -126,7 +134,7 @@ public class AssetRefProxyService
         {
             var url = $"http://localhost:{port}/{path.TrimStart('/')}";
 #pragma warning disable VSTHRD002 // Safe: runs on thread pool thread, no SynchronizationContext
-            var response = _httpClient.GetAsync(url).GetAwaiter().GetResult();
+            var response = client.GetAsync(url).GetAwaiter().GetResult();
             var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 #pragma warning restore VSTHRD002
             return (body, (int)response.StatusCode);

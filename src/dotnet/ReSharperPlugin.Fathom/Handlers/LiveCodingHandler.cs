@@ -1,9 +1,8 @@
 using System;
-using System.Diagnostics;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
 using ReSharperPlugin.Fathom.Formatting;
 using ReSharperPlugin.Fathom.Services;
 
@@ -14,13 +13,21 @@ public class LiveCodingHandler : IRequestHandler
     private readonly UeProjectService _ueProject;
     private readonly AssetRefProxyService _proxy;
 
-    private const int CompileTimeoutSeconds = 120;
-    private const int PollIntervalMs = 1000;
+    /// <summary>
+    /// Separate HttpClient with a long timeout for the compile endpoint.
+    /// Compile blocks on the UE side for the duration of the build (typically 2-30s,
+    /// up to 120s for large changes).
+    /// </summary>
+    private readonly HttpClient _compileClient;
 
     public LiveCodingHandler(UeProjectService ueProject, AssetRefProxyService proxy)
     {
         _ueProject = ueProject;
         _proxy = proxy;
+        _compileClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(130)
+        };
     }
 
     public bool CanHandle(string path) =>
@@ -62,9 +69,11 @@ public class LiveCodingHandler : IRequestHandler
             return;
         }
 
-        // 1. Trigger compile (returns immediately from UE side)
-        var (startBody, startStatus) = _proxy.ProxyGetWithStatus("live-coding/compile");
-        if (startBody == null)
+        // Single blocking call to UE. The UE side compiles synchronously (same as
+        // Ctrl+Alt+F11) and returns the result with build logs when done.
+        var (body, statusCode) = _proxy.ProxyGetWithStatus("live-coding/compile", _compileClient);
+
+        if (body == null)
         {
             HttpHelpers.RespondWithFormat(ctx, format, 502,
                 "Failed to connect to UE editor server.\n\nThe editor may have just closed. Try again shortly.",
@@ -72,80 +81,11 @@ public class LiveCodingHandler : IRequestHandler
             return;
         }
 
-        // Check if UE returned an error (NotStarted, AlreadyCompiling)
-        try
-        {
-            using var startDoc = JsonDocument.Parse(startBody);
-            var startResult = startDoc.RootElement.TryGetProperty("result", out var r) ? r.GetString() : null;
-            if (startResult != "CompileStarted")
-            {
-                // Pass through the error response from UE
-                if (format == "md")
-                    HttpHelpers.Respond(ctx, startStatus, "text/markdown; charset=utf-8",
-                        FormatCompileAsMarkdown(startBody));
-                else
-                    HttpHelpers.Respond(ctx, startStatus, "application/json; charset=utf-8", startBody);
-                return;
-            }
-        }
-        catch
-        {
-            HttpHelpers.Respond(ctx, startStatus, "application/json; charset=utf-8", startBody);
-            return;
-        }
-
-        // 2. Poll /live-coding/status until lastCompile appears or timeout
-        var sw = Stopwatch.StartNew();
-        string compileResultJson = null;
-
-        while (sw.Elapsed < TimeSpan.FromSeconds(CompileTimeoutSeconds))
-        {
-            Thread.Sleep(PollIntervalMs);
-
-            if (!_proxy.IsAvailable())
-            {
-                HttpHelpers.RespondWithFormat(ctx, format, 502,
-                    "UE editor disconnected during compile.",
-                    new { error = "UE editor disconnected during compile." });
-                return;
-            }
-
-            var (statusBody, statusCode) = _proxy.ProxyGetWithStatus("live-coding/status");
-            if (statusBody == null)
-                continue; // transient failure, retry
-
-            try
-            {
-                using var doc = JsonDocument.Parse(statusBody);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("lastCompile", out var lastCompile))
-                {
-                    compileResultJson = lastCompile.GetRawText();
-                    break;
-                }
-            }
-            catch
-            {
-                // malformed response, retry
-            }
-        }
-
-        // 3. Return result
-        if (compileResultJson != null)
-        {
-            if (format == "md")
-                HttpHelpers.Respond(ctx, 200, "text/markdown; charset=utf-8",
-                    FormatCompileAsMarkdown(compileResultJson));
-            else
-                HttpHelpers.Respond(ctx, 200, "application/json; charset=utf-8", compileResultJson);
-        }
+        if (format == "md")
+            HttpHelpers.Respond(ctx, statusCode, "text/markdown; charset=utf-8",
+                FormatCompileAsMarkdown(body));
         else
-        {
-            HttpHelpers.RespondWithFormat(ctx, format, 504,
-                "Live Coding compile timed out after " + CompileTimeoutSeconds + "s.\n\nThe compile may still be running in the editor.",
-                new { error = "Live Coding compile timed out", hint = "The compile may still be running in the editor." });
-        }
+            HttpHelpers.Respond(ctx, statusCode, "application/json; charset=utf-8", body);
     }
 
     private void HandleStatus(HttpListenerContext ctx)
@@ -268,17 +208,6 @@ public class LiveCodingHandler : IRequestHandler
             sb.AppendLine($"**Has Started:** {(hasStarted ? "Yes" : "No")}");
             sb.AppendLine($"**Enabled for Session:** {(isEnabled ? "Yes" : "No")}");
             sb.AppendLine($"**Currently Compiling:** {(isCompiling ? "Yes" : "No")}");
-
-            if (root.TryGetProperty("lastCompile", out var lastCompile))
-            {
-                sb.AppendLine();
-                sb.AppendLine("## Last Compile");
-                var lastResult = lastCompile.TryGetProperty("result", out var lr) ? lr.GetString() : "?";
-                var lastDuration = lastCompile.TryGetProperty("durationMs", out var ld) ? ld.GetInt32() : 0;
-                sb.AppendLine($"**Result:** {lastResult}");
-                if (lastDuration > 0)
-                    sb.AppendLine($"**Duration:** {lastDuration / 1000.0:F1}s");
-            }
         }
         catch
         {
