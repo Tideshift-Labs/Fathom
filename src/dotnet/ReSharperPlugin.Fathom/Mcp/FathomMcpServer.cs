@@ -115,6 +115,15 @@ namespace ReSharperPlugin.Fathom.Mcp
                 new ToolParam("scope", "string", "Scope: all (default, includes engine) or user (project files only)"),
                 new ToolParam("limit", "integer", "Maximum results (default 100)")),
 
+            // Live Coding
+            new ToolDef("live_coding_compile",
+                "[UE5] Trigger a Live Coding (hot reload) compile. Returns compile result and build log output. Blocks until complete. Requires live UE editor with Live Coding enabled.",
+                "/live-coding/compile", timeoutMs: 130_000),
+
+            new ToolDef("live_coding_status",
+                "[UE5] Check Live Coding availability and compile state.",
+                "/live-coding/status"),
+
             // Diagnostics
             new ToolDef("get_ue_project_info",
                 "UE project detection info and engine path.",
@@ -264,11 +273,12 @@ namespace ReSharperPlugin.Fathom.Mcp
                 throw new ArgumentException("Unknown tool: " + toolName);
 
             var url = BuildInternalUrl(toolDef, argsEl);
+            var timeoutMs = toolDef.TimeoutMs;
 
             string responseText;
             try
             {
-                responseText = InternalHttpGet(url);
+                responseText = InternalHttpGet(url, timeoutMs);
             }
             catch (Exception ex)
             {
@@ -317,23 +327,24 @@ namespace ReSharperPlugin.Fathom.Mcp
             return sb.ToString();
         }
 
-        private static string InternalHttpGet(string url)
+        private static string InternalHttpGet(string url, int timeoutMs = 0)
         {
-            using (var client = new WebClient())
+            var request = WebRequest.CreateHttp(url);
+            request.Method = "GET";
+            if (timeoutMs > 0)
+                request.Timeout = timeoutMs;
+
+            try
             {
-                client.Encoding = Encoding.UTF8;
-                try
-                {
-                    return client.DownloadString(url);
-                }
-                catch (WebException wex) when (wex.Response is HttpWebResponse httpResp)
-                {
-                    using (var reader = new StreamReader(httpResp.GetResponseStream(), Encoding.UTF8))
-                    {
-                        var body = reader.ReadToEnd();
-                        return "HTTP " + (int)httpResp.StatusCode + ": " + body;
-                    }
-                }
+                using var response = (HttpWebResponse)request.GetResponse();
+                using var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8);
+                return reader.ReadToEnd();
+            }
+            catch (WebException wex) when (wex.Response is HttpWebResponse httpResp)
+            {
+                using var reader = new StreamReader(httpResp.GetResponseStream(), Encoding.UTF8);
+                var body = reader.ReadToEnd();
+                return "HTTP " + (int)httpResp.StatusCode + ": " + body;
             }
         }
 
@@ -350,12 +361,19 @@ namespace ReSharperPlugin.Fathom.Mcp
             public readonly string Description;
             public readonly string Endpoint;
             public readonly ToolParam[] Params;
+            public readonly int TimeoutMs;
 
             public ToolDef(string name, string description, string endpoint, params ToolParam[] parameters)
+                : this(name, description, endpoint, 0, parameters)
+            {
+            }
+
+            public ToolDef(string name, string description, string endpoint, int timeoutMs, params ToolParam[] parameters)
             {
                 Name = name;
                 Description = description;
                 Endpoint = endpoint;
+                TimeoutMs = timeoutMs;
                 Params = parameters.Length > 0 ? parameters : null;
             }
         }
