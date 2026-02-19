@@ -171,6 +171,20 @@ public class LiveCodingHandler : IRequestHandler
                     sb.AppendLine("```");
                 }
             }
+
+            if (root.TryGetProperty("buildErrors", out var buildErrors) &&
+                buildErrors.ValueKind == JsonValueKind.Array &&
+                buildErrors.GetArrayLength() > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("## Compiler Errors");
+                sb.AppendLine("```");
+                foreach (var line in buildErrors.EnumerateArray())
+                {
+                    sb.AppendLine(line.GetString() ?? "");
+                }
+                sb.AppendLine("```");
+            }
         }
         catch
         {
