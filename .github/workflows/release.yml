@@ -82,8 +82,9 @@ jobs:
             Write-Error "No .zip found in output/"
             exit 1
           }
-          curl.exe --fail-with-body -X POST `
+          curl.exe --fail-with-body -i `
             -H "Authorization: Bearer $env:PUBLISH_TOKEN" `
+            -F "pluginId=30185" `
             -F "file=@$($zip.FullName)" `
             -F "channel=Stable" `
-            "https://plugins.jetbrains.com/plugin/30185/uploadNewVersion"
+            "https://plugins.jetbrains.com/api/updates/upload"
