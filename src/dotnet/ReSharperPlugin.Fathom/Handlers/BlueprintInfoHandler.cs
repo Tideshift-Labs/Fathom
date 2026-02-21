@@ -91,11 +91,13 @@ public class BlueprintInfoHandler : IRequestHandler
         {
             var jsonResult = new BlueprintInfoJsonResult
             {
+                EditorAvailable = editorAvailable,
                 Blueprints = blueprintInfos.Select(b => new BlueprintInfoJsonEntry
                 {
                     PackagePath = b.PackagePath,
                     Audit = b.Audit?.Data,
                     AuditContent = b.Audit?.AuditContent,
+                    IsStale = b.Audit?.IsStale ?? false,
                     Dependencies = b.Dependencies,
                     Referencers = b.Referencers
                 }).ToList()
@@ -149,6 +151,14 @@ public class BlueprintInfoHandler : IRequestHandler
     private static string FormatAsMarkdown(List<BlueprintInfo> infos)
     {
         var sb = new StringBuilder();
+        var editorOffline = infos.Count > 0 && !infos[0].EditorAvailable;
+
+        if (editorOffline)
+        {
+            sb.AppendLine("> **Note:** UE editor is not running. Audit data below is from cache. " +
+                          "Dependencies and referencers require a live editor connection.");
+            sb.AppendLine();
+        }
 
         foreach (var info in infos)
         {
@@ -164,6 +174,8 @@ public class BlueprintInfoHandler : IRequestHandler
             sb.AppendLine("## Audit Data");
             if (!string.IsNullOrEmpty(info.Audit?.AuditContent))
             {
+                if (info.Audit.IsStale)
+                    sb.AppendLine("*Audit data may be outdated (source asset has changed since last audit).*");
                 sb.AppendLine(info.Audit.AuditContent.TrimEnd());
             }
             else
@@ -188,7 +200,7 @@ public class BlueprintInfoHandler : IRequestHandler
         if (!editorAvailable)
         {
             sb.Append("## ").AppendLine(title);
-            sb.AppendLine("UE editor not running. Start the editor with FathomUELink plugin to see asset references.");
+            sb.AppendLine("Requires live editor connection.");
             sb.AppendLine();
             return;
         }
@@ -242,6 +254,7 @@ public class BlueprintInfoHandler : IRequestHandler
 
     private class BlueprintInfoJsonResult
     {
+        public bool EditorAvailable { get; set; }
         public List<BlueprintInfoJsonEntry> Blueprints { get; set; }
     }
 
@@ -250,6 +263,7 @@ public class BlueprintInfoHandler : IRequestHandler
         public string PackagePath { get; set; }
         public Dictionary<string, object> Audit { get; set; }
         public string AuditContent { get; set; }
+        public bool IsStale { get; set; }
         public List<AssetRefEntry> Dependencies { get; set; }
         public List<AssetRefEntry> Referencers { get; set; }
     }
