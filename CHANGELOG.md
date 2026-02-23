@@ -7,10 +7,35 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [Unreleased]
 
 ## [0.6.1] - 2026-02-23
+- Version bump and re-publish (no functional changes)
 
 ## [0.6.0] - 2026-02-23
 
+### Added
+- Blueprint staleness indicators: `IsStale` and `EditorAvailable` fields in blueprint info JSON responses
+- Markdown banners for editor-offline state and stale audit data warnings in blueprint info output
+
+### Changed
+- Live Coding responses now surface compiler errors in a "Compiler Errors" markdown section when a patch fails
+- Shortened "no editor" messages for dependencies/referencers to "Requires live editor connection."
+
+### Fixed
+- Fixed JetBrains Marketplace upload endpoint in release workflow (switched to `/api/updates/upload` with explicit `pluginId`)
+
 ## [0.5.0] - 2026-02-18
+
+### Added
+- Live Coding (Hot Reload) via MCP and HTTP: `/live-coding/compile` and `/live-coding/status` endpoints let AI agents and HTTP clients trigger and monitor UE Live Coding compiles
+- `live_coding_compile` and `live_coding_status` MCP tools with per-tool timeout support (130s for compile)
+- Branded HTML home page at `/` with live status, feature cards, API endpoint table, and MCP config (replaces old markdown listing)
+
+### Changed
+- Build output switched from IntelliJ Build tool window to Run console to avoid plugin verification issues with `@ApiStatus.Internal` classes
+- `AssetRefProxyService` gained a `ProxyGetWithStatus` overload accepting a custom `HttpClient` for long-running requests
+- MCP server internals refactored from `WebClient` to `HttpWebRequest` to support per-tool timeouts
+
+### Removed
+- Deleted custom `BuildEvents.kt` (custom `OutputBuildEvent`/`FinishBuildEvent` implementations no longer needed)
 
 ## [0.4.0] - 2026-02-17
 
