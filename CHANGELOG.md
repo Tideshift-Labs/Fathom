@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [Unreleased]
 
 ## [0.6.1] - 2026-02-23
-- Version bump and re-publish (no functional changes)
+
+### Fixed
+- UE5 Plugin Crash fix for when we attempt to audit uassets with compile errors
 
 ## [0.6.0] - 2026-02-23
 
