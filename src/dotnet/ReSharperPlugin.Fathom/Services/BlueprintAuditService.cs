@@ -18,7 +18,7 @@ public class BlueprintAuditService
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
     /// Bump both together when the audit format changes.
     /// </summary>
-    private const int AuditSchemaVersion = 7;
+    private const int AuditSchemaVersion = 9;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 
@@ -83,6 +83,7 @@ public class BlueprintAuditService
         var dataTables = new List<BlueprintAuditEntry>();
         var dataAssets = new List<BlueprintAuditEntry>();
         var structures = new List<BlueprintAuditEntry>();
+        var controlRigs = new List<BlueprintAuditEntry>();
         var staleCount = 0;
         var errorCount = 0;
 
@@ -96,6 +97,7 @@ public class BlueprintAuditService
                 case "DataTable": dataTables.Add(entry); break;
                 case "DataAsset": dataAssets.Add(entry); break;
                 case "Structure": structures.Add(entry); break;
+                case "ControlRig": controlRigs.Add(entry); break;
                 default: blueprints.Add(entry); break;
             }
 
@@ -103,7 +105,7 @@ public class BlueprintAuditService
             if (entry.Error != null) errorCount++;
         }
 
-        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count + structures.Count;
+        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count + structures.Count + controlRigs.Count;
 
         if (totalCount == 0)
         {
@@ -120,7 +122,7 @@ public class BlueprintAuditService
             DateTime? lastRefresh;
             lock (_auditLock) { lastRefresh = _lastAuditRefresh; }
 
-            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets).Concat(structures);
+            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets).Concat(structures).Concat(controlRigs);
             return new BlueprintAuditResult
             {
                 Status = "stale",
@@ -131,6 +133,7 @@ public class BlueprintAuditService
                 DataTableCount = dataTables.Count,
                 DataAssetCount = dataAssets.Count,
                 StructureCount = structures.Count,
+                ControlRigCount = controlRigs.Count,
                 Action = "Call /blueprint-audit/refresh to update audit data",
                 LastRefresh = lastRefresh?.ToString("o"),
                 StaleExamples = allEntries.Where(b => b.IsStale).Take(_config.MaxStaleExamples).ToList()
@@ -149,11 +152,13 @@ public class BlueprintAuditService
             DataTableCount = dataTables.Count,
             DataAssetCount = dataAssets.Count,
             StructureCount = structures.Count,
+            ControlRigCount = controlRigs.Count,
             LastRefresh = refresh?.ToString("o"),
             Blueprints = blueprints,
             DataTables = dataTables,
             DataAssets = dataAssets,
-            Structures = structures
+            Structures = structures,
+            ControlRigs = controlRigs
         };
     }
 
@@ -433,6 +438,7 @@ public class BlueprintAuditService
         if (data == null) return "Blueprint";
         if (data.ContainsKey("RowStruct")) return "DataTable";
         if (data.ContainsKey("ClassPath")) return "DataAsset";
+        if (data.TryGetValue("BlueprintType", out var bt) && bt?.ToString() == "ControlRig") return "ControlRig";
         if (data.ContainsKey("ParentClass")) return "Blueprint";
         return "Structure";
     }

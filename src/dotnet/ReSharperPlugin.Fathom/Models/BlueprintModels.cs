@@ -203,6 +203,16 @@ public class BlueprintClassInfo
         public int StructureCount { get; set; }
 
         /// <summary>
+        /// List of ControlRig audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> ControlRigs { get; set; }
+
+        /// <summary>
+        /// Number of ControlRig audit entries.
+        /// </summary>
+        public int ControlRigCount { get; set; }
+
+        /// <summary>
         /// Examples of stale entries (when status is "stale", first 10).
         /// </summary>
         public List<BlueprintAuditEntry> StaleExamples { get; set; }

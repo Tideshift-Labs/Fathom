@@ -21,6 +21,8 @@ public static class AuditMarkdownFormatter
             sb.Append("**DataAssets:** ").AppendLine(result.DataAssetCount.ToString());
         if (result.StructureCount > 0)
             sb.Append("**Structures:** ").AppendLine(result.StructureCount.ToString());
+        if (result.ControlRigCount > 0)
+            sb.Append("**ControlRigs:** ").AppendLine(result.ControlRigCount.ToString());
         if (result.ErrorCount > 0)
             sb.Append("**Errors:** ").AppendLine(result.ErrorCount.ToString());
         sb.AppendLine();
@@ -59,6 +61,16 @@ public static class AuditMarkdownFormatter
         {
             sb.AppendLine("## Structures");
             foreach (var e in result.Structures.OrderBy(b => b.Name))
+            {
+                FormatEntryLine(sb, e);
+            }
+            sb.AppendLine();
+        }
+
+        if (result.ControlRigs != null && result.ControlRigs.Count > 0)
+        {
+            sb.AppendLine("## ControlRigs");
+            foreach (var e in result.ControlRigs.OrderBy(b => b.Name))
             {
                 FormatEntryLine(sb, e);
             }
