@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- Control Rig audit support: on-save, stale check, and commandlet paths now gather and serialize Control Rig node graphs (URigVMGraph/URigVMNode/URigVMPin/URigVMLink)
+- New POD structs for Control Rig audit data: FRigVMPinAuditData, FRigVMNodeAuditData, FRigVMEdgeAuditData, FRigVMGraphAuditData, FControlRigAuditData
+- Rider plugin: ControlRig categorization in audit results, InferAssetType, formatter, and MCP tool descriptions
+- ControlRig and RigVM plugin dependencies in FathomUELink.uplugin and Build.cs
+
+### Changed
+- Audit schema version bumped to v9 (both UE and Rider sides)
+- Removed ControlRig/RigVM exclusion from IsSupportedBlueprintClass (loading is now safe with modules linked)
+
 ## [0.7.0] - 2026-02-24
 
 ## [0.6.2] - 2026-02-23
