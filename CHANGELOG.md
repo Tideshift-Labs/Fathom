@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-02-26
+
 ### Added
 - Control Rig audit support: on-save, stale check, and commandlet paths now gather and serialize Control Rig node graphs (URigVMGraph/URigVMNode/URigVMPin/URigVMLink)
 - New POD structs for Control Rig audit data: FRigVMPinAuditData, FRigVMNodeAuditData, FRigVMEdgeAuditData, FRigVMGraphAuditData, FControlRigAuditData
