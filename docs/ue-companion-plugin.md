@@ -105,6 +105,21 @@ The Rider plugin detects the companion through two mechanisms:
 1. Looks for `Saved/Fathom/Audit/v<N>/Blueprints/`. If `.md` files exist, reads them.
 2. If it needs to refresh, shells out to the commandlet. If it fails with "unknown commandlet" or similar, sets a `_commandletMissing` flag. Subsequent requests return HTTP 501 with installation instructions rather than repeatedly failing.
 
+### Install locations and shadowing
+
+The companion plugin can be installed to two locations:
+
+| Location | Path | Use case |
+|----------|------|----------|
+| Engine | `{EnginePath}/Plugins/Marketplace/Developer/FathomUELink` | Shared across all projects using that engine version |
+| Game | `{ProjectDir}/Plugins/FathomUELink` | Project-specific install |
+
+**UE plugin load order**: Unreal Engine loads Game plugins before Engine plugins. If the same plugin exists in both locations, the Game copy takes precedence and the Engine copy is ignored.
+
+This creates a shadowing risk: if a user has an outdated Game copy and installs a fresh version to Engine, the stale Game copy still wins at load time. To prevent this, `CompanionPluginService.Install("Engine")` automatically removes any existing Game copy before proceeding. The removal is best-effort; if it fails (e.g., permissions), the Engine install still continues and a warning is logged.
+
+Installing to Game does not remove the Engine copy, since the Game version takes precedence anyway.
+
 ### What each side covers
 
 | Concern | Rider plugin | UE companion plugin |

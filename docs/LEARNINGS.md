@@ -466,6 +466,12 @@ notification.addAction(NotificationAction.createSimple("Do Thing") {
 
 Note: `project.solution.protocol` is nullable in the Kotlin API. Always use `?: return` or `?.scheduler?.queue` to guard against null.
 
+### UE plugin load order: Game shadows Engine
+
+Unreal Engine loads Game-level plugins (`{ProjectDir}/Plugins/`) before Engine-level plugins (`{EnginePath}/Plugins/Marketplace/`). If the same plugin exists in both locations, the Game copy wins and the Engine copy is ignored entirely.
+
+This means installing a fresh version to Engine while a stale Game copy exists is useless. The stale Game copy shadows the new Engine copy. `CompanionPluginService.Install("Engine")` handles this by removing the Game copy first.
+
 ---
 
 ## Component Registration

@@ -95,6 +95,9 @@ public class CompanionPluginService
 
     /// <summary>
     /// Installs the companion plugin to the specified location ("Engine" or "Game").
+    /// When installing to Engine, any existing Game copy is removed to prevent
+    /// UE's plugin loader from shadowing the Engine version (Game takes precedence
+    /// in UE's load order, so a stale Game copy would hide the fresh Engine copy).
     /// </summary>
     public (bool success, string message) Install(string location)
     {
@@ -129,6 +132,14 @@ public class CompanionPluginService
                 Directory.Delete(targetDir, recursive: true);
             }
 
+            // When installing to Engine, remove any Game copy so it cannot shadow
+            // the Engine version. UE loads Game plugins before Engine plugins, so
+            // a leftover Game copy would take precedence and hide the new install.
+            if (string.Equals(location, "Engine", StringComparison.OrdinalIgnoreCase))
+            {
+                RemoveShadowingGameCopy();
+            }
+
             // Extract ZIP contents into target directory.
             // The ZIP root contains the plugin files directly (no wrapper folder),
             // so we extract into the target directory.
@@ -155,6 +166,28 @@ public class CompanionPluginService
         {
             Log.Error(ex, "CompanionPluginService.Install failed");
             return (false, "Install failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Removes the Game-level companion plugin copy if it exists. Called when
+    /// installing to Engine so the Game copy cannot shadow the Engine version.
+    /// Failures are logged but do not abort the Engine install.
+    /// </summary>
+    private void RemoveShadowingGameCopy()
+    {
+        try
+        {
+            var gameDir = GetGamePluginDir();
+            if (gameDir != null && Directory.Exists(gameDir))
+            {
+                Log.Info($"CompanionPluginService: removing Game copy at {gameDir} to prevent shadowing Engine install");
+                Directory.Delete(gameDir, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"CompanionPluginService: failed to remove Game copy (Engine install will proceed): {ex.Message}");
         }
     }
 
