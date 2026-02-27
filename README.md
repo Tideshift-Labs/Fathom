@@ -18,6 +18,10 @@
 
 Fathom is a free, open-source plugin that helps AI coding assistants better understand your Unreal Engine 5 C++ projects. Whether you use Claude, Gemini, Codex, or any other LLM, Fathom gives them the right project context at the right time, reducing hallucinations and increasing your productivity.
 
+<p align="center">
+  <img src="docs/images/flowchart.png" alt="Fathom architecture flowchart showing LLM connecting through MCP to Unreal Engine and JetBrains Rider" width="600">
+</p>
+
 ## Why Fathom?
 
 Unreal Engine projects are more than just C++ code. They include various binary files that are linked to the C++ code. Without understanding what's happening "in engine", LLMs working on UE5 C++ projects frequently hallucinate class names, miss Blueprint relationships, and produce code that doesn't match your project's actual structure. They can only see the files you feed them, and they have no way to query your project as a whole.
@@ -51,7 +55,7 @@ Blueprint and asset features require the [Fathom UE Link](https://github.com/Tid
 
 ## Connecting Your AI Assistant
 
-Fathom exposes an MCP endpoint at `http://localhost:19876/mcp` (streamable HTTP transport). The port defaults to `19876` and can be changed in Rider under **Settings > Tools > Fathom**.
+Fathom exposes an MCP endpoint at `http://localhost:19876/mcp` (streamable HTTP transport). The port defaults to `19876` and can be changed in Rider under **Settings > Tools > Fathom**. If the configured port is already in use (e.g. by another Rider instance), Fathom automatically tries up to 10 consecutive ports.
 
 Some tools are auto-configured on startup. If your tool was not configured automatically, follow the manual instructions below.
 
