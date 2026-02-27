@@ -120,6 +120,11 @@ namespace ReSharperPlugin.Fathom
                             // Handle companion plugin build requests from frontend
                             model.BuildCompanionPlugin.Advise(lifetime,
                                 _ => _companionOrchestrator.HandleBuildRequest(model));
+
+                            // Schedule on-boot staleness check and companion plugin detection.
+                            // Must run here (not in StartServer) so that model and _rdScheduler
+                            // are guaranteed non-null when the boot check fires the RD sink.
+                            _bootChecks.Run(model, _rdScheduler);
                         }
                         catch (Exception ex)
                         {
@@ -225,9 +230,6 @@ namespace ReSharperPlugin.Fathom
                         _rdScheduler.Queue(() =>
                             model.ServerStatus.Fire(new ServerStatus(true, port,
                                 $"Listening on http://localhost:{port}/")));
-
-                    // Schedule on-boot staleness check and companion plugin detection
-                    _bootChecks.Run(model, _rdScheduler);
                 }
                 catch (Exception ex)
                 {
