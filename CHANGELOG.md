@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - [UE5] Audit file version bumped to v10.
 - Added flowchart to README.md
 - Fixed companion plugin notification balloons never appearing. The RD `sink` event fired before `FathomHost` (PostStartupActivity) registered its advise, so the notification was silently lost. Moved notification logic to `FathomStatusBarWidget.install()` which runs early enough to catch the event.
+- Fixed boot-time companion plugin detection not triggering the status bar icon or notification bubble. The `BootCheckOrchestrator` was called before the RD scheduler was initialized, so the `companionPluginStatus` sink was never fired despite successful detection.
+- Fixed "Install to Engine" leaving a stale Game copy that would shadow the Engine version. UE loads Game plugins before Engine plugins, so an outdated Game copy silently overrode a freshly installed Engine copy. The install logic now removes the Game copy when targeting Engine.
 
 ### Refactoring & Internals
 - Renamed `InspectionHttpServer2` to `FathomRiderHttpServer` and split into three focused files: `CompanionPluginOrchestrator` (install/build workflows), `McpConfigWriter` (MCP config I/O), and the slimmed-down server class
