@@ -60,7 +60,7 @@ public FathomMcpServer(
     ServerConfiguration config)
 ```
 
-Update the instantiation in `InspectionHttpServer2.StartServer()` (line 209)
+Update the instantiation in `FathomRiderHttpServer.StartServer()`
 to pass these services instead of just `port`.
 
 ### 2. Replace `HandleToolsCall` dispatch
@@ -167,7 +167,7 @@ private class ToolDef
 | File | Change |
 |------|--------|
 | `Mcp/FathomMcpServer.cs` | Major rewrite: inject services, direct dispatch, remove HTTP proxy code |
-| `InspectionHttpServer2.cs` | Update `FathomMcpServer` instantiation (line ~209) |
+| `FathomRiderHttpServer.cs` | Update `FathomMcpServer` instantiation in `CreateHandlers()` |
 
 No changes to handlers, services, or `McpHandler.cs` (it still receives
 JSON-RPC and delegates to `FathomMcpServer`).

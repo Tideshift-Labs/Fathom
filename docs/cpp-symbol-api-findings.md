@@ -460,7 +460,7 @@ Two design decisions address this:
 
 ## Debug Endpoints
 
-The file `src/dotnet/ReSharperPlugin.Fathom/Handlers/DebugSymbolHandler.cs` contains temporary debug endpoints wired into `InspectionHttpServer2.cs`:
+The file `src/dotnet/ReSharperPlugin.Fathom/Handlers/DebugSymbolHandler.cs` contains temporary debug endpoints wired into `FathomRiderHttpServer.cs`:
 
 | Endpoint | Purpose | Status |
 |---|---|---|
@@ -503,7 +503,7 @@ Filter/sort results: `CppClassSymbol` before `CppFwdClassSymbol`. Deduplicate by
 
 - `Handlers/SymbolsHandler.cs` for `GET /symbols`, `GET /symbols/declaration`, `GET /symbols/inheritors`
 - `Models/SymbolModels.cs` for response DTOs
-- Wire into `InspectionHttpServer2.cs` and `FathomMcpServer.cs`
+- Wire into `FathomRiderHttpServer.cs` and `FathomMcpServer.cs`
 
 ### Step 3: Test inheritors
 

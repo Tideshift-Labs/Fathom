@@ -82,7 +82,7 @@ All Live Coding code is wrapped in `#if PLATFORM_WINDOWS ... #endif`. On non-Win
 | File | Role |
 |------|------|
 | `Handlers/LiveCodingHandler.cs` | HTTP handler (compile proxy + status proxy) |
-| `InspectionHttpServer2.cs` | Handler registration |
+| `FathomRiderHttpServer.cs` | Handler registration |
 | `Mcp/FathomMcpServer.cs` | MCP tool definitions + per-tool timeout |
 
 ### LiveCodingHandler

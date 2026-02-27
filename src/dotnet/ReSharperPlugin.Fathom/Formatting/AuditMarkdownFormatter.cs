@@ -9,6 +9,13 @@ public static class AuditMarkdownFormatter
     public static string FormatAuditResult(BlueprintAuditResult result)
     {
         var sb = new StringBuilder();
+
+        if (!string.IsNullOrEmpty(result.VersionNote))
+        {
+            sb.Append("> Note: ").AppendLine(result.VersionNote);
+            sb.AppendLine();
+        }
+
         sb.AppendLine("# Asset Audit");
         sb.AppendLine();
         sb.AppendLine("**Status:** Fresh (all data up-to-date)");

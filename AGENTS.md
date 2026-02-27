@@ -34,6 +34,7 @@ When the Rider plugin spawns `UnrealEditor-Cmd.exe -run=BlueprintAudit`, it look
 
 - **Audit schema version** must match between `BlueprintAuditService.AuditSchemaVersion` (this repo) and `FBlueprintAuditor::AuditSchemaVersion` in the [Fathom-UnrealEngine](https://github.com/Tideshift-Labs/Fathom-UnrealEngine) repo. Bump both together.
 - **Audit output path**: `Saved/Fathom/Audit/v<N>/Blueprints/...`. Version segment must match on both sides.
+- **Audit version manifest**: `BlueprintAuditService.ResolveAuditDir()` reads `Saved/Fathom/audit-manifest.json` (written by the UE plugin) to discover the correct version directory. Falls back to the hardcoded `v<N>` path when the manifest is absent, preserving backward compatibility.
 
 ## Build
 

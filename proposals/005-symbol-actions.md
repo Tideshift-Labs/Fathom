@@ -315,7 +315,7 @@ GetDeclaration(string symbolName, string containingType, int contextLines)
 | Other | `symbol` | Yes |
 
 **Wiring:**
-- Add `SymbolSearchService` as a field on `InspectionHttpServer2`
+- Add `SymbolSearchService` as a field on `FathomRiderHttpServer`
 - Add `SymbolsHandler` to the `_handlers` array
 - Add MCP tool definitions to `FathomMcpServer.Tools`
 
@@ -392,7 +392,7 @@ Combines:
 
 | File | Change |
 |---|---|
-| `InspectionHttpServer2.cs` | Add `SymbolSearchService` field, wire in constructor, add `SymbolsHandler` to `_handlers` array |
+| `FathomRiderHttpServer.cs` | Add `SymbolSearchService` field, wire in constructor, add `SymbolsHandler` to `_handlers` array |
 | `Mcp/FathomMcpServer.cs` | Add `ToolDef` entries for symbol tools |
 
 ### Files to remove (after verification)

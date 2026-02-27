@@ -1,6 +1,10 @@
 package com.tideshiftlabs.fathom
 
 import com.intellij.ide.BrowserUtil
+import com.intellij.notification.Notification
+import com.intellij.notification.NotificationAction
+import com.intellij.notification.NotificationType
+import com.intellij.notification.Notifications
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.invokeLater
@@ -31,6 +35,7 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
 
     companion object {
         const val ID = "FathomStatusBarWidget"
+        private const val NOTIFICATION_GROUP_ID = "Fathom.CompanionPlugin"
     }
 
     private var statusBar: StatusBar? = null
@@ -60,6 +65,7 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
                 actionInProgress = false
                 invokeLater {
                     this.statusBar?.updateWidget(ID)
+                    showCompanionNotification(info, protocol, model)
                 }
             }
         }
@@ -182,7 +188,7 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
                 }
 
                 val filteredLines = logFile.useLines { lines ->
-                    lines.filter { it.contains("Fathom") }.toList()
+                    lines.filter { it.contains("Fathom") || it.contains("CompanionPlugin") }.toList()
                 }
 
                 if (filteredLines.isEmpty()) {
@@ -263,6 +269,84 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
                 e.presentation.isEnabled = !disabled
             }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+        }
+    }
+
+    private fun showCompanionNotification(
+        info: CompanionPluginInfo,
+        protocol: com.jetbrains.rd.framework.IProtocol,
+        model: com.jetbrains.rd.ide.model.FathomModel
+    ) {
+        val notification = when (info.status) {
+            CompanionPluginStatus.NotInstalled -> {
+                Notification(NOTIFICATION_GROUP_ID, "Fathom UE plugin not installed", info.message, NotificationType.WARNING).apply {
+                    isImportant = true
+                    addAction(NotificationAction.createSimple("Install to Engine") {
+                        expire()
+                        protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                    })
+                    addAction(NotificationAction.createSimple("Install to Game") {
+                        expire()
+                        protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
+                    })
+                }
+            }
+            CompanionPluginStatus.Outdated -> {
+                Notification(NOTIFICATION_GROUP_ID, "Fathom UE plugin outdated", info.message, NotificationType.WARNING).apply {
+                    isImportant = true
+                    when (info.installLocation) {
+                        "Engine" -> {
+                            addAction(NotificationAction.createSimple("Update") {
+                                expire()
+                                protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                            })
+                        }
+                        "Game" -> {
+                            addAction(NotificationAction.createSimple("Update") {
+                                expire()
+                                protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
+                            })
+                            addAction(NotificationAction.createSimple("Install to Engine") {
+                                expire()
+                                protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                            })
+                        }
+                        "Both" -> {
+                            addAction(NotificationAction.createSimple("Update Engine") {
+                                expire()
+                                protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                            })
+                            addAction(NotificationAction.createSimple("Update Game") {
+                                expire()
+                                protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
+                            })
+                        }
+                        else -> {
+                            addAction(NotificationAction.createSimple("Install") {
+                                expire()
+                                protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
+                            })
+                        }
+                    }
+                }
+            }
+            CompanionPluginStatus.Installed -> {
+                Notification(NOTIFICATION_GROUP_ID, "Fathom UE plugin installed", info.message, NotificationType.INFORMATION).apply {
+                    addAction(NotificationAction.createSimple("Build Now") {
+                        expire()
+                        protocol.scheduler.queue { model.buildCompanionPlugin.fire(Unit) }
+                    })
+                }
+            }
+            CompanionPluginStatus.UpToDate -> {
+                if (info.message.isNotBlank()) {
+                    Notification(NOTIFICATION_GROUP_ID, "Fathom UE plugin", info.message, NotificationType.INFORMATION)
+                } else null
+            }
+        }
+
+        if (notification != null) {
+            Notifications.Bus.notify(notification, project)
         }
     }
 }

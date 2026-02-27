@@ -216,6 +216,11 @@ public class BlueprintClassInfo
         /// Examples of stale entries (when status is "stale", first 10).
         /// </summary>
         public List<BlueprintAuditEntry> StaleExamples { get; set; }
+
+        /// <summary>
+        /// Info note when the companion plugin's audit schema version differs from what Rider expects.
+        /// </summary>
+        public string VersionNote { get; set; }
     }
 
     /// <summary>

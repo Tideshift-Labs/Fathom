@@ -432,6 +432,21 @@ override suspend fun execute(project: Project) {
 }
 ```
 
+### Sink/signal timing: advise must be registered before the event fires
+
+RD `sink` and `signal` primitives are fire-and-forget. Unlike `property`, they do **not** store their last value. If the backend fires a `sink` event before the frontend registers `.advise()`, the event is silently lost.
+
+This bit us with `companionPluginStatus` (a `sink`). The backend fires it ~7 seconds after boot. `FathomStatusBarWidget.install()` runs during status bar creation (early) and catches it. But `FathomHost.execute()` (a `PostStartupActivity`) runs much later and misses it entirely. The notification balloon never appeared.
+
+**Rule:** For `sink`/`signal` events that fire during startup, register the advise in a component that initializes early (e.g., `StatusBarWidget.install()`, `SolutionComponent`). Do not rely on `PostStartupActivity` for time-sensitive `sink` events.
+
+| RD primitive | Stores last value? | Late advise gets current value? |
+|---|---|---|
+| `property` | Yes | Yes |
+| `sink` | No | No |
+| `signal` | No | No |
+| `source` | No | No |
+
 **Notification action callbacks run on the EDT**, not the protocol thread. Any `model.fire()` inside a `NotificationAction` must be wrapped:
 
 ```kotlin

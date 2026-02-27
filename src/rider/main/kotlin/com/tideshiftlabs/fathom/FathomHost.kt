@@ -6,21 +6,23 @@ import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.ui.RunContentManager
-import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
 import com.intellij.notification.Notifications
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
-import com.jetbrains.rd.ide.model.CompanionPluginStatus
 import com.jetbrains.rd.ide.model.fathomModel
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
 import com.jetbrains.rider.projectView.solution
 import java.util.concurrent.atomic.AtomicReference
 
 class FathomHost : ProjectActivity {
+
+    companion object {
+        private const val GROUP_ID = "Fathom.CompanionPlugin"
+    }
 
     override suspend fun execute(project: Project) {
         val solution = project.solution
@@ -43,108 +45,17 @@ class FathomHost : ProjectActivity {
         // Listen for MCP config provisioning status
         protocol.scheduler.queue {
             model.mcpConfigStatus.advise(lifetimeDef.lifetime) { message ->
-                val group = NotificationGroupManager.getInstance()
-                    .getNotificationGroup("Fathom.CompanionPlugin") ?: return@advise
-                val notification = group.createNotification(
-                    "Fathom MCP configured",
-                    message,
-                    NotificationType.INFORMATION
-                )
-                Notifications.Bus.notify(notification, project)
-            }
-        }
-
-        // Listen for companion plugin status from backend (advise must run on protocol scheduler)
-        protocol.scheduler.queue {
-            model.companionPluginStatus.advise(lifetimeDef.lifetime) { info ->
-                val group = NotificationGroupManager.getInstance()
-                    .getNotificationGroup("Fathom.CompanionPlugin") ?: return@advise
-
-                when (info.status) {
-                    CompanionPluginStatus.NotInstalled -> {
-                        val notification = group.createNotification(
-                            "Fathom UE plugin not installed",
-                            info.message,
-                            NotificationType.WARNING
-                        )
-                        notification.addAction(NotificationAction.createSimple("Install to Engine") {
-                            notification.expire()
-                            protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
-                        })
-                        notification.addAction(NotificationAction.createSimple("Install to Game") {
-                            notification.expire()
-                            protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
-                        })
-                        Notifications.Bus.notify(notification, project)
-                    }
-                    CompanionPluginStatus.Outdated -> {
-                        val notification = group.createNotification(
-                            "Fathom UE plugin outdated",
-                            info.message,
-                            NotificationType.WARNING
-                        )
-                        // Offer update for wherever it's currently installed
-                        when (info.installLocation) {
-                            "Engine" -> {
-                                notification.addAction(NotificationAction.createSimple("Update") {
-                                    notification.expire()
-                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
-                                })
-                            }
-                            "Game" -> {
-                                notification.addAction(NotificationAction.createSimple("Update") {
-                                    notification.expire()
-                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
-                                })
-                                notification.addAction(NotificationAction.createSimple("Install to Engine") {
-                                    notification.expire()
-                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
-                                })
-                            }
-                            "Both" -> {
-                                notification.addAction(NotificationAction.createSimple("Update Engine") {
-                                    notification.expire()
-                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
-                                })
-                                notification.addAction(NotificationAction.createSimple("Update Game") {
-                                    notification.expire()
-                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Game") }
-                                })
-                            }
-                            else -> {
-                                notification.addAction(NotificationAction.createSimple("Install") {
-                                    notification.expire()
-                                    protocol.scheduler.queue { model.installCompanionPlugin.fire("Engine") }
-                                })
-                            }
-                        }
-                        Notifications.Bus.notify(notification, project)
-                    }
-                    CompanionPluginStatus.Installed -> {
-                        val notification = group.createNotification(
-                            "Fathom UE plugin installed",
-                            info.message,
-                            NotificationType.INFORMATION
-                        )
-                        notification.addAction(NotificationAction.createSimple("Build Now") {
-                            notification.expire()
-                            protocol.scheduler.queue { model.buildCompanionPlugin.fire(Unit) }
-                        })
-                        Notifications.Bus.notify(notification, project)
-                    }
-                    CompanionPluginStatus.UpToDate -> {
-                        if (info.message.isNotBlank()) {
-                            val notification = group.createNotification(
-                                "Fathom UE plugin",
-                                info.message,
-                                NotificationType.INFORMATION
-                            )
-                            Notifications.Bus.notify(notification, project)
-                        }
-                    }
+                ApplicationManager.getApplication().invokeLater {
+                    val notification = Notification(GROUP_ID, "Fathom MCP configured", message, NotificationType.INFORMATION)
+                    Notifications.Bus.notify(notification, project)
                 }
             }
         }
+
+        // NOTE: Companion plugin status notifications are handled in
+        // FathomStatusBarWidget.install(), which runs earlier than this
+        // PostStartupActivity. The RD sink fires before execute() runs,
+        // so an advise registered here would miss the event.
 
         // Build output streaming to Run console
         val consoleRef = AtomicReference<ConsoleView?>(null)

@@ -10,12 +10,14 @@ A companion Unreal Engine editor plugin ([Fathom-UnrealEngine](https://github.co
 
 ## What the UE plugin does
 
-### Core auditor (`FBlueprintAuditor`)
+### Core auditor (modular domain auditors)
+
+The audit system is split into domain-specific auditor structs (`FBlueprintGraphAuditor`, `FDataTableAuditor`, `FDataAssetAuditor`, `FUserDefinedStructAuditor`, `FControlRigAuditor`) under `Public/Audit/`. `FBlueprintAuditor` remains as a thin facade for backward compatibility.
 
 Uses a two-phase architecture to avoid blocking the editor UI:
 
-1. **Phase 1 (game thread):** `GatherBlueprintData()` reads `UBlueprint*` and populates plain-old-data (POD) structs that contain no UObject pointers.
-2. **Phase 2 (background thread):** `SerializeToMarkdown()` + `WriteAuditFile()` converts POD structs to Markdown, computes the source file hash, and writes to disk.
+1. **Phase 1 (game thread):** `GatherData()` / `GatherBlueprintData()` reads UObject pointers and populates plain-old-data (POD) structs (defined in `Audit/AuditTypes.h`) that contain no UObject pointers.
+2. **Phase 2 (background thread):** `SerializeToMarkdown()` + `FAuditFileUtils::WriteAuditFile()` converts POD structs to Markdown, computes the source file hash, and writes to disk.
 
 Given a `UBlueprint*`, produces a Markdown file containing:
 
@@ -50,7 +52,7 @@ Given a `UBlueprint*`, produces a Markdown file containing:
 {ProjectDir}/Saved/Fathom/Audit/v<N>/Blueprints/
 ```
 
-The `v<N>` segment is the audit schema version (`FBlueprintAuditor::AuditSchemaVersion`). When the version is bumped, all cached files are automatically invalidated because no files exist at the new path.
+The `v<N>` segment is the audit schema version (`FAuditFileUtils::AuditSchemaVersion`). When the version is bumped, all cached files are automatically invalidated because no files exist at the new path.
 
 Mirrors the `Content/` directory layout:
 ```
@@ -75,7 +77,8 @@ UE Editor Plugin                          Rider Plugin (.NET backend)
 
  BlueprintAuditSubsystem (on-save)        BlueprintAuditService
  BlueprintAuditCommandlet (headless)      BlueprintAuditHandler (HTTP)
- BlueprintAuditor (core extraction)       AuditMarkdownFormatter
+ Domain auditors (Audit/*.cpp)            AuditMarkdownFormatter
+ FBlueprintAuditor facade
          |                                          |
          +---writes--->  Saved/Fathom/Audit/v<N>/  <---reads---+
                          Blueprints/*.md
@@ -88,7 +91,7 @@ The UE plugin writes Markdown files. The Rider plugin reads them. That is the en
 The contract between the two plugins is purely **filesystem conventions**:
 
 1. **Audit output directory**: `{ProjectDir}/Saved/Fathom/Audit/v<N>/Blueprints/`. Both sides agree on this path.
-2. **Schema version**: `FBlueprintAuditor::AuditSchemaVersion` (C++) must match `BlueprintAuditService.AuditSchemaVersion` (C#). Divergence means the Rider plugin looks in the wrong directory.
+2. **Schema version**: `FAuditFileUtils::AuditSchemaVersion` (C++, canonical constant; `FBlueprintAuditor::AuditSchemaVersion` proxies it) must match `BlueprintAuditService.AuditSchemaVersion` (C#). Divergence means the Rider plugin looks in the wrong directory.
 3. **Commandlet name**: `BlueprintAudit`, the hardcoded convention the Rider plugin uses to invoke headless audits.
 4. **Hash algorithm**: Both sides compute MD5 with lowercase hex output, no separators.
 5. **Header field names**: The Rider-side `ParseAuditHeader()` reads `Name` (from H1), `Path`, `Hash`, `Parent`, `Type` from the Markdown header block.

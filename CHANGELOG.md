@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### New Features
+- [UE5] Ability to audit nested/collapsed graphs in BPs
+
+### Fixes & Changes
+- Port fallback: if the configured port is already in use, the Rider-side HTTP server now tries up to 10 consecutive ports (e.g. 19876, 19877, ..., 19885) before giving up. Marker files, MCP configs, and RD notifications all reflect the actual bound port.
+- [UE5] Audit file version bumped to v10.
+- Added flowchart to README.md
+- Fixed companion plugin notification balloons never appearing. The RD `sink` event fired before `FathomHost` (PostStartupActivity) registered its advise, so the notification was silently lost. Moved notification logic to `FathomStatusBarWidget.install()` which runs early enough to catch the event.
+
+### Refactoring & Internals
+- Renamed `InspectionHttpServer2` to `FathomRiderHttpServer` and split into three focused files: `CompanionPluginOrchestrator` (install/build workflows), `McpConfigWriter` (MCP config I/O), and the slimmed-down server class
+- [UE5] Modularized `BlueprintAuditor` into domain-specific auditors: `FBlueprintGraphAuditor`, `FDataTableAuditor`, `FDataAssetAuditor`, `FUserDefinedStructAuditor`, `FControlRigAuditor`, `FAuditFileUtils`
+- [UE5] Extracted all 23 POD audit data structs into `Public/Audit/AuditTypes.h`
+- [UE5] Promoted `CleanExportedValue` helper into `FathomAuditHelpers` namespace (`Private/Audit/AuditHelpers.h/.cpp`)
+- `FBlueprintAuditor` is now a thin facade delegating to domain auditors (backward-compatible, no consumer changes needed)
+- [UE5] Canonical schema version constant lives in `FAuditFileUtils::AuditSchemaVersion`; `FBlueprintAuditor::AuditSchemaVersion` proxies it
+- [UE5] Extracted `FathomHttp::SendJson`/`SendError` helpers to eliminate repeated JSON serialization boilerplate across all HTTP handlers, added `WrapHandler` safety wrapper for crash resilience, and replaced `LoadModuleChecked` with defensive `GetModulePtr` for AssetRegistry access
+- [UE5] Introduced an audit version manifest: The UE plugin now writes a new file `audit-manifest.json` so Rider discovers the correct audit directory even when plugin versions differ. Rider shows an info note when a version mismatch is detected.
+- Extracted `BootCheckOrchestrator` (boot-time audit + companion plugin detection) and `ServerMarkerWriter` (marker file I/O) from `FathomRiderHttpServer`, reducing it from ~405 to ~307 lines
+
 ## [0.8.0] - 2026-02-26
 
 ### Added

@@ -265,9 +265,32 @@ namespace ReSharperPlugin.Fathom
                 }
                 catch { /* RD model may not be available */ }
 
+                const int maxPortAttempts = 10;
                 try
                 {
-                    // Wire handlers
+                    // Try the requested port, then fall back to port+1 .. port+9
+                    for (int attempt = 0; attempt < maxPortAttempts; attempt++)
+                    {
+                        var candidatePort = port + attempt;
+                        var candidate = new HttpListener();
+                        candidate.Prefixes.Add($"http://localhost:{candidatePort}/");
+                        try
+                        {
+                            candidate.Start();
+                            _listener = candidate;
+                            if (attempt > 0)
+                                Log.Info($"InspectionHttpServer2: port {port} was in use, bound to {candidatePort} instead");
+                            port = candidatePort;
+                            break;
+                        }
+                        catch (HttpListenerException) when (attempt < maxPortAttempts - 1)
+                        {
+                            Log.Info($"InspectionHttpServer2: port {candidatePort} is in use, trying next");
+                            try { candidate.Close(); } catch { }
+                        }
+                    }
+
+                    // Wire handlers (using the actual bound port)
                     var mcpServer = new FathomMcpServer(port);
                     _handlers = new IRequestHandler[]
                     {
@@ -291,9 +314,6 @@ namespace ReSharperPlugin.Fathom
                     };
 
                     _config.Port = port;
-                    _listener = new HttpListener();
-                    _listener.Prefixes.Add($"http://localhost:{port}/");
-                    _listener.Start();
                     _currentPort = port;
                     Log.Info($"InspectionHttpServer2: listening on http://localhost:{port}/");
 
@@ -388,7 +408,7 @@ namespace ReSharperPlugin.Fathom
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, $"InspectionHttpServer2: failed to start on port {port}");
+                    Log.Error(ex, $"InspectionHttpServer2: failed to start on ports {port}-{port + maxPortAttempts - 1}");
                     if (model != null && _rdScheduler != null)
                         _rdScheduler.Queue(() =>
                             model.ServerStatus.Fire(new ServerStatus(false, port, ex.Message)));

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Util;
@@ -18,7 +19,7 @@ public class BlueprintAuditService
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
     /// Bump both together when the audit format changes.
     /// </summary>
-    private const int AuditSchemaVersion = 9;
+    private const int AuditSchemaVersion = 10;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 
@@ -34,6 +35,8 @@ public class BlueprintAuditService
     private string _bootCheckResult;
     private bool _commandletMissing;
     private int? _lastExitCode;
+    private bool _manifestVersionMismatch;
+    private int? _manifestVersion;
 
     public BlueprintAuditService(UeProjectService ueProject, ServerConfiguration config)
     {
@@ -67,7 +70,7 @@ public class BlueprintAuditService
         }
 
         var uprojectDir = ueInfo.ProjectDirectory;
-        var versionDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}");
+        var versionDir = ResolveAuditDir(uprojectDir);
 
         if (!Directory.Exists(versionDir))
         {
@@ -117,6 +120,12 @@ public class BlueprintAuditService
             };
         }
 
+        string versionNote = null;
+        if (_manifestVersionMismatch && _manifestVersion.HasValue)
+        {
+            versionNote = $"Companion plugin is on audit schema v{_manifestVersion}, Rider expects v{AuditSchemaVersion}. Update the companion plugin for full compatibility.";
+        }
+
         if (staleCount > 0)
         {
             DateTime? lastRefresh;
@@ -136,7 +145,8 @@ public class BlueprintAuditService
                 ControlRigCount = controlRigs.Count,
                 Action = "Call /blueprint-audit/refresh to update audit data",
                 LastRefresh = lastRefresh?.ToString("o"),
-                StaleExamples = allEntries.Where(b => b.IsStale).Take(_config.MaxStaleExamples).ToList()
+                StaleExamples = allEntries.Where(b => b.IsStale).Take(_config.MaxStaleExamples).ToList(),
+                VersionNote = versionNote
             };
         }
 
@@ -158,7 +168,8 @@ public class BlueprintAuditService
             DataTables = dataTables,
             DataAssets = dataAssets,
             Structures = structures,
-            ControlRigs = controlRigs
+            ControlRigs = controlRigs,
+            VersionNote = versionNote
         };
     }
 
@@ -259,7 +270,7 @@ public class BlueprintAuditService
             }
 
             var uprojectDir = ueInfo.ProjectDirectory;
-            var versionDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}");
+            var versionDir = ResolveAuditDir(uprojectDir);
             if (!Directory.Exists(versionDir))
             {
                 _bootCheckResult = "Audit directory does not exist - triggering refresh";
@@ -319,7 +330,7 @@ public class BlueprintAuditService
         if (!ueInfo.IsUnrealProject) return null;
 
         var uprojectDir = ueInfo.ProjectDirectory;
-        var versionDir = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}");
+        var versionDir = ResolveAuditDir(uprojectDir);
 
         var normalizedInput = StripObjectName(packagePath);
 
@@ -341,6 +352,57 @@ public class BlueprintAuditService
     {
         _bootCheckResult = result;
         _bootCheckCompleted = true;
+    }
+
+    private string ResolveAuditDir(string uprojectDir)
+    {
+        var fallback = Path.Combine(uprojectDir, "Saved", "Fathom", "Audit", $"v{AuditSchemaVersion}");
+
+        try
+        {
+            var manifestPath = Path.Combine(uprojectDir, "Saved", "Fathom", "audit-manifest.json");
+            if (!File.Exists(manifestPath))
+            {
+                _manifestVersionMismatch = false;
+                _manifestVersion = null;
+                return fallback;
+            }
+
+            var json = File.ReadAllText(manifestPath);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var auditDir = root.TryGetProperty("auditDir", out var dirProp)
+                ? dirProp.GetString()
+                : null;
+            var version = root.TryGetProperty("version", out var verProp) && verProp.TryGetInt32(out var v)
+                ? v
+                : (int?)null;
+
+            if (version.HasValue && version.Value < AuditSchemaVersion)
+            {
+                _manifestVersionMismatch = true;
+                _manifestVersion = version.Value;
+            }
+            else
+            {
+                _manifestVersionMismatch = false;
+                _manifestVersion = version;
+            }
+
+            if (!string.IsNullOrEmpty(auditDir))
+            {
+                return Path.Combine(uprojectDir, auditDir.Replace('/', Path.DirectorySeparatorChar));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"BlueprintAudit: Failed to read audit manifest: {ex.Message}");
+            _manifestVersionMismatch = false;
+            _manifestVersion = null;
+        }
+
+        return fallback;
     }
 
     private void RunBlueprintAuditCommandlet(UeProjectInfo ueInfo)
