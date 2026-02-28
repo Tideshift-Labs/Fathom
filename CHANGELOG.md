@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-02-27
+
 ### New Features
 - [UE5] Ability to audit nested/collapsed graphs in BPs
 
