@@ -180,7 +180,24 @@ Edit `%USERPROFILE%\.codeium\windsurf\mcp_config.json`:
 
 ### Claude Desktop
 
-Claude Desktop does not support remote HTTP servers via its config file. Instead, add Fathom through the UI: **Settings > Connectors**, then enter `http://localhost:19876/mcp` as the server URL.
+Claude Desktop requires HTTPS for its Connectors UI, so `http://localhost` URLs cannot be added there directly. Instead, use [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) to bridge the connection via stdio.
+
+Add the following to your `claude_desktop_config.json` (typically `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "fathom": {
+      "command": "npx",
+      "args": ["mcp-remote@latest", "--http", "http://localhost:19876/mcp", "--allow-http"]
+    }
+  }
+}
+```
+
+> **Requires**: Node.js (for `npx`). Rider must be open with Fathom running before launching Claude Desktop.
+>
+> **Port**: The default port is `19876`, but if that port is already in use (e.g. multiple Rider instances), Fathom will bind to the next available port. Check `.fathom-server.json` in your project's `Saved/Fathom/` directory for the actual port.
 
 ## Limitations
 
