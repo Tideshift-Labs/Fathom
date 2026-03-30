@@ -37,6 +37,17 @@ $changelog = $changelog -replace '## \[Unreleased\]', "## [Unreleased]`n`n## [$V
 Set-Content $changelogPath $changelog -NoNewline
 Write-Host "Updated CHANGELOG.md with version $Version"
 
+# Update ServerConfiguration.cs FathomVersion constant
+$serverConfigPath = Join-Path $RepoRoot "src\dotnet\ReSharperPlugin.Fathom\ServerConfiguration.cs"
+if (Test-Path $serverConfigPath) {
+    $serverConfig = Get-Content $serverConfigPath -Raw
+    $serverConfig = $serverConfig -replace 'FathomVersion = "[^"]*"', "FathomVersion = `"$Version`""
+    Set-Content $serverConfigPath $serverConfig -NoNewline
+    Write-Host "Updated ServerConfiguration.cs FathomVersion to $Version"
+} else {
+    Write-Warning "ServerConfiguration.cs not found at $serverConfigPath - skipping"
+}
+
 # Update Fathom-UnrealEngine .uplugin VersionName (sibling repo)
 $upluginPath = Join-Path $RepoRoot "..\Fathom-UnrealEngine\FathomUELink.uplugin"
 if (Test-Path $upluginPath) {
@@ -51,7 +62,7 @@ if (Test-Path $upluginPath) {
 # Git commit and tag in Fathom repo
 Push-Location $RepoRoot
 try {
-    git add gradle.properties CHANGELOG.md
+    git add gradle.properties CHANGELOG.md src/dotnet/ReSharperPlugin.Fathom/ServerConfiguration.cs
     git commit -m "Bump version to $Version"
     git tag -a "v$Version" -m "v$Version"
     Write-Host "Created commit and tag v$Version in Fathom"

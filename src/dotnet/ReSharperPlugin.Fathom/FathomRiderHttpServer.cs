@@ -184,7 +184,7 @@ namespace ReSharperPlugin.Fathom
                 new LiveCodingHandler(_ueProject, _assetRefProxy),
                 new AssetSearchHandler(_ueProject, _assetRefProxy, _config),
                 new AssetShowHandler(_ueProject, _assetRefProxy, _config),
-                new UeProjectHandler(_solution, _ueProject, _reflection),
+                new UeProjectHandler(_solution, _ueProject, _reflection, _blueprintAudit, _assetRefProxy, _companionPlugin, port),
                 new SymbolsHandler(_symbolSearch, _config),
                 new DebugBuildLifecycleHandler(_solution, _reflection),
             };

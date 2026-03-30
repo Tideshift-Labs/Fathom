@@ -126,7 +126,7 @@ namespace ReSharperPlugin.Fathom.Mcp
 
             // Diagnostics
             new ToolDef("get_ue_project_info",
-                "UE project detection info and engine path.",
+                "Returns full Fathom environment status: UE project/engine paths, Fathom and FathomUELink versions, MCP endpoint, UE editor connection status, audit directory location, supported asset types, and audit stats (counts by type, stale, errors). Call this first to discover the environment.",
                 "/ue-project"),
 
             new ToolDef("get_editor_status",

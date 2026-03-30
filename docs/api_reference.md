@@ -301,9 +301,55 @@ Server and solution health check.
 
 ### GET `/ue-project`
 
-Diagnostic info for UE project detection and engine path discovery.
+Returns UE project path, engine path/version, commandlet exe path, UBT path, and editor target name for the current solution.
 
-**Response format:** Markdown only
+| Param | Required | Description |
+|-------|----------|-------------|
+| `format` | No | `md` (default) or `json` |
+| `debug` | No | `true` to include raw assembly discovery info |
+
+**Response (JSON):**
+```json
+{
+  "IsUnrealProject": true,
+  "UProjectPath": "E:\\Projects\\MyGame\\MyGame.uproject",
+  "ProjectDirectory": "E:\\Projects\\MyGame",
+  "EnginePath": "C:\\Epic\\Engines\\UE_5.7\\Engine",
+  "EngineVersion": "5.7.1",
+  "CommandletExePath": "C:\\Epic\\Engines\\UE_5.7\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe",
+  "UnrealBuildToolDllPath": "C:\\Epic\\Engines\\UE_5.7\\Engine\\Binaries\\DotNET\\UnrealBuildTool\\UnrealBuildTool.dll",
+  "EditorTargetName": "MyGameEditor",
+  "Error": null,
+  "FathomVersion": "0.9.0",
+  "FathomUELinkVersion": "0.9.0",
+  "McpEndpoint": "http://localhost:19876/mcp",
+  "UeLink": {
+    "Connected": true,
+    "Port": 19900,
+    "Pid": 12345,
+    "Status": "Connected (port 19900, PID 12345)"
+  },
+  "Audit": {
+    "AuditDirectory": "E:\\Projects\\MyGame\\Saved\\Fathom\\Audit\\v10",
+    "SchemaVersion": 10,
+    "SupportedAssetTypes": [
+      {"Name": "Blueprint", "Description": "Blueprints, Widget Blueprints, and Animation Blueprints (event graph only, not the anim graph)"},
+      {"Name": "DataTable", "Description": "Data Tables with row struct definitions and row data"},
+      {"Name": "DataAsset", "Description": "Data Assets derived from UDataAsset"},
+      {"Name": "UserDefinedStruct", "Description": "User-created struct definitions"},
+      {"Name": "ControlRig", "Description": "Control Rig Blueprints for animation rigging"}
+    ],
+    "TotalAudited": 142,
+    "BlueprintCount": 98,
+    "DataTableCount": 20,
+    "DataAssetCount": 12,
+    "StructureCount": 8,
+    "ControlRigCount": 4,
+    "StaleCount": 0,
+    "ErrorCount": 0
+  }
+}
+```
 
 ### GET `/debug-psi-tree`
 
