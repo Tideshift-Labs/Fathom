@@ -19,7 +19,7 @@ public class BlueprintAuditService
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
     /// Bump both together when the audit format changes.
     /// </summary>
-    private const int AuditSchemaVersion = 10;
+    internal const int AuditSchemaVersion = 10;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 

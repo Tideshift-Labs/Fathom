@@ -7,6 +7,11 @@ namespace ReSharperPlugin.Fathom;
 public class ServerConfiguration
 {
         /// <summary>
+        /// Fathom plugin version. Updated by scripts/bump-version.ps1.
+        /// </summary>
+        public const string FathomVersion = "0.9.0";
+
+        /// <summary>
         /// Default configuration instance.
         /// </summary>
         public static ServerConfiguration Default { get; } = new ServerConfiguration();
