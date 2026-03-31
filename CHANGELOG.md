@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### New Features
+- [UE5] Per-component property overrides in audit files: each Blueprint component now lists non-default property values, with a tree view showing component hierarchy
+- [Rider] `get_ue_project_info` MCP tool now returns useful project status instead of raw debug dump
+
+### Fixes & Changes
+- [UE5] Fixed ControlRig audit missing edges through reroute/redirect nodes. RigVM reroute nodes have a single IO pin, so the old link-based approach silently dropped connections through them.
+- [UE5] Fixed IO pins in ControlRig graphs generating spurious reverse edges in audit files
+- [UE5] Fixed crash in stale check during editor startup GC
+- [UE5] Fixed AnimBlueprint audit docs to reflect partial support
+- Audit schema version bumped to v11
+- Updated Claude Desktop MCP docs to use mcp-remote bridge
+
 ## [0.9.0] - 2026-02-27
 
 ### New Features
