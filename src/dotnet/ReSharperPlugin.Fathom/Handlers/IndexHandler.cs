@@ -16,17 +16,21 @@ public class IndexHandler : IRequestHandler
     private readonly ServerConfiguration _config;
     private readonly UeProjectService _ueProject;
     private readonly AssetRefProxyService _assetRefProxy;
+    private readonly BlueprintAuditService _auditService;
+    private readonly CompanionPluginService _companionPlugin;
 
     private static readonly Lazy<string> HtmlTemplate = new Lazy<string>(LoadHtmlTemplate);
     private static readonly Lazy<string> LogoBase64 = new Lazy<string>(LoadLogoBase64);
 
     public IndexHandler(ISolution solution, ServerConfiguration config, UeProjectService ueProject,
-        AssetRefProxyService assetRefProxy)
+        AssetRefProxyService assetRefProxy, BlueprintAuditService auditService, CompanionPluginService companionPlugin)
     {
         _solution = solution;
         _config = config;
         _ueProject = ueProject;
         _assetRefProxy = assetRefProxy;
+        _auditService = auditService;
+        _companionPlugin = companionPlugin;
     }
 
     public bool CanHandle(string path) => path == "" || path == "/" || path == "/health";
@@ -71,13 +75,20 @@ public class IndexHandler : IRequestHandler
                     ["GET /uassets/show?package=/Game/Path"] = "[UE5] Asset detail: registry metadata, disk size, tags, dependency/referencer counts. Multiple: &package=/Game/A&package=/Game/B. Requires live UE editor.",
                     ["GET /asset-refs/dependencies?asset=/Game/Path"] = "[UE5] Asset dependencies. Requires live UE editor.",
                     ["GET /asset-refs/referencers?asset=/Game/Path"] = "[UE5] Asset referencers. Requires live UE editor.",
+                    // Symbol navigation
+                    ["GET /symbols?query=name"] = "Search C++ symbols by name across the solution. Optional: &kind=class|function|variable|enum, &scope=all|user, &limit=50.",
+                    ["GET /symbols/declaration?symbol=name"] = "Go to definition: find where a C++ symbol is defined with source code snippet. Optional: &containingType=ClassName, &kind=class|function.",
+                    ["GET /symbols/inheritors?symbol=name"] = "Find classes that directly inherit from a C++ class. Optional: &scope=all|user, &limit=100.",
+                    // Live Coding
+                    ["GET /live-coding/compile"] = "[UE5] Trigger Live Coding compile. Returns build log and errors. Blocks until complete. Requires live UE editor.",
+                    ["GET /live-coding/status"] = "[UE5] Check Live Coding availability and compile state.",
                     // Diagnostics
                     ["GET /health"] = "Server and solution status (JSON).",
-                    ["GET /ue-project"] = "Diagnostic: UE project detection info and engine path.",
+                    ["GET /ue-project"] = "[UE5] Full project status: Fathom/UELink versions, MCP endpoint, UE project/engine paths, editor connection, supported asset types, and audit stats by type.",
                     ["GET /asset-refs/status"] = "[UE5] UE editor connection status.",
                     ["GET /debug-psi-tree?file=path"] = "Diagnostic: raw PSI tree dump for a source file.",
                     // MCP
-                    ["POST /mcp"] = "MCP Streamable HTTP endpoint (JSON-RPC). Supports initialize, tools/list, tools/call. 15 tools available."
+                    ["POST /mcp"] = "MCP Streamable HTTP endpoint (JSON-RPC). Supports initialize, tools/list, tools/call."
                 },
                 isUnrealProject = isUe
             });
@@ -87,21 +98,79 @@ public class IndexHandler : IRequestHandler
 
         // Default: branded HTML home page
         var ueInfo = _ueProject.GetUeProjectInfo();
-        var editorConnected = _assetRefProxy.IsAvailable();
+        var editorStatus = _assetRefProxy.GetStatus();
 
         var projectName = "";
         if (!string.IsNullOrEmpty(ueInfo.UProjectPath))
             projectName = Path.GetFileNameWithoutExtension(ueInfo.UProjectPath);
 
+        // Audit stats
+        var auditTotal = 0;
+        var auditStale = 0;
+        var auditErrors = 0;
+        var auditBp = 0;
+        var auditDt = 0;
+        var auditDa = 0;
+        var auditStruct = 0;
+        var auditCr = 0;
+        var auditStatus = "N/A";
+        if (isUe)
+        {
+            try
+            {
+                var auditData = _auditService.GetAuditData();
+                auditTotal = auditData.TotalCount;
+                auditStale = auditData.StaleCount;
+                auditErrors = auditData.ErrorCount;
+                auditDt = auditData.DataTableCount;
+                auditDa = auditData.DataAssetCount;
+                auditStruct = auditData.StructureCount;
+                auditCr = auditData.ControlRigCount;
+                auditBp = auditTotal - auditDt - auditDa - auditStruct - auditCr;
+                auditStatus = auditTotal > 0
+                    ? (auditStale > 0 ? "Stale" : "Fresh")
+                    : "Not Ready";
+            }
+            catch { auditStatus = "Error"; }
+        }
+
+        var auditDir = "";
+        if (!string.IsNullOrEmpty(ueInfo.ProjectDirectory))
+            auditDir = Path.Combine(ueInfo.ProjectDirectory, "Saved", "Fathom", "Audit",
+                $"v{BlueprintAuditService.AuditSchemaVersion}");
+
         var html = HtmlTemplate.Value
             .Replace("{{LOGO_BASE64}}", LogoBase64.Value)
+            .Replace("{{FATHOM_VERSION}}", ServerConfiguration.FathomVersion)
+            .Replace("{{UELINK_VERSION}}", _companionPlugin.GetBundledVersion())
             .Replace("{{PORT}}", _config.Port.ToString())
+            .Replace("{{MCP_ENDPOINT}}", $"http://localhost:{_config.Port}/mcp")
             .Replace("{{IS_UE}}", isUe ? "Yes" : "No")
             .Replace("{{UE_BAR_VISIBILITY}}", isUe ? "" : "ue-hidden")
             .Replace("{{UE_PROJECT_NAME}}", string.IsNullOrEmpty(projectName) ? "Unknown" : projectName)
+            .Replace("{{UE_PROJECT_PATH}}", ueInfo.UProjectPath ?? "")
+            .Replace("{{UE_PROJECT_DIR}}", ueInfo.ProjectDirectory ?? "")
+            .Replace("{{UE_ENGINE_PATH}}", ueInfo.EnginePath ?? "")
             .Replace("{{UE_ENGINE_VERSION}}", string.IsNullOrEmpty(ueInfo.EngineVersion) ? "Unknown" : ueInfo.EngineVersion)
-            .Replace("{{UE_EDITOR_STATUS}}", editorConnected ? "Connected" : "Not Running")
-            .Replace("{{UE_EDITOR_DOT_CLASS}}", editorConnected ? "" : "disconnected");
+            .Replace("{{UE_COMMANDLET}}", ueInfo.CommandletExePath ?? "")
+            .Replace("{{UE_UBT}}", ueInfo.UnrealBuildToolDllPath ?? "")
+            .Replace("{{UE_EDITOR_TARGET}}", ueInfo.EditorTargetName ?? "")
+            .Replace("{{UE_EDITOR_STATUS}}", editorStatus.Connected ? "Connected" : "Not Running")
+            .Replace("{{UE_EDITOR_DOT_CLASS}}", editorStatus.Connected ? "" : "disconnected")
+            .Replace("{{UE_EDITOR_PORT}}", editorStatus.Connected ? $"Port {editorStatus.Port}" : "")
+            .Replace("{{UE_EDITOR_DETAIL}}", editorStatus.Connected ? $"Port {editorStatus.Port}, PID {editorStatus.Pid}" : "Not running")
+            .Replace("{{AUDIT_DIR}}", auditDir)
+            .Replace("{{AUDIT_SCHEMA}}", BlueprintAuditService.AuditSchemaVersion.ToString())
+            .Replace("{{AUDIT_TOTAL}}", auditTotal.ToString())
+            .Replace("{{AUDIT_BP}}", auditBp.ToString())
+            .Replace("{{AUDIT_DT}}", auditDt.ToString())
+            .Replace("{{AUDIT_DA}}", auditDa.ToString())
+            .Replace("{{AUDIT_STRUCT}}", auditStruct.ToString())
+            .Replace("{{AUDIT_CR}}", auditCr.ToString())
+            .Replace("{{AUDIT_STALE}}", auditStale.ToString())
+            .Replace("{{AUDIT_ERRORS}}", auditErrors.ToString())
+            .Replace("{{AUDIT_STATUS}}", auditStatus)
+            .Replace("{{AUDIT_DOT_CLASS}}", auditStatus == "Fresh" ? "" : (auditStatus == "Stale" ? "stale" : "disconnected"));
 
         HttpHelpers.Respond(ctx, 200, "text/html; charset=utf-8", html);
     }

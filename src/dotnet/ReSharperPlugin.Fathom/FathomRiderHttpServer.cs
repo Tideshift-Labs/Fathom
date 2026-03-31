@@ -171,7 +171,7 @@ namespace ReSharperPlugin.Fathom
             return new IRequestHandler[]
             {
                 new McpHandler(mcpServer),
-                new IndexHandler(_solution, _config, _ueProject, _assetRefProxy),
+                new IndexHandler(_solution, _config, _ueProject, _assetRefProxy, _blueprintAudit, _companionPlugin),
                 new FilesHandler(_solution, _fileIndex),
                 new ClassesHandler(_classIndex, _config),
                 new InspectHandler(_solution, _fileIndex, _inspection),
