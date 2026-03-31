@@ -337,14 +337,16 @@ Returns UE project path, engine path/version, commandlet exe path, UBT path, and
       {"Name": "DataTable", "Description": "Data Tables with row struct definitions and row data"},
       {"Name": "DataAsset", "Description": "Data Assets derived from UDataAsset"},
       {"Name": "UserDefinedStruct", "Description": "User-created struct definitions"},
-      {"Name": "ControlRig", "Description": "Control Rig Blueprints for animation rigging"}
+      {"Name": "ControlRig", "Description": "Control Rig Blueprints for animation rigging"},
+      {"Name": "Material", "Description": "Materials and Material Instances (properties, parameters, expression graph)"}
     ],
-    "TotalAudited": 142,
+    "TotalAudited": 152,
     "BlueprintCount": 98,
     "DataTableCount": 20,
     "DataAssetCount": 12,
     "StructureCount": 8,
     "ControlRigCount": 4,
+    "MaterialCount": 10,
     "StaleCount": 0,
     "ErrorCount": 0
   }
