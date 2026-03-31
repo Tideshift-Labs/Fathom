@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-03-30
+
 ### New Features
 - [UE5] Per-component property overrides in audit files: each Blueprint component now lists non-default property values, with a tree view showing component hierarchy
 - [Rider] `get_ue_project_info` MCP tool now returns useful project status instead of raw debug dump
