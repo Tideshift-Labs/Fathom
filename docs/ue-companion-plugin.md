@@ -12,7 +12,7 @@ A companion Unreal Engine editor plugin ([Fathom-UnrealEngine](https://github.co
 
 ### Core auditor (modular domain auditors)
 
-The audit system is split into domain-specific auditor structs (`FBlueprintGraphAuditor`, `FDataTableAuditor`, `FDataAssetAuditor`, `FUserDefinedStructAuditor`, `FControlRigAuditor`) under `Public/Audit/`. `FBlueprintAuditor` remains as a thin facade for backward compatibility.
+The audit system is split into domain-specific auditor structs (`FBlueprintGraphAuditor`, `FDataTableAuditor`, `FDataAssetAuditor`, `FUserDefinedStructAuditor`, `FControlRigAuditor`, `FMaterialAuditor`) under `Public/Audit/`. `FBlueprintAuditor` remains as a thin facade for backward compatibility.
 
 Uses a two-phase architecture to avoid blocking the editor UI:
 

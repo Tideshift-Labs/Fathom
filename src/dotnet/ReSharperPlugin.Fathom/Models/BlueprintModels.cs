@@ -213,6 +213,16 @@ public class BlueprintClassInfo
         public int ControlRigCount { get; set; }
 
         /// <summary>
+        /// List of Material audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> Materials { get; set; }
+
+        /// <summary>
+        /// Number of Material audit entries.
+        /// </summary>
+        public int MaterialCount { get; set; }
+
+        /// <summary>
         /// Examples of stale entries (when status is "stale", first 10).
         /// </summary>
         public List<BlueprintAuditEntry> StaleExamples { get; set; }

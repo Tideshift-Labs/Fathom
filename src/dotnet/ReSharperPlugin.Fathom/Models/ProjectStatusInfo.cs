@@ -18,6 +18,8 @@ public static class AuditCapabilities
             "User-created struct definitions"),
         new AuditedAssetType("ControlRig",
             "Control Rig Blueprints for animation rigging"),
+        new AuditedAssetType("Material",
+            "Materials and Material Instances (properties, parameters, expression graph)"),
     };
 }
 
@@ -83,6 +85,7 @@ public class AuditInfo
     public int DataAssetCount { get; set; }
     public int StructureCount { get; set; }
     public int ControlRigCount { get; set; }
+    public int MaterialCount { get; set; }
     public int StaleCount { get; set; }
     public int ErrorCount { get; set; }
 }

@@ -98,6 +98,7 @@ public class UeProjectHandler : IRequestHandler
             sb.AppendLine($"- DataAssets: {info.Audit.DataAssetCount}");
             sb.AppendLine($"- Structures: {info.Audit.StructureCount}");
             sb.AppendLine($"- ControlRigs: {info.Audit.ControlRigCount}");
+            sb.AppendLine($"- Materials: {info.Audit.MaterialCount}");
             sb.AppendLine($"- Stale: {info.Audit.StaleCount}");
             sb.AppendLine($"- Errors: {info.Audit.ErrorCount}");
         }
@@ -170,11 +171,13 @@ public class UeProjectHandler : IRequestHandler
                              - auditData.DataTableCount
                              - auditData.DataAssetCount
                              - auditData.StructureCount
-                             - auditData.ControlRigCount,
+                             - auditData.ControlRigCount
+                             - auditData.MaterialCount,
             DataTableCount = auditData.DataTableCount,
             DataAssetCount = auditData.DataAssetCount,
             StructureCount = auditData.StructureCount,
             ControlRigCount = auditData.ControlRigCount,
+            MaterialCount = auditData.MaterialCount,
             StaleCount = auditData.StaleCount,
             ErrorCount = auditData.ErrorCount,
         };
