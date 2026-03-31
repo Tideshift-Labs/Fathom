@@ -110,6 +110,11 @@
             box-shadow: none;
         }
 
+        .status-dot.stale {
+            background: var(--accent-yellow);
+            box-shadow: 0 0 6px rgba(250, 204, 21, 0.5);
+        }
+
         .status-label {
             color: var(--text-muted);
         }
@@ -148,6 +153,74 @@
 
         .ue-hidden {
             display: none;
+        }
+
+        .status-dot-inline {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+            margin-right: 6px;
+            position: relative;
+            top: -1px;
+        }
+
+        .status-dot-inline.disconnected {
+            background: var(--text-muted);
+            box-shadow: none;
+        }
+
+        .status-dot-inline.stale {
+            background: var(--accent-yellow);
+            box-shadow: 0 0 6px rgba(250, 204, 21, 0.5);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .status-card h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 0.8125rem;
+        }
+
+        .status-row-label {
+            color: var(--text-muted);
+        }
+
+        .status-row-value {
+            color: var(--text-primary);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.75rem;
+            text-align: right;
+        }
+
+        .status-row-value.audit-total {
+            font-weight: 600;
+            color: var(--accent-blue);
         }
 
         .container {
@@ -364,6 +437,14 @@
             <span class="status-value">{{PORT}}</span>
         </div>
         <div class="status-item">
+            <span class="status-label">Fathom</span>
+            <span class="status-value">v{{FATHOM_VERSION}}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">UELink</span>
+            <span class="status-value">v{{UELINK_VERSION}}</span>
+        </div>
+        <div class="status-item">
             <span class="status-label">Unreal Project</span>
             <span class="status-value">{{IS_UE}}</span>
         </div>
@@ -384,6 +465,11 @@
         <div class="status-dot {{UE_EDITOR_DOT_CLASS}}"></div>
         <span class="status-label">Editor</span>
         <span class="status-value">{{UE_EDITOR_STATUS}}</span>
+    </div>
+    <div class="status-item">
+        <div class="status-dot {{AUDIT_DOT_CLASS}}"></div>
+        <span class="status-label">Audit</span>
+        <span class="status-value">{{AUDIT_STATUS}} ({{AUDIT_TOTAL}} assets)</span>
     </div>
 </div>
 
@@ -419,6 +505,45 @@
         </div>
     </div>
 
+    <div class="section {{UE_BAR_VISIBILITY}}">
+        <h2>Project Status</h2>
+        <div class="status-grid">
+            <div class="status-card">
+                <h3>Environment</h3>
+                <div class="status-row"><span class="status-row-label">Fathom</span><span class="status-row-value">{{FATHOM_VERSION}}</span></div>
+                <div class="status-row"><span class="status-row-label">FathomUELink</span><span class="status-row-value">{{UELINK_VERSION}}</span></div>
+                <div class="status-row"><span class="status-row-label">Project</span><span class="status-row-value">{{UE_PROJECT_NAME}}</span></div>
+                <div class="status-row"><span class="status-row-label">Engine</span><span class="status-row-value">{{UE_ENGINE_VERSION}}</span></div>
+                <div class="status-row"><span class="status-row-label">Editor target</span><span class="status-row-value">{{UE_EDITOR_TARGET}}</span></div>
+                <div class="status-row"><span class="status-row-label">MCP endpoint</span><span class="status-row-value">{{MCP_ENDPOINT}}</span></div>
+            </div>
+            <div class="status-card">
+                <h3>Connections</h3>
+                <div class="status-row">
+                    <span class="status-row-label">UE Editor</span>
+                    <span class="status-row-value"><span class="status-dot-inline {{UE_EDITOR_DOT_CLASS}}"></span> {{UE_EDITOR_STATUS}}</span>
+                </div>
+                <div class="status-row"><span class="status-row-label">Editor details</span><span class="status-row-value">{{UE_EDITOR_DETAIL}}</span></div>
+                <div class="status-row" style="margin-top: 8px;">
+                    <span class="status-row-label">Asset audit</span>
+                    <span class="status-row-value"><span class="status-dot-inline {{AUDIT_DOT_CLASS}}"></span> {{AUDIT_STATUS}}</span>
+                </div>
+                <div class="status-row"><span class="status-row-label">Schema version</span><span class="status-row-value">v{{AUDIT_SCHEMA}}</span></div>
+            </div>
+            <div class="status-card">
+                <h3>Audited Assets</h3>
+                <div class="status-row"><span class="status-row-label">Total</span><span class="status-row-value audit-total">{{AUDIT_TOTAL}}</span></div>
+                <div class="status-row"><span class="status-row-label">Blueprints</span><span class="status-row-value">{{AUDIT_BP}}</span></div>
+                <div class="status-row"><span class="status-row-label">DataTables</span><span class="status-row-value">{{AUDIT_DT}}</span></div>
+                <div class="status-row"><span class="status-row-label">DataAssets</span><span class="status-row-value">{{AUDIT_DA}}</span></div>
+                <div class="status-row"><span class="status-row-label">Structures</span><span class="status-row-value">{{AUDIT_STRUCT}}</span></div>
+                <div class="status-row"><span class="status-row-label">ControlRigs</span><span class="status-row-value">{{AUDIT_CR}}</span></div>
+                <div class="status-row" style="margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px;"><span class="status-row-label">Stale</span><span class="status-row-value">{{AUDIT_STALE}}</span></div>
+                <div class="status-row"><span class="status-row-label">Errors</span><span class="status-row-value">{{AUDIT_ERRORS}}</span></div>
+            </div>
+        </div>
+    </div>
+
     <div class="section">
         <h2>API Endpoints</h2>
 
@@ -432,6 +557,7 @@
                     </tr>
                 </thead>
                 <tbody>
+                    <!-- Source Code -->
                     <tr>
                         <td><span class="endpoint-method method-get">GET</span></td>
                         <td><span class="endpoint-path">/files</span></td>
@@ -452,6 +578,23 @@
                         <td><span class="endpoint-path">/inspect?file=<em>path</em></span></td>
                         <td class="endpoint-desc">Run code inspection on source files</td>
                     </tr>
+                    <!-- Symbol Navigation -->
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/symbols?query=<em>name</em></span></td>
+                        <td class="endpoint-desc">Search C++ symbols by name across the solution</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/symbols/declaration?symbol=<em>name</em></span></td>
+                        <td class="endpoint-desc">Go to definition with source code snippet</td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/symbols/inheritors?symbol=<em>name</em></span></td>
+                        <td class="endpoint-desc">Find classes that inherit from a C++ class</td>
+                    </tr>
+                    <!-- Blueprints & Assets -->
                     <tr>
                         <td><span class="endpoint-method method-get">GET</span></td>
                         <td><span class="endpoint-path">/blueprints?class=<em>name</em></span></td>
@@ -465,7 +608,17 @@
                     <tr>
                         <td><span class="endpoint-method method-get">GET</span></td>
                         <td><span class="endpoint-path">/blueprint-audit</span></td>
-                        <td class="endpoint-desc">Get Blueprint audit data <span class="endpoint-badge">UE5</span></td>
+                        <td class="endpoint-desc">Get audit data for Blueprints, DataTables, DataAssets, Structures, ControlRigs <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/blueprint-audit/refresh</span></td>
+                        <td class="endpoint-desc">Trigger background refresh of audit data <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/blueprint-audit/status</span></td>
+                        <td class="endpoint-desc">Check status of audit refresh <span class="endpoint-badge">UE5</span></td>
                     </tr>
                     <tr>
                         <td><span class="endpoint-method method-get">GET</span></td>
@@ -487,16 +640,34 @@
                         <td><span class="endpoint-path">/asset-refs/referencers</span></td>
                         <td class="endpoint-desc">Asset referencer graph <span class="endpoint-badge">UE5</span></td>
                     </tr>
+                    <!-- Live Coding -->
                     <tr>
                         <td><span class="endpoint-method method-get">GET</span></td>
-                        <td><span class="endpoint-path">/symbols</span></td>
-                        <td class="endpoint-desc">Search code symbols across the solution</td>
+                        <td><span class="endpoint-path">/live-coding/compile</span></td>
+                        <td class="endpoint-desc">Trigger Live Coding compile, returns build log and errors <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/live-coding/status</span></td>
+                        <td class="endpoint-desc">Check Live Coding availability and compile state <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <!-- Diagnostics -->
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/ue-project</span></td>
+                        <td class="endpoint-desc">Full project status: versions, engine paths, UE editor connection, audit stats by type <span class="endpoint-badge">UE5</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="endpoint-method method-get">GET</span></td>
+                        <td><span class="endpoint-path">/asset-refs/status</span></td>
+                        <td class="endpoint-desc">UE editor connection status <span class="endpoint-badge">UE5</span></td>
                     </tr>
                     <tr>
                         <td><span class="endpoint-method method-get">GET</span></td>
                         <td><span class="endpoint-path">/health</span></td>
                         <td class="endpoint-desc">Server and solution status (JSON)</td>
                     </tr>
+                    <!-- MCP -->
                     <tr>
                         <td><span class="endpoint-method method-post">POST</span></td>
                         <td><span class="endpoint-path">/mcp</span></td>
