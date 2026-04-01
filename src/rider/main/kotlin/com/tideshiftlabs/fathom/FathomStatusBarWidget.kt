@@ -188,7 +188,12 @@ class FathomStatusBarWidget(private val project: Project) : StatusBarWidget, Sta
                 }
 
                 val filteredLines = logFile.useLines { lines ->
-                    lines.filter { it.contains("Fathom") || it.contains("CompanionPlugin") }.toList()
+                    lines.filter {
+                        it.contains("Fathom") ||
+                        it.contains("CompanionPlugin") ||
+                        it.contains("BlueprintAudit") ||
+                        it.contains("BootCheckOrchestrator")
+                    }.toList()
                 }
 
                 if (filteredLines.isEmpty()) {
