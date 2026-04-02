@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-02
+
+### New Features
+- **StateTree auditor**: full state hierarchy with tasks, transitions, enter conditions, considerations, property bindings (e.g. `[LeftTag <- Parameters.Motivation]`), Blueprint class resolution, enum display names, global evaluators/tasks, state metadata (Tag, Selection Behavior, Tasks Completion, Weight, Custom Tick Rate, Required Event with payload), linked state/asset references with parameter overrides. Uses optional module loading pattern for zero compile-time coupling.
+- **Audit extension registry** (`AuditExtensionRegistry`): generic callback interface for optional auditors, wired into all subsystem/commandlet integration points. Enables future optional auditors without modifying core plugin code.
+- **BehaviorTree auditor**: tree structure with blackboard keys, decorators (abort modes, logic expressions), services (intervals), task properties, and composite node types
+- **Material and Material Instance auditing**: material domain, blend mode, shading model, expression graph with node connections, material instance parameter overrides
+- Enriched status page with project info, audit stats by type, and endpoint documentation
+
+### Fixes & Changes
+- StateTree uses optional module loading: `FathomUELinkStateTree` with `LoadingPhase: None`, dynamically loaded when StateTree plugin is present. Verified to build against projects both with and without StateTree enabled.
+- DataAsset duplicate filtering: extension-handled assets (e.g. StateTree, which inherits UDataAsset) filtered from DataAsset audit loops
+- Fixed subsystem initialization during commandlet runs causing conflicts with batch audit
+- Exported `LogFathomUELink` log category for cross-module access
+- Widened log filter to capture BlueprintAudit and BootCheck log lines
+- Fixed changelog formatting in JetBrains Marketplace releases
+- Audit schema version bumped to v13
+
 ## [0.9.1] - 2026-03-30
 
 ### New Features
