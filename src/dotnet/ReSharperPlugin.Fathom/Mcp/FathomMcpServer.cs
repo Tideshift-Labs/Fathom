@@ -56,15 +56,15 @@ namespace ReSharperPlugin.Fathom.Mcp
                 new ToolParam("file", "string", "Blueprint package path (e.g. /Game/Blueprints/BP_Player)", required: true)),
 
             new ToolDef("get_blueprint_audit",
-                "[UE5] Get cached audit data for Blueprints, DataTables, DataAssets, and Control Rigs. Returns 409 if stale, 503 if not ready.",
+                "[UE5] Get cached audit data for Blueprints, DataTables, DataAssets, Materials, Control Rigs, BehaviorTrees, and StateTrees. Returns 409 if stale, 503 if not ready.",
                 "/blueprint-audit"),
 
             new ToolDef("refresh_blueprint_audit",
-                "[UE5] Trigger background refresh of Blueprint, DataTable, DataAsset, and Control Rig audit data.",
+                "[UE5] Trigger background refresh of all asset audit data (Blueprints, DataTables, DataAssets, Materials, Control Rigs, BehaviorTrees, StateTrees).",
                 "/blueprint-audit/refresh"),
 
             new ToolDef("get_audit_status",
-                "[UE5] Check status of Blueprint/DataTable/DataAsset/ControlRig audit refresh.",
+                "[UE5] Check status of asset audit refresh.",
                 "/blueprint-audit/status"),
 
             // Asset search / detail

@@ -174,13 +174,15 @@ public class UeProjectHandler : IRequestHandler
                              - auditData.StructureCount
                              - auditData.ControlRigCount
                              - auditData.MaterialCount
-                             - auditData.BehaviorTreeCount,
+                             - auditData.BehaviorTreeCount
+                             - auditData.StateTreeCount,
             DataTableCount = auditData.DataTableCount,
             DataAssetCount = auditData.DataAssetCount,
             StructureCount = auditData.StructureCount,
             ControlRigCount = auditData.ControlRigCount,
             MaterialCount = auditData.MaterialCount,
             BehaviorTreeCount = auditData.BehaviorTreeCount,
+            StateTreeCount = auditData.StateTreeCount,
             StaleCount = auditData.StaleCount,
             ErrorCount = auditData.ErrorCount,
         };

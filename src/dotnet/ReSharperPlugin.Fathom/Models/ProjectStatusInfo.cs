@@ -22,6 +22,8 @@ public static class AuditCapabilities
             "Materials and Material Instances (properties, parameters, expression graph)"),
         new AuditedAssetType("BehaviorTree",
             "Behavior Trees with blackboard keys, tree structure, decorators, services, and task properties"),
+        new AuditedAssetType("StateTree",
+            "State Trees with state hierarchy, tasks, transitions, property bindings, and evaluators"),
     };
 }
 
@@ -89,6 +91,7 @@ public class AuditInfo
     public int ControlRigCount { get; set; }
     public int MaterialCount { get; set; }
     public int BehaviorTreeCount { get; set; }
+    public int StateTreeCount { get; set; }
     public int StaleCount { get; set; }
     public int ErrorCount { get; set; }
 }
