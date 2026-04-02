@@ -20,6 +20,8 @@ public static class AuditCapabilities
             "Control Rig Blueprints for animation rigging"),
         new AuditedAssetType("Material",
             "Materials and Material Instances (properties, parameters, expression graph)"),
+        new AuditedAssetType("BehaviorTree",
+            "Behavior Trees with blackboard keys, tree structure, decorators, services, and task properties"),
     };
 }
 
@@ -86,6 +88,7 @@ public class AuditInfo
     public int StructureCount { get; set; }
     public int ControlRigCount { get; set; }
     public int MaterialCount { get; set; }
+    public int BehaviorTreeCount { get; set; }
     public int StaleCount { get; set; }
     public int ErrorCount { get; set; }
 }

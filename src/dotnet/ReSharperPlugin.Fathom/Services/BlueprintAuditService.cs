@@ -19,7 +19,7 @@ public class BlueprintAuditService
     /// Must match FBlueprintAuditor::AuditSchemaVersion in the UE plugin.
     /// Bump both together when the audit format changes.
     /// </summary>
-    internal const int AuditSchemaVersion = 11;
+    internal const int AuditSchemaVersion = 12;
 
     private static readonly ILogger Log = JetBrains.Util.Logging.Logger.GetLogger<BlueprintAuditService>();
 
@@ -88,6 +88,7 @@ public class BlueprintAuditService
         var structures = new List<BlueprintAuditEntry>();
         var controlRigs = new List<BlueprintAuditEntry>();
         var materials = new List<BlueprintAuditEntry>();
+        var behaviorTrees = new List<BlueprintAuditEntry>();
         var staleCount = 0;
         var errorCount = 0;
 
@@ -103,6 +104,7 @@ public class BlueprintAuditService
                 case "Structure": structures.Add(entry); break;
                 case "ControlRig": controlRigs.Add(entry); break;
                 case "Material": materials.Add(entry); break;
+                case "BehaviorTree": behaviorTrees.Add(entry); break;
                 default: blueprints.Add(entry); break;
             }
 
@@ -110,7 +112,7 @@ public class BlueprintAuditService
             if (entry.Error != null) errorCount++;
         }
 
-        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count + structures.Count + controlRigs.Count + materials.Count;
+        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count + structures.Count + controlRigs.Count + materials.Count + behaviorTrees.Count;
 
         if (totalCount == 0)
         {
@@ -133,7 +135,7 @@ public class BlueprintAuditService
             DateTime? lastRefresh;
             lock (_auditLock) { lastRefresh = _lastAuditRefresh; }
 
-            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets).Concat(structures).Concat(controlRigs).Concat(materials);
+            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets).Concat(structures).Concat(controlRigs).Concat(materials).Concat(behaviorTrees);
             return new BlueprintAuditResult
             {
                 Status = "stale",
@@ -146,6 +148,7 @@ public class BlueprintAuditService
                 StructureCount = structures.Count,
                 ControlRigCount = controlRigs.Count,
                 MaterialCount = materials.Count,
+                BehaviorTreeCount = behaviorTrees.Count,
                 Action = "Call /blueprint-audit/refresh to update audit data",
                 LastRefresh = lastRefresh?.ToString("o"),
                 StaleExamples = allEntries.Where(b => b.IsStale).Take(_config.MaxStaleExamples).ToList(),
@@ -167,6 +170,7 @@ public class BlueprintAuditService
             StructureCount = structures.Count,
             ControlRigCount = controlRigs.Count,
             MaterialCount = materials.Count,
+            BehaviorTreeCount = behaviorTrees.Count,
             LastRefresh = refresh?.ToString("o"),
             Blueprints = blueprints,
             DataTables = dataTables,
@@ -174,6 +178,7 @@ public class BlueprintAuditService
             Structures = structures,
             ControlRigs = controlRigs,
             Materials = materials,
+            BehaviorTrees = behaviorTrees,
             VersionNote = versionNote
         };
     }
@@ -506,6 +511,7 @@ public class BlueprintAuditService
         if (data.ContainsKey("RowStruct")) return "DataTable";
         if (data.ContainsKey("ClassPath")) return "DataAsset";
         if (data.ContainsKey("Domain") || data.ContainsKey("BlendMode")) return "Material";
+        if (data.TryGetValue("BlueprintType", out var t) && t?.ToString() == "BehaviorTree") return "BehaviorTree";
         if (data.TryGetValue("BlueprintType", out var bt) && bt?.ToString() == "ControlRig") return "ControlRig";
         if (data.ContainsKey("ParentClass")) return "Blueprint";
         return "Structure";

@@ -223,6 +223,16 @@ public class BlueprintClassInfo
         public int MaterialCount { get; set; }
 
         /// <summary>
+        /// List of BehaviorTree audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> BehaviorTrees { get; set; }
+
+        /// <summary>
+        /// Number of BehaviorTree audit entries.
+        /// </summary>
+        public int BehaviorTreeCount { get; set; }
+
+        /// <summary>
         /// Examples of stale entries (when status is "stale", first 10).
         /// </summary>
         public List<BlueprintAuditEntry> StaleExamples { get; set; }
