@@ -197,13 +197,28 @@ tasks.buildSearchableOptions {
 }
 
 tasks.patchPluginXml {
-    // TODO: See also org.jetbrains.changelog: https://github.com/JetBrains/gradle-changelog-plugin
-    val changelogText = file("${rootDir}/CHANGELOG.md").readText()
-    val changelogMatches = Regex("(?s)(-.+?)(?=##|\$)").findAll(changelogText)
+    // CI extracts changelog to release-notes.txt before building.
+    // For local dev, fall back to parsing CHANGELOG.md directly.
+    val releaseNotesFile = file("${rootDir}/release-notes.txt")
+    val notes = if (releaseNotesFile.exists()) {
+        releaseNotesFile.readText().trim()
+    } else {
+        val changelogText = file("${rootDir}/CHANGELOG.md").readText()
+        val match = Regex("(?s)## \\[\\d+\\.\\d+\\.\\d+][^\n]*\n(.+?)(?=\n## |\\z)").find(changelogText)
+        match?.groups?.get(1)?.value?.trim() ?: "See CHANGELOG.md for details."
+    }
 
-    changeNotes.set(changelogMatches.map {
-        it.groups[1]!!.value.replace("(?s)\r?\n".toRegex(), "<br />\n")
-    }.take(1).joinToString())
+    // Convert markdown to simple HTML for JetBrains Marketplace
+    val html = notes.lines().joinToString("\n") { line ->
+        when {
+            line.startsWith("### ") -> "<h3>${line.removePrefix("### ")}</h3>"
+            line.startsWith("- ") -> "<li>${line.removePrefix("- ")}</li>"
+            line.isBlank() -> ""
+            else -> line
+        }
+    }.replace("(?s)(<li>.*?</li>(?:\n<li>.*?</li>)*)".toRegex()) { "<ul>\n${it.value}\n</ul>" }
+
+    changeNotes.set(html)
 }
 
 tasks.prepareSandbox {

@@ -47,24 +47,25 @@ jobs:
           $version = "${{ github.ref_name }}".TrimStart('v')
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
 
-      - name: Build plugin
-        shell: pwsh
-        run: |
-          .\gradlew.bat buildPlugin "-PPluginVersion=${{ steps.version.outputs.VERSION }}" "-PBuildConfiguration=Release"
-
       - name: Extract release notes from CHANGELOG
         id: changelog
         shell: pwsh
         run: |
           $content = Get-Content CHANGELOG.md -Raw
-          $pattern = "(?s)## \[${{ steps.version.outputs.VERSION }}\][^\r\n]*\r?\n(.+?)(?=\r?\n## |\z)"
+          $escapedVersion = "${{ steps.version.outputs.VERSION }}" -replace '\.', '\.'
+          $pattern = "(?s)## \[$escapedVersion\][^\r\n]*\r?\n(.+?)(?=\r?\n## |\z)"
           if ($content -match $pattern) {
             $notes = $Matches[1].Trim()
           } else {
             $notes = "Release ${{ steps.version.outputs.VERSION }}"
           }
-          # Write to a file to avoid multiline env var issues
+          # Write to a file for both GitHub Release and Gradle patchPluginXml
           $notes | Out-File -FilePath release-notes.txt -Encoding utf8
+
+      - name: Build plugin
+        shell: pwsh
+        run: |
+          .\gradlew.bat buildPlugin "-PPluginVersion=${{ steps.version.outputs.VERSION }}" "-PBuildConfiguration=Release"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
