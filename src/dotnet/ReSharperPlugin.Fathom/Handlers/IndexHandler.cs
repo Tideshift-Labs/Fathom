@@ -115,6 +115,7 @@ public class IndexHandler : IRequestHandler
         var auditCr = 0;
         var auditMat = 0;
         var auditBt = 0;
+        var auditSt = 0;
         var auditStatus = "N/A";
         if (isUe)
         {
@@ -130,7 +131,8 @@ public class IndexHandler : IRequestHandler
                 auditCr = auditData.ControlRigCount;
                 auditMat = auditData.MaterialCount;
                 auditBt = auditData.BehaviorTreeCount;
-                auditBp = auditTotal - auditDt - auditDa - auditStruct - auditCr - auditMat - auditBt;
+                auditSt = auditData.StateTreeCount;
+                auditBp = auditTotal - auditDt - auditDa - auditStruct - auditCr - auditMat - auditBt - auditSt;
                 auditStatus = auditTotal > 0
                     ? (auditStale > 0 ? "Stale" : "Fresh")
                     : "Not Ready";
@@ -173,6 +175,7 @@ public class IndexHandler : IRequestHandler
             .Replace("{{AUDIT_CR}}", auditCr.ToString())
             .Replace("{{AUDIT_MAT}}", auditMat.ToString())
             .Replace("{{AUDIT_BT}}", auditBt.ToString())
+            .Replace("{{AUDIT_ST}}", auditSt.ToString())
             .Replace("{{AUDIT_STALE}}", auditStale.ToString())
             .Replace("{{AUDIT_ERRORS}}", auditErrors.ToString())
             .Replace("{{AUDIT_STATUS}}", auditStatus)

@@ -30,6 +30,10 @@ public static class AuditMarkdownFormatter
             sb.Append("**Structures:** ").AppendLine(result.StructureCount.ToString());
         if (result.ControlRigCount > 0)
             sb.Append("**ControlRigs:** ").AppendLine(result.ControlRigCount.ToString());
+        if (result.BehaviorTreeCount > 0)
+            sb.Append("**BehaviorTrees:** ").AppendLine(result.BehaviorTreeCount.ToString());
+        if (result.StateTreeCount > 0)
+            sb.Append("**StateTrees:** ").AppendLine(result.StateTreeCount.ToString());
         if (result.ErrorCount > 0)
             sb.Append("**Errors:** ").AppendLine(result.ErrorCount.ToString());
         sb.AppendLine();
@@ -78,6 +82,26 @@ public static class AuditMarkdownFormatter
         {
             sb.AppendLine("## ControlRigs");
             foreach (var e in result.ControlRigs.OrderBy(b => b.Name))
+            {
+                FormatEntryLine(sb, e);
+            }
+            sb.AppendLine();
+        }
+
+        if (result.BehaviorTrees != null && result.BehaviorTrees.Count > 0)
+        {
+            sb.AppendLine("## BehaviorTrees");
+            foreach (var e in result.BehaviorTrees.OrderBy(b => b.Name))
+            {
+                FormatEntryLine(sb, e);
+            }
+            sb.AppendLine();
+        }
+
+        if (result.StateTrees != null && result.StateTrees.Count > 0)
+        {
+            sb.AppendLine("## StateTrees");
+            foreach (var e in result.StateTrees.OrderBy(b => b.Name))
             {
                 FormatEntryLine(sb, e);
             }

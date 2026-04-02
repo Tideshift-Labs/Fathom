@@ -233,6 +233,16 @@ public class BlueprintClassInfo
         public int BehaviorTreeCount { get; set; }
 
         /// <summary>
+        /// List of StateTree audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> StateTrees { get; set; }
+
+        /// <summary>
+        /// Number of StateTree audit entries.
+        /// </summary>
+        public int StateTreeCount { get; set; }
+
+        /// <summary>
         /// Examples of stale entries (when status is "stale", first 10).
         /// </summary>
         public List<BlueprintAuditEntry> StaleExamples { get; set; }
