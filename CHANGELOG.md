@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [0.10.0] - 2026-04-02
 
+## [0.10.0] - 2026-04-02
+
 ### New Features
 - **StateTree auditor**: full state hierarchy with tasks, transitions, enter conditions, considerations, property bindings (e.g. `[LeftTag <- Parameters.Motivation]`), Blueprint class resolution, enum display names, global evaluators/tasks, state metadata (Tag, Selection Behavior, Tasks Completion, Weight, Custom Tick Rate, Required Event with payload), linked state/asset references with parameter overrides. Uses optional module loading pattern for zero compile-time coupling.
 - **Audit extension registry** (`AuditExtensionRegistry`): generic callback interface for optional auditors, wired into all subsystem/commandlet integration points. Enables future optional auditors without modifying core plugin code.
