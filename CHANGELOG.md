@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - [UE5] Skip One-File-Per-Actor packages under `__ExternalActors__/` and `__ExternalObjects__/`. These are level data, not first-class assets, and were producing noisy `Failed to compute hash` warnings during map edits. (Tideshift-Labs/Fathom#40)
 - [UE5] Audit files now include a `SourcePath:` header containing the project-relative `.uasset` path (or absolute, if the asset lives outside the project). The Rider-side staleness check prefers this over deriving the path from the package name, which is what makes plugin staleness work. Older audits without the field still load via the legacy `/Game/` derivation. No schema-version bump.
 - [UE5] The boot-time sweep also deletes audit files whose package is no longer auditable (e.g. pre-existing `__ExternalActors__` audits, or audits for a project plugin that was disabled).
+- [UE5] Skip subsystem startup during cook and unattended runs. UAT packaging launches the editor with `-unattended`, where the existing `IsRunningCommandlet()` guard alone was not enough: `AssetRefSubsystem` produced `HttpListener unable to bind` errors when packaging while another editor was open, and `BlueprintAuditSubsystem` wrote a manifest and registered save hooks during cook. Both now also check `IsRunningCookCommandlet()` and `FApp::IsUnattended()`.
 
 ## [0.10.0] - 2026-04-02
 
