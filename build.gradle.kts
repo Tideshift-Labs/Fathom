@@ -31,6 +31,8 @@ val PublishToken: String by project
 allprojects {
     repositories {
         maven { setUrl("https://cache-redirector.jetbrains.com/maven-central") }
+        // Fallback if the JetBrains cache redirector misses (has happened in CI for rd-gen)
+        mavenCentral()
     }
 }
 

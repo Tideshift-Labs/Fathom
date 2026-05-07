@@ -3,6 +3,9 @@ pluginManagement {
     repositories {
         maven { setUrl("https://cache-redirector.jetbrains.com/plugins.gradle.org") }
         maven { setUrl("https://cache-redirector.jetbrains.com/maven-central") }
+        // Fallback if the JetBrains cache redirector misses (has happened in CI for rd-gen)
+        mavenCentral()
+        gradlePluginPortal()
     }
     resolutionStrategy {
         eachPlugin {
