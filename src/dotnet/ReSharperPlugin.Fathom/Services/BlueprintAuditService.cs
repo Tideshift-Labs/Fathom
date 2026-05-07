@@ -536,10 +536,11 @@ public class BlueprintAuditService
             entry.Name = entry.Data.TryGetValue("Name", out var name) ? name?.ToString() : null;
             entry.Path = entry.Data.TryGetValue("Path", out var path) ? path?.ToString() : null;
             entry.SourceFileHash = entry.Data.TryGetValue("Hash", out var hash) ? hash?.ToString() : null;
+            var sourcePath = entry.Data.TryGetValue("SourcePath", out var sp) ? sp?.ToString() : null;
 
             if (!string.IsNullOrEmpty(entry.Path))
             {
-                var uassetPath = ConvertPackagePathToFilePath(entry.Path, uprojectDir);
+                var uassetPath = ResolveSourceUassetPath(sourcePath, entry.Path, uprojectDir);
                 if (!string.IsNullOrEmpty(uassetPath) && File.Exists(uassetPath))
                 {
                     entry.CurrentFileHash = ComputeMd5Hash(uassetPath);
@@ -579,6 +580,26 @@ public class BlueprintAuditService
         if (dotIndex > 0)
             return objectPath.Substring(0, dotIndex);
         return objectPath;
+    }
+
+    /// <summary>
+    /// Resolve the on-disk .uasset path for an audit entry.
+    /// Prefers the SourcePath header (written by the producer with authoritative
+    /// mount-point info). SourcePath may be project-relative (e.g.
+    /// "Plugins/MyPlugin/Content/Foo/Bar.uasset") or absolute.
+    /// Falls back to deriving the path from the package path when SourcePath
+    /// is absent (older audit format), which only handles /Game/.
+    /// </summary>
+    private static string ResolveSourceUassetPath(string sourcePath, string packagePath, string uprojectDir)
+    {
+        if (!string.IsNullOrEmpty(sourcePath))
+        {
+            if (Path.IsPathRooted(sourcePath))
+                return sourcePath.Replace('/', Path.DirectorySeparatorChar);
+            return Path.Combine(uprojectDir, sourcePath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        return ConvertPackagePathToFilePath(packagePath, uprojectDir);
     }
 
     private static string ConvertPackagePathToFilePath(string packagePath, string uprojectDir)

@@ -49,14 +49,15 @@ Given a `UBlueprint*`, produces a Markdown file containing:
 ### Output location
 
 ```
-{ProjectDir}/Saved/Fathom/Audit/v<N>/Blueprints/
+{ProjectDir}/Saved/Fathom/Audit/v<N>/
 ```
 
 The `v<N>` segment is the audit schema version (`FAuditFileUtils::AuditSchemaVersion`). When the version is bumped, all cached files are automatically invalidated because no files exist at the new path.
 
 Mirrors the `Content/` directory layout:
 ```
-/Game/UI/Widgets/WBP_Foo  ->  Saved/Fathom/Audit/v<N>/Blueprints/UI/Widgets/WBP_Foo.md
+/Game/UI/Widgets/WBP_Foo            ->  Saved/Fathom/Audit/v<N>/UI/Widgets/WBP_Foo.md
+/MyPlugin/Foo/Bar                   ->  Saved/Fathom/Audit/v<N>/_Plugins/MyPlugin/Foo/Bar.md
 ```
 
 ### Staleness detection
@@ -81,7 +82,7 @@ UE Editor Plugin                          Rider Plugin (.NET backend)
  FBlueprintAuditor facade
          |                                          |
          +---writes--->  Saved/Fathom/Audit/v<N>/  <---reads---+
-                         Blueprints/*.md
+                         *.md
 ```
 
 The UE plugin writes Markdown files. The Rider plugin reads them. That is the entire interface.
@@ -90,7 +91,7 @@ The UE plugin writes Markdown files. The Rider plugin reads them. That is the en
 
 The contract between the two plugins is purely **filesystem conventions**:
 
-1. **Audit output directory**: `{ProjectDir}/Saved/Fathom/Audit/v<N>/Blueprints/`. Both sides agree on this path.
+1. **Audit output directory**: `{ProjectDir}/Saved/Fathom/Audit/v<N>/`. Both sides agree on this path.
 2. **Schema version**: `FAuditFileUtils::AuditSchemaVersion` (C++, canonical constant; `FBlueprintAuditor::AuditSchemaVersion` proxies it) must match `BlueprintAuditService.AuditSchemaVersion` (C#). Divergence means the Rider plugin looks in the wrong directory.
 3. **Commandlet name**: `BlueprintAudit`, the hardcoded convention the Rider plugin uses to invoke headless audits.
 4. **Hash algorithm**: Both sides compute MD5 with lowercase hex output, no separators.
@@ -102,7 +103,7 @@ No shared config files, no runtime communication protocol, no compile-time depen
 
 The Rider plugin detects the companion through two mechanisms:
 
-1. Looks for `Saved/Fathom/Audit/v<N>/Blueprints/`. If `.md` files exist, reads them.
+1. Looks for `Saved/Fathom/Audit/v<N>/`. If `.md` files exist, reads them.
 2. If it needs to refresh, shells out to the commandlet. If it fails with "unknown commandlet" or similar, sets a `_commandletMissing` flag. Subsequent requests return HTTP 501 with installation instructions rather than repeatedly failing.
 
 ### Install locations and shadowing
