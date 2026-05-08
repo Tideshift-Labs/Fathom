@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-05-07
+
 ### Fixes & Changes
 - [UE5] Fixed Blueprint function audits duplicating output parameters when the function had multiple return nodes. Outputs are now collected from a single result node since they share the function signature. (Tideshift-Labs/Fathom#36)
 - [UE5] DataAsset, Blueprint, BehaviorTree, Material, and StateTree audits now serialize array, set, map, and struct properties as structured indented Markdown instead of single-line `(...)` blobs. Object/soft-object references are stripped to just the asset name. Nested struct fields that match defaults are filtered out. (Tideshift-Labs/Fathom#31)
