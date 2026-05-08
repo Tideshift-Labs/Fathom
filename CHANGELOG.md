@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixes & Changes
+- [UE5] Property overrides now expand `Instanced` UObject subobjects inline instead of emitting a single-line object path. Affects GAS Gameplay Effects (`GEComponents` and the per-component config arrays such as `GrantAbilityConfigs`) and any other UPROPERTY declared with the `Instanced` specifier. Each subobject is labelled with its `EditorFriendlyName` (when present) plus the class name; child fields are filtered against the class CDO so only overrides appear. Cycle detection and an 8-level depth cap prevent runaway recursion. Non-instanced object refs (e.g. `UTexture2D*`) keep the existing asset-name behavior.
+- Audit schema version bumped to v15.
+
 ## [0.12.0] - 2026-05-07
 
 ### Fixes & Changes
