@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-08
+
 ### Fixes & Changes
 - [UE5] Property overrides now expand `Instanced` UObject subobjects inline instead of emitting a single-line object path. Affects GAS Gameplay Effects (`GEComponents` and the per-component config arrays such as `GrantAbilityConfigs`) and any other UPROPERTY declared with the `Instanced` specifier. Each subobject is labelled with its `EditorFriendlyName` (when present) plus the class name; child fields are filtered against the class CDO so only overrides appear. Cycle detection and an 8-level depth cap prevent runaway recursion. Non-instanced object refs (e.g. `UTexture2D*`) keep the existing asset-name behavior.
 - [UE5] Bulk stale re-audit (e.g. after a Fathom audit-format update) now surfaces a cancelable `FScopedSlowTask` progress dialog when 25 or more assets need re-auditing, instead of freezing the editor for minutes with no feedback. Below that threshold, the existing ticker paces one entry every three frames for perceptual smoothness. The dialog text makes it clear the operation is one-time, not per-launch.
