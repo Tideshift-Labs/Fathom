@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixes & Changes
+- [UE5] Fixed UE 5.6 compile break in StateTree auditor: `EStateTreeExpressionOperand::Multiply` was added in 5.7. The case label is now guarded with `UE_VERSION_NEWER_THAN_OR_EQUAL(5,7,0)`, so 5.5 and 5.6 builds compile cleanly while 5.7 still emits `MUL` for the new operator.
+
 ## [0.13.0] - 2026-05-08
 
 ### Fixes & Changes
