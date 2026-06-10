@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-06-10
+
 ### Added
 - [UE5] PCG graph audit support. `UPCGGraph` assets are audited via a new optional `FathomUELinkPCG` module (StateTree-style, loaded only when the PCG plugin is present): graph-level user parameters, node table (type, title, settings class), per-node non-default overridable settings values, instanced subobject configuration (mesh selector entries, instance data packers, Blueprint element properties), pin types, and an edge list traced through reroute nodes (including named reroute declaration/usage pairs). Subgraph nodes record the referenced graph asset path instead of inlining it. `UPCGGraphInstance` assets get their own audit file listing the parent graph and parameter values with override markers. The Rider plugin routes `Type: PCG` audit files into a `pcgGraphs` list on `/blueprint-audit` and includes PCG in the MCP tool descriptions and project status output. No schema bump: existing audit files are unchanged, and PCG audits backfill via the startup stale check.
 

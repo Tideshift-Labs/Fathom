@@ -9,7 +9,7 @@ public class ServerConfiguration
         /// <summary>
         /// Fathom plugin version. Updated by scripts/bump-version.ps1.
         /// </summary>
-        public const string FathomVersion = "0.13.1";
+        public const string FathomVersion = "0.13.2";
 
         /// <summary>
         /// Default configuration instance.
