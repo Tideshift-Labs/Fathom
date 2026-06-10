@@ -243,6 +243,16 @@ public class BlueprintClassInfo
         public int StateTreeCount { get; set; }
 
         /// <summary>
+        /// List of PCG graph audit entries (only populated when fresh).
+        /// </summary>
+        public List<BlueprintAuditEntry> PcgGraphs { get; set; }
+
+        /// <summary>
+        /// Number of PCG graph audit entries.
+        /// </summary>
+        public int PcgGraphCount { get; set; }
+
+        /// <summary>
         /// Examples of stale entries (when status is "stale", first 10).
         /// </summary>
         public List<BlueprintAuditEntry> StaleExamples { get; set; }

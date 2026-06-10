@@ -100,6 +100,8 @@ public class UeProjectHandler : IRequestHandler
             sb.AppendLine($"- ControlRigs: {info.Audit.ControlRigCount}");
             sb.AppendLine($"- Materials: {info.Audit.MaterialCount}");
             sb.AppendLine($"- BehaviorTrees: {info.Audit.BehaviorTreeCount}");
+            sb.AppendLine($"- StateTrees: {info.Audit.StateTreeCount}");
+            sb.AppendLine($"- PCG Graphs: {info.Audit.PcgGraphCount}");
             sb.AppendLine($"- Stale: {info.Audit.StaleCount}");
             sb.AppendLine($"- Errors: {info.Audit.ErrorCount}");
         }
@@ -175,7 +177,8 @@ public class UeProjectHandler : IRequestHandler
                              - auditData.ControlRigCount
                              - auditData.MaterialCount
                              - auditData.BehaviorTreeCount
-                             - auditData.StateTreeCount,
+                             - auditData.StateTreeCount
+                             - auditData.PcgGraphCount,
             DataTableCount = auditData.DataTableCount,
             DataAssetCount = auditData.DataAssetCount,
             StructureCount = auditData.StructureCount,
@@ -183,6 +186,7 @@ public class UeProjectHandler : IRequestHandler
             MaterialCount = auditData.MaterialCount,
             BehaviorTreeCount = auditData.BehaviorTreeCount,
             StateTreeCount = auditData.StateTreeCount,
+            PcgGraphCount = auditData.PcgGraphCount,
             StaleCount = auditData.StaleCount,
             ErrorCount = auditData.ErrorCount,
         };

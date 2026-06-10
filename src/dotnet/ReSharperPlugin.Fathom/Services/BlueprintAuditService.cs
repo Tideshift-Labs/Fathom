@@ -90,6 +90,7 @@ public class BlueprintAuditService
         var materials = new List<BlueprintAuditEntry>();
         var behaviorTrees = new List<BlueprintAuditEntry>();
         var stateTrees = new List<BlueprintAuditEntry>();
+        var pcgGraphs = new List<BlueprintAuditEntry>();
         var staleCount = 0;
         var errorCount = 0;
 
@@ -107,6 +108,7 @@ public class BlueprintAuditService
                 case "Material": materials.Add(entry); break;
                 case "BehaviorTree": behaviorTrees.Add(entry); break;
                 case "StateTree": stateTrees.Add(entry); break;
+                case "PCG": pcgGraphs.Add(entry); break;
                 default: blueprints.Add(entry); break;
             }
 
@@ -114,7 +116,7 @@ public class BlueprintAuditService
             if (entry.Error != null) errorCount++;
         }
 
-        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count + structures.Count + controlRigs.Count + materials.Count + behaviorTrees.Count + stateTrees.Count;
+        var totalCount = blueprints.Count + dataTables.Count + dataAssets.Count + structures.Count + controlRigs.Count + materials.Count + behaviorTrees.Count + stateTrees.Count + pcgGraphs.Count;
 
         if (totalCount == 0)
         {
@@ -137,7 +139,7 @@ public class BlueprintAuditService
             DateTime? lastRefresh;
             lock (_auditLock) { lastRefresh = _lastAuditRefresh; }
 
-            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets).Concat(structures).Concat(controlRigs).Concat(materials).Concat(behaviorTrees).Concat(stateTrees);
+            var allEntries = blueprints.Concat(dataTables).Concat(dataAssets).Concat(structures).Concat(controlRigs).Concat(materials).Concat(behaviorTrees).Concat(stateTrees).Concat(pcgGraphs);
             return new BlueprintAuditResult
             {
                 Status = "stale",
@@ -152,6 +154,7 @@ public class BlueprintAuditService
                 MaterialCount = materials.Count,
                 BehaviorTreeCount = behaviorTrees.Count,
                 StateTreeCount = stateTrees.Count,
+                PcgGraphCount = pcgGraphs.Count,
                 Action = "Call /blueprint-audit/refresh to update audit data",
                 LastRefresh = lastRefresh?.ToString("o"),
                 StaleExamples = allEntries.Where(b => b.IsStale).Take(_config.MaxStaleExamples).ToList(),
@@ -175,6 +178,7 @@ public class BlueprintAuditService
             MaterialCount = materials.Count,
             BehaviorTreeCount = behaviorTrees.Count,
             StateTreeCount = stateTrees.Count,
+            PcgGraphCount = pcgGraphs.Count,
             LastRefresh = refresh?.ToString("o"),
             Blueprints = blueprints,
             DataTables = dataTables,
@@ -184,6 +188,7 @@ public class BlueprintAuditService
             Materials = materials,
             BehaviorTrees = behaviorTrees,
             StateTrees = stateTrees,
+            PcgGraphs = pcgGraphs,
             VersionNote = versionNote
         };
     }
@@ -519,6 +524,7 @@ public class BlueprintAuditService
         if (data.TryGetValue("BlueprintType", out var t) && t?.ToString() == "BehaviorTree") return "BehaviorTree";
         if (data.TryGetValue("BlueprintType", out var st) && st?.ToString() == "StateTree") return "StateTree";
         if (data.TryGetValue("BlueprintType", out var bt) && bt?.ToString() == "ControlRig") return "ControlRig";
+        if (data.TryGetValue("BlueprintType", out var pcg) && pcg?.ToString() == "PCG") return "PCG";
         if (data.ContainsKey("ParentClass")) return "Blueprint";
         return "Structure";
     }

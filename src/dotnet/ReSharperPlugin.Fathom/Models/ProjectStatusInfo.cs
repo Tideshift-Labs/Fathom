@@ -24,6 +24,8 @@ public static class AuditCapabilities
             "Behavior Trees with blackboard keys, tree structure, decorators, services, and task properties"),
         new AuditedAssetType("StateTree",
             "State Trees with state hierarchy, tasks, transitions, property bindings, and evaluators"),
+        new AuditedAssetType("PCG",
+            "PCG graphs and graph instances with user parameters, nodes, settings values, and edges"),
     };
 }
 
@@ -92,6 +94,7 @@ public class AuditInfo
     public int MaterialCount { get; set; }
     public int BehaviorTreeCount { get; set; }
     public int StateTreeCount { get; set; }
+    public int PcgGraphCount { get; set; }
     public int StaleCount { get; set; }
     public int ErrorCount { get; set; }
 }

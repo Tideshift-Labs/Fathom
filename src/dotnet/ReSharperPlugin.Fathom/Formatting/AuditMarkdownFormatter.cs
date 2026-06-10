@@ -34,6 +34,8 @@ public static class AuditMarkdownFormatter
             sb.Append("**BehaviorTrees:** ").AppendLine(result.BehaviorTreeCount.ToString());
         if (result.StateTreeCount > 0)
             sb.Append("**StateTrees:** ").AppendLine(result.StateTreeCount.ToString());
+        if (result.PcgGraphCount > 0)
+            sb.Append("**PCG Graphs:** ").AppendLine(result.PcgGraphCount.ToString());
         if (result.ErrorCount > 0)
             sb.Append("**Errors:** ").AppendLine(result.ErrorCount.ToString());
         sb.AppendLine();
@@ -102,6 +104,16 @@ public static class AuditMarkdownFormatter
         {
             sb.AppendLine("## StateTrees");
             foreach (var e in result.StateTrees.OrderBy(b => b.Name))
+            {
+                FormatEntryLine(sb, e);
+            }
+            sb.AppendLine();
+        }
+
+        if (result.PcgGraphs != null && result.PcgGraphs.Count > 0)
+        {
+            sb.AppendLine("## PCG Graphs");
+            foreach (var e in result.PcgGraphs.OrderBy(b => b.Name))
             {
                 FormatEntryLine(sb, e);
             }
