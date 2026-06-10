@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixes & Changes
+- [UE5] Fixed an access violation in the Blueprint graph audit when a pin's `LinkedTo` array contained null or orphaned entries (seen in corrupted or partially-loaded graphs). The knot-trace and edge-building passes now skip null pin links, null owning nodes, null pins, and null graph/node list entries instead of dereferencing them.
+- [UE5] Hardened all auditors against the same class of broken references. Properties whose backing type asset was deleted (a `TSubclassOf`/`TSoftClassPtr` with null MetaClass, object refs with null PropertyClass, null enum or struct types) crash inside the engine's `GetCPPType`, `ExportTextItem`, and `Identical`; a shared `HasBrokenTypeMetadata` check now skips them in every property gather loop, DataTable columns/rows render `Unknown`/`(unavailable)` placeholders instead of crashing, the ControlRig reroute trace skips null pin links like the Blueprint knot trace, and the recursive BehaviorTree, Blackboard parent-chain, and StateTree hierarchy walks guard against cyclic references.
+
 ## [0.13.1] - 2026-05-10
 
 ### Fixes & Changes
