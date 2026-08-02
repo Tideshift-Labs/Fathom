@@ -250,8 +250,54 @@ public class BlueprintAuditService
             LastRefresh = lastRefresh?.ToString("o"),
             LastExitCode = exitCode,
             Output = output != null ? HttpHelpers.TruncateForJson(output, _config.MaxOutputLength) : null,
-            Error = error != null ? HttpHelpers.TruncateForJson(error, _config.MaxErrorLength) : null
+            Error = error != null ? HttpHelpers.TruncateForJson(error, _config.MaxErrorLength) : null,
+            SkippedAssets = ReadSkippedAssets()
         };
+    }
+
+    /// <summary>
+    /// Read the skip list the UE plugin embeds in audit-manifest.json. These assets
+    /// have no audit file on purpose, so an absent audit reads as "the asset is
+    /// broken" rather than "Fathom missed it".
+    /// </summary>
+    private List<SkippedAssetEntry> ReadSkippedAssets()
+    {
+        try
+        {
+            var ueInfo = _ueProject.GetUeProjectInfo();
+            if (!ueInfo.IsUnrealProject)
+                return null;
+
+            var manifestPath = Path.Combine(ueInfo.ProjectDirectory, "Saved", "Fathom", "audit-manifest.json");
+            if (!File.Exists(manifestPath))
+                return null;
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            if (!doc.RootElement.TryGetProperty("skipped", out var skipped) ||
+                skipped.ValueKind != JsonValueKind.Array ||
+                skipped.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            var entries = new List<SkippedAssetEntry>();
+            foreach (var element in skipped.EnumerateArray())
+            {
+                entries.Add(new SkippedAssetEntry
+                {
+                    Package = element.TryGetProperty("package", out var p) ? p.GetString() : null,
+                    Reason = element.TryGetProperty("reason", out var r) ? r.GetString() : null,
+                    Detail = element.TryGetProperty("detail", out var d) ? d.GetString() : null
+                });
+            }
+
+            return entries;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"BlueprintAudit: Failed to read skipped assets from manifest: {ex.Message}");
+            return null;
+        }
     }
 
     public void CheckAndRefreshOnBoot()

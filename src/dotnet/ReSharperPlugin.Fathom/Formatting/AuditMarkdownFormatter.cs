@@ -190,6 +190,21 @@ public static class AuditMarkdownFormatter
             sb.Append("**Last Refresh:** ").AppendLine(status.LastRefresh);
         if (status.LastExitCode.HasValue)
             sb.Append("**Last Exit Code:** ").AppendLine(status.LastExitCode.Value.ToString());
+        if (status.SkippedAssets != null && status.SkippedAssets.Count > 0)
+        {
+            sb.AppendLine();
+            sb.Append("## Skipped Assets (").Append(status.SkippedAssets.Count).AppendLine(")");
+            sb.AppendLine();
+            sb.AppendLine("These assets have no audit file on purpose. They are broken, or they hard-reference");
+            sb.AppendLine("something broken. See `Saved/Fathom/skipped.md` in the UE project for the full report.");
+            sb.AppendLine();
+            foreach (var skipped in status.SkippedAssets)
+            {
+                sb.Append("- `").Append(skipped.Package).Append("` (").Append(skipped.Reason).AppendLine(")");
+                if (!string.IsNullOrEmpty(skipped.Detail))
+                    sb.Append("  - ").AppendLine(skipped.Detail);
+            }
+        }
         if (status.Error != null)
         {
             sb.AppendLine();

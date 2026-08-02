@@ -208,6 +208,8 @@ Check the status of a Blueprint audit refresh.
 |-------|----------|-------------|
 | `format` | No | `json` for JSON output |
 
+Includes a `skippedAssets` list when the UE plugin excluded assets from the audit. Each entry has `package`, `reason` (`broken_generated_class`, `tainted_by_hard_reference`, `quarantined_after_crash`, or `suspect`), and `detail`. These assets have no audit file on purpose: they are corrupt, or they hard-reference something corrupt. The UE project also gets a full report at `Saved/Fathom/skipped.md`.
+
 ### GET `/uassets`
 
 Search or browse UAssets. Provide a `search` term and/or filters (`class`, `pathPrefix`). At least one must be provided. Search uses plain name substrings (space-separated, all must match). Wildcards and regex are not supported.

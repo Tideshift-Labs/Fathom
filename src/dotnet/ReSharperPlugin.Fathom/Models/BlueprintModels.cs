@@ -307,4 +307,32 @@ public class BlueprintClassInfo
         /// Error message from the last commandlet run.
         /// </summary>
         public string Error { get; set; }
+
+        /// <summary>
+        /// Assets the UE plugin deliberately left without an audit file, and why.
+        /// Null when nothing was skipped.
+        /// </summary>
+        public List<SkippedAssetEntry> SkippedAssets { get; set; }
+    }
+
+    /// <summary>
+    /// One asset excluded from the audit by the UE plugin's load guard.
+    /// </summary>
+    public class SkippedAssetEntry
+    {
+        /// <summary>
+        /// Package path, e.g. /Game/Blueprints/BP_Broken.
+        /// </summary>
+        public string Package { get; set; }
+
+        /// <summary>
+        /// Machine-readable reason: broken_generated_class, tainted_by_hard_reference,
+        /// quarantined_after_crash, or suspect.
+        /// </summary>
+        public string Reason { get; set; }
+
+        /// <summary>
+        /// Human-readable explanation.
+        /// </summary>
+        public string Detail { get; set; }
     }
