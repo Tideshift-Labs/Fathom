@@ -3,7 +3,7 @@
   <PropertyGroup>
     <!-- See https://www.nuget.org/packages/JetBrains.ReSharper.SDK -->
     <!-- Keep in sync with ProductVersion in gradle.properties -->
-    <SdkVersion>2025.3.2</SdkVersion>
+    <SdkVersion>2026.2.0.1</SdkVersion>
 
     <Title>Fathom</Title>
     <Description>Helps AI coding assistants better understand Unreal Engine 5 C++ projects by providing MCP tools for solution-wide code analysis, Blueprint discovery, and asset summaries.</Description>

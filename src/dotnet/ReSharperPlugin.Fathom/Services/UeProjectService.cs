@@ -132,7 +132,11 @@ public class UeProjectService
                             result.EngineVersion = versionVal?.ToString();
                         }
 
-                        // If Path property didn't work, try parsing ToString()
+                        // If Path property didn't work, try parsing ToString(). This scrapes an
+                        // internal JetBrains type's debug string, so validate what we extract
+                        // before trusting it - a shape change in that string (e.g. across a
+                        // platform version bump) can otherwise hand us a garbage path that
+                        // later throws deep in path-handling code (Path.Combine, FileSystemPath).
                         if (string.IsNullOrEmpty(result.EnginePath))
                         {
                             var contextStr = contextValue.ToString();
@@ -140,7 +144,9 @@ public class UeProjectService
                                 contextStr, @"Path:\s*([^.]+(?:\.[^.]+)*?)\.\s*Version:");
                             if (pathMatch.Success)
                             {
-                                result.EnginePath = pathMatch.Groups[1].Value.Trim();
+                                var candidate = pathMatch.Groups[1].Value.Trim();
+                                if (IsPlausibleEnginePath(candidate))
+                                    result.EnginePath = candidate;
                             }
 
                             var versionMatch = Regex.Match(
@@ -177,5 +183,28 @@ public class UeProjectService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Rejects strings that are clearly not a real engine directory - e.g. a truncated
+    /// drive root like "C:" salvaged from a malformed regex match against a debug string
+    /// whose format no longer matches what we expect.
+    /// </summary>
+    private static bool IsPlausibleEnginePath(string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        if (candidate.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            return false;
+
+        if (!Path.IsPathRooted(candidate))
+            return false;
+
+        // A bare drive root ("C:", "C:\") isn't an engine install.
+        if (candidate.TrimEnd('\\', '/').Length <= 2)
+            return false;
+
+        return true;
     }
 }
