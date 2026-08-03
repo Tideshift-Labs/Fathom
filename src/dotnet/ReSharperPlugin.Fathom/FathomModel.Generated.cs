@@ -36,7 +36,7 @@ namespace JetBrains.Rider.Model
   
   
   /// <summary>
-  /// <p>Generated from: FathomModel.kt:8</p>
+  /// <p>Generated from: FathomModel.kt:7</p>
   /// </summary>
   public class FathomModel : RdExtBase
   {
