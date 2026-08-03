@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-02
+
 ### Fixes & Changes
 - [Rider] Bumped the target platform to Rider 2026.2 (was 2025.3). The HTTP/MCP server could fail to bind on newer Rider builds because engine-path detection falls back to regex-scraping an internal JetBrains type's debug string when the expected `Path` property isn't found; a shape change in that string on a new platform version could hand back a malformed path (e.g. a bare drive root) instead of failing cleanly. `UeProjectService` now validates any path recovered this way and discards it if implausible, rather than passing it downstream.
 - [Rider] Bumped the Kotlin Gradle plugin to 2.4.10 (was 2.1.20); Rider 2026.2's platform jars are compiled with newer Kotlin metadata that the old compiler couldn't read. Also declared an explicit `bundledModule("intellij.rider.rdclient.dotnet")` dependency (plus the matching `<module>` entry in `plugin.xml`): 2026.2 split this module out of the previously-implicit `com.intellij.modules.rider` classpath, and it owns the `Project.solution`/protocol-scheduler access the Kotlin frontend code (`FathomHost`, `FathomSettings`, `FathomStatusBarWidget`) depends on.
