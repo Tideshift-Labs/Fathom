@@ -172,6 +172,11 @@ dependencies {
         rider(ProductVersion) { useInstaller = false }
         jetbrainsRuntime()
 
+        // Rider 2026.2 split this out of the implicit com.intellij.modules.rider
+        // classpath; it owns Project.solution/IProtocol access used throughout
+        // the frontend module (see plugin.xml's matching <module> dependency).
+        bundledModule("intellij.rider.rdclient.dotnet")
+
         // TODO: add plugins
         // bundledPlugin("uml")
         // bundledPlugin("com.jetbrains.ChooseRuntime:1.0.9")
