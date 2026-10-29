@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- [UE5] AnimBlueprint anim graph nodes now include their Details-panel settings. Most anim node settings live on the node's inner `FAnimNode_*` struct and are not pins, so they were invisible in the audit. Each anim graph node row now lists the struct's editable fields that differ from the struct's defaults (e.g. `bAllowStretching=True` on a Two Bone IK node), skipping fields currently exposed as pins and pose links. Works for any anim node via reflection, including third-party plugin nodes. Audit schema bumped to v16 so existing AnimBlueprint audits regenerate.
+- [UE5] Anim graph pin bindings (property access) are now in the audit. A bound pin renders as `Pin <- bind Member.Path`, with `(function)`, `(promoted from <type>)`, `(only when active)` and `(context: ...)` qualifiers, in place of its unused default value. Previously a bound node looked identical to an unbound one. Node functions (`OnInitialUpdate`, `OnBecomeRelevant`, `OnUpdate`) and the anim node tag are listed too. Each graph containing anim nodes gets a summary line counting fast-path and Blueprint-updated nodes, bound pins, wired pins, and node functions.
+- [UE5] The Blueprint audit now descends into state machines, states, conduits, transition rule graphs, and blend space graphs, each under its own heading (`State Machine: X`, `State: X`, `Transition: A to B`). Before, it only followed collapsed graphs, so any anim node inside a state machine was missing from the audit. Included in the v16 schema.
+
 ## [0.14.0] - 2026-08-02
 
 ### Fixes & Changes
