@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - [UE5] State machine Details-panel data in the Blueprint audit: non-default transition settings (automatic rule and trigger time, priority, crossfade, blend mode and curve, blend profile, logic type, notify events, shared rules, sync group), a `Never fires` warning for disabled transitions and for transitions with the automatic rule off, a constant-false rule and no native C++ rule, a warning on bidirectional transitions (unsupported by the anim compiler), state settings (`bAlwaysResetOnEntry`, entered/left/fully blended events), state alias targets, and the transition order (the Entry target, and the exits of each state or conduit with more than one, sorted by priority and including alias transitions). A rule graph shared by several transitions is now audited once; before, shared rule graphs were missing. Included in the v16 schema.
 - [UE5] Anim getter nodes (`GetInstanceStateWeight` and friends) show their editor title, e.g. `State Weight (Walk)`, and name the state machine, state, transition or asset player they read. Before, only the function name was listed.
 - [UE5] Each Blueprint-updated anim node in the audit summary names the wire that keeps it off the fast path, e.g. `Alpha fed by Subtract_DoubleDouble`.
+- [UE5] The Blueprint audit's Variables table has a `Default` column: each variable's value on the class default object when it differs from its type's default, on one line (vectors as tuples, references as paths, structs as `(Field=Value, ...)`, capped at 120 characters).
+- [UE5] Interface functions implemented as graphs (those with outputs, const or thread-safe ones, and anim layers) are now in the Blueprint audit, under `## Function:` with an `Interface:` line. Before, they were skipped.
+- [UE5] Unconnected bool, integer and float pins with an empty literal now show their zero value (e.g. DoOnce `Start Closed=false`). Before, they were left out, which hid the setting on macro instances.
+
+### Fixes & Changes
+- [UE5] The Variables table's `Editable` column now means instance editable (the eye icon). It ignored "Disable Edit On Instance", so almost every variable showed `Yes`.
+- [UE5] Nested variable categories such as `Rig|Offsets` no longer break the Variables table. The `|` separator is now escaped.
 
 ## [0.14.0] - 2026-08-02
 
