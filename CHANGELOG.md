@@ -16,8 +16,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - [UE5] The Blueprint audit's Variables table has a `Default` column: each variable's value on the class default object when it differs from its type's default, on one line (vectors as tuples, references as paths, structs as `(Field=Value, ...)`, capped at 120 characters).
 - [UE5] Interface functions implemented as graphs (those with outputs, const or thread-safe ones, and anim layers) are now in the Blueprint audit, under `## Function:` with an `Interface:` line. Before, they were skipped.
 - [UE5] Unconnected bool, integer and float pins with an empty literal now show their zero value (e.g. DoOnce `Start Closed=false`). Before, they were left out, which hid the setting on macro instances.
+- [UE5] Control Rig audits show unwired pin values on every node (element keys as `Control 'Name'`, enums, reals, structs, partly wired struct and array pins by sub-pin), function references' target and owning asset, and variable nodes' variable. Nodes with added pins (a 3-input Add, a 5-output Sequence) are listed as their unit instead of as a collapsed node.
+- [UE5] Control Rig audits list the rig hierarchy: controls with parent, type, animation type, animatable flag, initial value and enabled limits (float noise near zero printed as `0.0`), plus nulls and bones with their parents.
+- [UE5] Control Rig functions get their own `## Function: Name` sections with access specifier, description, category, keywords, input and output defaults and call sites. Before, every function graph was headed `ContainedGraph`.
+- [UE5] Control Rig variables show their default value and whether the AnimGraph Control Rig node can expose them as pins.
+- [UE5] Control Rig nodes show the events whose execution reaches them (`runs on Forwards Solve`), and nodes on no execution chain are flagged `unreachable`.
 
 ### Fixes & Changes
+- [UE5] Quaternions in the Variables `Default` column and in struct values print as `(X, Y, Z, W)` tuples, like vectors.
+- [UE5] Control Rig audits list every member variable. Before, only variables with a get or set node in the root graph were listed.
+- [UE5] AnimBlueprint state machine nodes always list their settings, defaults included. `bReinitializeOnBecomingRelevant=True` is an exit from the current state that no transition shows, and omitting it hid that.
 - [UE5] The Variables table's `Editable` column now means instance editable (the eye icon). It ignored "Disable Edit On Instance", so almost every variable showed `Yes`.
 - [UE5] Nested variable categories such as `Rig|Offsets` no longer break the Variables table. The `|` separator is now escaped.
 
